@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="hr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Pisač — prototip uređivača s provenijencijom teksta, FPZG kućni stil.">
+</head>
+<body>
+<title>Pisač Prototip</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="assets/styles.css">
+
+<div class="app">
+<div class="bar">
+  <div class="brand"><b>Pisač</b><span>FPZG · diplomski</span></div>
+  <button class="iconbtn" id="tgL" title="Struktura (Ctrl+\)" aria-pressed="true">☰</button>
+  <button class="iconbtn" id="tgFocus" title="Način fokusa (Ctrl+.)" aria-pressed="false">◎</button>
+  <button class="iconbtn" id="tgFind" title="Traži (Ctrl+F)">⌕</button>
+  <div class="modes" role="tablist">
+    <button role="tab" id="m-student" aria-selected="true">Student</button>
+    <button role="tab" id="m-mentor" aria-selected="false">Mentor</button>
+  </div>
+</div>
+
+<div class="body">
+  <aside class="rail left" id="railL">
+    <div class="sec"><h3>Struktura <span class="c" id="tot-words"></span></h3><div id="outline"></div></div>
+    <div class="sec"><h3>Popis tablica</h3><div id="tablist"></div></div>
+    <div class="sec"><h3>Popis grafikona</h3><div id="graflist"></div></div>
+    <div class="sec"><h3>Fusnote</h3><div id="fnrail"></div></div>
+  </aside>
+
+  <main class="canvas" id="canvas">
+    <div class="tools">
+      <button class="t" data-cmd="undo" title="Poništi (Ctrl+Z)">↶</button>
+      <button class="t" data-cmd="redo" title="Ponovi (Ctrl+Y)">↷</button>
+      <span class="sep"></span>
+      <button class="t" data-cmd="p">Odlomak</button>
+      <button class="t" data-cmd="h2">Naslov</button>
+      <button class="t" data-cmd="h3">Podnaslov</button>
+      <span class="sep"></span>
+      <button class="t b" data-cmd="bold" title="Ctrl+B">B</button>
+      <button class="t i" data-cmd="italic" title="Ctrl+I">I</button>
+      <button class="t" data-cmd="ul">• Popis</button>
+      <button class="t" data-cmd="quote">Blok-citat</button>
+      <span class="sep"></span>
+      <button class="t" data-cmd="tablica">Tablica</button>
+      <button class="t" data-cmd="grafikon">Grafikon</button>
+      <button class="t" data-cmd="xref">Poziv</button>
+      <button class="t" data-cmd="footnote">Fusnota</button>
+      <button class="t" data-cmd="comment" title="Komentar na odabrano">Komentar</button>
+      <div class="right">
+        <select id="style" aria-label="Stil citiranja">
+          <option value="fpzg">FPZG</option><option value="apa">APA</option><option value="chicago">Chicago</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="findbar" id="findbar" hidden>
+      <input id="findq" placeholder="Traži…"><input id="repq" placeholder="Zamijeni…">
+      <button class="btn ghost sm" id="findnext">Dalje</button>
+      <button class="btn ghost sm" id="repone">Zamijeni</button>
+      <button class="btn sm" id="repall">Sve</button>
+      <button class="iconbtn" id="findclose">×</button>
+    </div>
+
+    <div class="scrollarea" id="scroll">
+      <article class="sheet">
+        <div class="doc-meta">
+          <h1>Inkrementalizam u analizi javnih politika: izmjene Zakona o strancima 2026.</h1>
+          <p>Diplomski rad · Sveučilište u Zagrebu, Fakultet političkih znanosti</p>
+        </div>
+        <div id="editor" contenteditable="true" spellcheck="true" lang="hr" aria-label="Tekst rada"></div>
+        <div class="gen" id="fnwrap" hidden><h4>Fusnote</h4><ol id="fnlist"></ol></div>
+        <div class="gen"><h4>Literatura</h4><div class="biblist" id="biblist"></div><div class="auto" id="bibauto"></div></div>
+      </article>
+    </div>
+  </main>
+
+  <aside class="rail right" id="railR">
+    <div class="tabs" role="tablist">
+      <button role="tab" id="t-ai" aria-selected="true">Asistent</button>
+      <button role="tab" id="t-nb" aria-selected="false">Literatura</button>
+      <button role="tab" id="t-up" aria-selected="false">Upute</button>
+      <button role="tab" id="t-cm" aria-selected="false">Komentari</button>
+    </div>
+    <div class="pane" id="p-ai">
+      <div class="lbl">Svrha korištenja</div>
+      <select class="field" id="purpose">
+        <option value="explain">objašnjenje pojma</option><option value="brainstorm">brainstorming</option>
+        <option value="language">jezična dorada</option><option value="translate">prijevod</option>
+        <option value="restructure">restrukturiranje</option><option value="generate">generiranje teksta</option>
+      </select>
+      <textarea class="field" id="prompt" rows="2" placeholder="Pitaj asistenta…"></textarea>
+      <div class="row"><button class="btn" id="ask">Pošalji</button><span class="lbl" id="ai-count"></span></div>
+      <div id="ai-list" style="display:flex;flex-direction:column;gap:9px"></div>
+    </div>
+    <div class="pane" id="p-nb" hidden></div>
+    <div class="pane" id="p-up" hidden></div>
+    <div class="pane" id="p-cm" hidden></div>
+  </aside>
+</div>
+
+<div class="status" id="statusbar">
+  <div class="grp"><i class="dot" id="st-dot"></i><span id="st-save">lokalno</span></div>
+  <div class="grp"><span class="chip" id="st-inv" title="reconstruct(zapisnik) === dokument">zapisnik = dokument</span></div>
+  <div class="grp"><b id="st-words">0</b> / 10.000–15.000 riječi <div class="pbar"><i id="st-pbar"></i></div></div>
+  <div class="grp"><span id="st-pages"></span></div>
+  <div class="grp"><span id="st-session"></span></div>
+  <div class="grp" id="st-rhythm-g" hidden><span id="st-rhythm"></span></div>
+  <div class="grp sp"><span id="st-prov-l" class="note"></span><div class="provbar" id="st-prov"></div></div>
+  <div class="grp"><span class="chip" id="st-chk"></span></div>
+  <div class="grp"><span id="st-days"></span></div>
+</div>
+</div>
+
+<script src="assets/app.js"></script>
+
+</body>
+</html>
