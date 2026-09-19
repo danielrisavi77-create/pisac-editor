@@ -6,7 +6,7 @@ export function createAnthropicProvider(config = {}, runtime = {}) {
   return {
     id: "anthropic",
     available() {
-      return Boolean(env[config.keyEnv || "ANTHROPIC_API_KEY"]);
+      return config.enabled !== false && Boolean(env[config.keyEnv || "ANTHROPIC_API_KEY"]);
     },
     async execute({ model, system, user, plan }) {
       const apiKey = env[config.keyEnv || "ANTHROPIC_API_KEY"];
@@ -24,7 +24,10 @@ export function createAnthropicProvider(config = {}, runtime = {}) {
             model,
             max_tokens: plan?.outputBudgetTokens || 4096,
             system,
-            messages: [{ role: "user", content: user }]
+            messages: [{ role: "user", content: user }],
+            ...(["low","medium","high","xhigh","max"].includes(plan?.reasoning)
+              ? { output_config:{ effort:plan.reasoning } }
+              : {})
           })
         },
         { timeoutMs: plan?.budgets?.maxLatencyMs || 30000, fetchImpl }
