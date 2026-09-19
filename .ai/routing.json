@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "default": {
     "workflow": {
       "id": "direct"
@@ -29,9 +29,18 @@
     },
     "budgets": {
       "maxCostUsd": 0.05,
-      "maxLatencyMs": 30000
+      "maxLatencyMs": 30000,
+      "maxInputTokens": 48000,
+      "maxOutputTokens": 12000,
+      "maxTotalTokens": 70000,
+      "maxRetries": 1,
+      "maxFallbacks": 2,
+      "maxEscalations": 1,
+      "allowDynamicPricing": false,
+      "allowUnknownPredictedCost": false
     },
-    "fallbackPolicy": "standard"
+    "fallbackPolicy": "standard",
+    "profile": "balanced"
   },
   "routes": {
     "generic": {
@@ -43,7 +52,20 @@
       },
       "capability": "medium",
       "reasoning": "medium",
-      "qualityGate": 0.88
+      "qualityGate": 0.88,
+      "profile": "balanced",
+      "budgets": {
+        "maxCostUsd": 0.05,
+        "maxLatencyMs": 30000,
+        "maxInputTokens": 48000,
+        "maxOutputTokens": 12000,
+        "maxTotalTokens": 70000,
+        "maxRetries": 1,
+        "maxFallbacks": 2,
+        "maxEscalations": 1,
+        "allowDynamicPricing": false,
+        "allowUnknownPredictedCost": false
+      }
     },
     "explanation": {
       "workflow": {
@@ -54,7 +76,20 @@
       },
       "capability": "medium",
       "reasoning": "medium",
-      "qualityGate": 0.9
+      "qualityGate": 0.9,
+      "profile": "balanced",
+      "budgets": {
+        "maxCostUsd": 0.05,
+        "maxLatencyMs": 30000,
+        "maxInputTokens": 48000,
+        "maxOutputTokens": 12000,
+        "maxTotalTokens": 70000,
+        "maxRetries": 1,
+        "maxFallbacks": 2,
+        "maxEscalations": 1,
+        "allowDynamicPricing": false,
+        "allowUnknownPredictedCost": false
+      }
     },
     "brainstorm": {
       "workflow": {
@@ -69,6 +104,19 @@
       "generation": {
         "temperature": 0.7,
         "maxOutputTokens": 2500
+      },
+      "profile": "fast",
+      "budgets": {
+        "maxCostUsd": 0.05,
+        "maxLatencyMs": 30000,
+        "maxInputTokens": 48000,
+        "maxOutputTokens": 2500,
+        "maxTotalTokens": 70000,
+        "maxRetries": 1,
+        "maxFallbacks": 2,
+        "maxEscalations": 1,
+        "allowDynamicPricing": false,
+        "allowUnknownPredictedCost": false
       }
     },
     "grammar": {
@@ -84,6 +132,19 @@
       "generation": {
         "temperature": 0.1,
         "maxOutputTokens": 2500
+      },
+      "profile": "fast",
+      "budgets": {
+        "maxCostUsd": 0.05,
+        "maxLatencyMs": 30000,
+        "maxInputTokens": 48000,
+        "maxOutputTokens": 2500,
+        "maxTotalTokens": 70000,
+        "maxRetries": 1,
+        "maxFallbacks": 2,
+        "maxEscalations": 1,
+        "allowDynamicPricing": false,
+        "allowUnknownPredictedCost": false
       }
     },
     "translation": {
@@ -99,6 +160,19 @@
       "generation": {
         "temperature": 0.1,
         "maxOutputTokens": 3000
+      },
+      "profile": "fast",
+      "budgets": {
+        "maxCostUsd": 0.05,
+        "maxLatencyMs": 30000,
+        "maxInputTokens": 48000,
+        "maxOutputTokens": 3000,
+        "maxTotalTokens": 70000,
+        "maxRetries": 1,
+        "maxFallbacks": 2,
+        "maxEscalations": 1,
+        "allowDynamicPricing": false,
+        "allowUnknownPredictedCost": false
       }
     },
     "rewrite": {
@@ -114,6 +188,19 @@
       "generation": {
         "temperature": 0.15,
         "maxOutputTokens": 3500
+      },
+      "profile": "balanced",
+      "budgets": {
+        "maxCostUsd": 0.05,
+        "maxLatencyMs": 30000,
+        "maxInputTokens": 48000,
+        "maxOutputTokens": 3500,
+        "maxTotalTokens": 70000,
+        "maxRetries": 1,
+        "maxFallbacks": 2,
+        "maxEscalations": 1,
+        "allowDynamicPricing": false,
+        "allowUnknownPredictedCost": false
       }
     },
     "generation": {
@@ -134,6 +221,19 @@
         "required": true,
         "independent": true,
         "strategy": "independent-model-review"
+      },
+      "profile": "balanced",
+      "budgets": {
+        "maxCostUsd": 0.05,
+        "maxLatencyMs": 30000,
+        "maxInputTokens": 48000,
+        "maxOutputTokens": 4000,
+        "maxTotalTokens": 70000,
+        "maxRetries": 1,
+        "maxFallbacks": 2,
+        "maxEscalations": 1,
+        "allowDynamicPricing": false,
+        "allowUnknownPredictedCost": false
       }
     },
     "mentor_feedback": {
@@ -148,6 +248,19 @@
       "qualityGate": 0.93,
       "contextBudget": {
         "maxChars": 10000
+      },
+      "profile": "balanced",
+      "budgets": {
+        "maxCostUsd": 0.05,
+        "maxLatencyMs": 30000,
+        "maxInputTokens": 48000,
+        "maxOutputTokens": 12000,
+        "maxTotalTokens": 70000,
+        "maxRetries": 1,
+        "maxFallbacks": 2,
+        "maxEscalations": 1,
+        "allowDynamicPricing": false,
+        "allowUnknownPredictedCost": false
       }
     },
     "research": {
@@ -178,8 +291,17 @@
       },
       "budgets": {
         "maxCostUsd": 0.12,
-        "maxLatencyMs": 45000
-      }
+        "maxLatencyMs": 45000,
+        "maxInputTokens": 90000,
+        "maxOutputTokens": 12000,
+        "maxTotalTokens": 120000,
+        "maxRetries": 1,
+        "maxFallbacks": 2,
+        "maxEscalations": 1,
+        "allowDynamicPricing": false,
+        "allowUnknownPredictedCost": false
+      },
+      "profile": "quality"
     },
     "source_synthesis": {
       "workflow": {
@@ -205,6 +327,19 @@
       },
       "contextBudget": {
         "maxChars": 16000
+      },
+      "profile": "quality",
+      "budgets": {
+        "maxCostUsd": 0.05,
+        "maxLatencyMs": 30000,
+        "maxInputTokens": 90000,
+        "maxOutputTokens": 12000,
+        "maxTotalTokens": 120000,
+        "maxRetries": 1,
+        "maxFallbacks": 2,
+        "maxEscalations": 1,
+        "allowDynamicPricing": false,
+        "allowUnknownPredictedCost": false
       }
     },
     "citation_verification": {
@@ -235,8 +370,17 @@
       },
       "budgets": {
         "maxCostUsd": 0.16,
-        "maxLatencyMs": 50000
-      }
+        "maxLatencyMs": 50000,
+        "maxInputTokens": 90000,
+        "maxOutputTokens": 12000,
+        "maxTotalTokens": 120000,
+        "maxRetries": 1,
+        "maxFallbacks": 2,
+        "maxEscalations": 1,
+        "allowDynamicPricing": false,
+        "allowUnknownPredictedCost": false
+      },
+      "profile": "critical"
     },
     "hallucination_check": {
       "workflow": {
@@ -255,6 +399,19 @@
       },
       "contextBudget": {
         "maxChars": 12000
+      },
+      "profile": "critical",
+      "budgets": {
+        "maxCostUsd": 0.05,
+        "maxLatencyMs": 30000,
+        "maxInputTokens": 48000,
+        "maxOutputTokens": 12000,
+        "maxTotalTokens": 70000,
+        "maxRetries": 1,
+        "maxFallbacks": 2,
+        "maxEscalations": 1,
+        "allowDynamicPricing": false,
+        "allowUnknownPredictedCost": false
       }
     },
     "coding": {
@@ -281,8 +438,17 @@
       },
       "budgets": {
         "maxCostUsd": 0.15,
-        "maxLatencyMs": 60000
-      }
+        "maxLatencyMs": 60000,
+        "maxInputTokens": 48000,
+        "maxOutputTokens": 12000,
+        "maxTotalTokens": 70000,
+        "maxRetries": 1,
+        "maxFallbacks": 2,
+        "maxEscalations": 1,
+        "allowDynamicPricing": false,
+        "allowUnknownPredictedCost": false
+      },
+      "profile": "quality"
     },
     "architecture": {
       "workflow": {
@@ -302,8 +468,17 @@
       },
       "budgets": {
         "maxCostUsd": 0.14,
-        "maxLatencyMs": 50000
-      }
+        "maxLatencyMs": 50000,
+        "maxInputTokens": 48000,
+        "maxOutputTokens": 12000,
+        "maxTotalTokens": 70000,
+        "maxRetries": 1,
+        "maxFallbacks": 2,
+        "maxEscalations": 1,
+        "allowDynamicPricing": false,
+        "allowUnknownPredictedCost": false
+      },
+      "profile": "quality"
     },
     "security_review": {
       "workflow": {
@@ -329,8 +504,17 @@
       },
       "budgets": {
         "maxCostUsd": 0.18,
-        "maxLatencyMs": 60000
-      }
+        "maxLatencyMs": 60000,
+        "maxInputTokens": 48000,
+        "maxOutputTokens": 12000,
+        "maxTotalTokens": 70000,
+        "maxRetries": 1,
+        "maxFallbacks": 2,
+        "maxEscalations": 1,
+        "allowDynamicPricing": false,
+        "allowUnknownPredictedCost": false
+      },
+      "profile": "critical"
     },
     "document_repair": {
       "workflow": {
@@ -357,8 +541,17 @@
       },
       "budgets": {
         "maxCostUsd": 0.16,
-        "maxLatencyMs": 60000
-      }
+        "maxLatencyMs": 60000,
+        "maxInputTokens": 48000,
+        "maxOutputTokens": 12000,
+        "maxTotalTokens": 70000,
+        "maxRetries": 1,
+        "maxFallbacks": 2,
+        "maxEscalations": 1,
+        "allowDynamicPricing": false,
+        "allowUnknownPredictedCost": false
+      },
+      "profile": "critical"
     },
     "data_analysis": {
       "workflow": {
@@ -381,6 +574,19 @@
       },
       "contextBudget": {
         "maxChars": 14000
+      },
+      "profile": "quality",
+      "budgets": {
+        "maxCostUsd": 0.05,
+        "maxLatencyMs": 30000,
+        "maxInputTokens": 48000,
+        "maxOutputTokens": 12000,
+        "maxTotalTokens": 70000,
+        "maxRetries": 1,
+        "maxFallbacks": 2,
+        "maxEscalations": 1,
+        "allowDynamicPricing": false,
+        "allowUnknownPredictedCost": false
       }
     }
   }
