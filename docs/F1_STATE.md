@@ -3,7 +3,7 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 
 ## Done
 - R0 AI Architect v0.3 reconciliation merged into this branch; router surfaces removed; tests green. (see git log)
-- R1 PRs #1–#5 closed with rationale; PR #6 superseded by this branch's PR.
+- R1 PRs #1–#5 closed with rationale; PR #6 superseded by PR #7 (this branch). Loop routine active: hourly.
 
 ## Queue (top = next). Tags: [review] = reviewer pass required.
 - TODO F1-0a Tooling: Next.js App Router + TypeScript scaffold in repo root (`app/`, `package.json` scripts: dev/build/test/lint), Vitest, ESLint, `.nvmrc`; move `public/index.html` + `public/assets/*` to `legacy/` and keep `netlify.toml` publishing a working site (Next on Netlify). Root `npm test` must still run `tools/ai-architect` tests plus Vitest. CI: `.github/workflows/ci.yml` (install, lint, typecheck, unit tests).
