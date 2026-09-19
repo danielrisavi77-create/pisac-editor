@@ -40,7 +40,7 @@ test("retrieval-required tasks are blocked before any model call when evidence i
   assert.equal(result.attempts.length, 0);
 });
 
-test("high-risk task cannot silently succeed without an independent verifier", async () => {
+test("critical tasks cannot silently downgrade to the low-capability local mock", async () => {
   const outcomes = [];
   const architect = new AIArchitect({
     repoRoot:root,
@@ -56,8 +56,8 @@ test("high-risk task cannot silently succeed without an independent verifier", a
   });
 
   assert.equal(result.ok, false);
-  assert.equal(result.code, "VERIFICATION_UNAVAILABLE");
-  assert.ok(result.attempts.length >= 1);
+  assert.equal(result.code, "NO_PROVIDER_AVAILABLE");
+  assert.equal(result.attempts.length, 0);
   assert.equal(outcomes.at(-1).success, false);
 });
 
