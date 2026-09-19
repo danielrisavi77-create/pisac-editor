@@ -5,13 +5,18 @@
  *
  * F1-3a gives this view the local durable journal: every debounced canonical
  * candidate is written to IndexedDB in one atomic transaction and the sync
- * state machine is driven from the result. There is still no server sync
- * (F1-4b), so a document here can reach LOCAL_DURABLE and never SYNCED — and
- * it says exactly that, rather than a generic "saved".
+ * state machine is driven from the result. LOCAL_DURABLE and SYNCED stay two
+ * different claims — the journal can only ever justify the first one.
  *
  * F1-4a adds one thing only: the canonical server document and its revision
- * arrive as props and seed the bootstrap when the journal is empty. Nothing
- * here sends anything yet; the pending queue is still drained by nobody.
+ * arrive as props and seed the bootstrap when the journal is empty.
+ *
+ * F1-4b closes the loop: a drain runner (`createDrainRunner`) takes the
+ * pending queue to the server, and an ACK is what finally makes SYNCED true.
+ * The runner lives entirely outside this component — this file only hands it
+ * the journal, a `commit` bound to the server action, the reducer's dispatch
+ * and a place to put the revision the server names. Only the writer tab gets
+ * one, and it is stopped on unmount.
  *
  * Three honesty rules shape the wiring:
  *
@@ -43,11 +48,14 @@ import type { CanonicalDocument } from "@/domain/document";
 import {
   INITIAL_SYNC_STATE,
   restoreSyncState,
+  serverSyncErrorToOutcome,
   syncReducer,
+  type DrainOutcome,
   type JournalContents,
   type LocalSaveFailureReason,
   type SyncState,
 } from "@/domain/sync";
+import type { DocumentTransaction } from "@/domain/document";
 import {
   LOAD_FAILURE_MESSAGE,
   resolveInitialDocument,
@@ -56,6 +64,9 @@ import {
 import { openJournal, type JournalDatabase } from "@/lib/journal/db";
 import { loadJournal, markState, saveLocal } from "@/lib/journal/journal";
 import { acquireDocumentLock, documentLockName } from "@/lib/journal/lock";
+import { createDrainRunner, type DrainRunner } from "@/lib/sync/drainRunner";
+
+import { commitDocument } from "./actions";
 
 const statusRow = {
   display: "flex",
@@ -101,8 +112,8 @@ export type EditorClientProps = {
   documentId: string;
   /**
    * The project whose canonical server document this view commits to.
-   * Plumbed in by F1-4a and consumed by the pending-queue drain in F1-4b;
-   * nothing in this step sends anything to the server.
+   * Plumbed in by F1-4a; from F1-4b the drain runner commits the pending
+   * queue against it.
    */
   projectId: string;
   /** Canonical server document, or `null` when this request could not read one. */
@@ -122,6 +133,29 @@ type Boot =
     }
   | { status: "failed"; reason: LocalSaveFailureReason };
 
+/**
+ * One commit round trip, in the vocabulary the drain runner understands.
+ *
+ * Everything that is not an answer from `pisac_commit_document` becomes
+ * `transport_error` — the one retryable outcome — because a round trip that
+ * did not complete has told us nothing about the server, and the queue is
+ * still owed. A rejected promise counts: a server action can fail on the wire,
+ * and a throw here would leave the runner's latch stuck instead of retrying.
+ * Typed error codes are mapped by `serverSyncErrorToOutcome`, so `prevelik`
+ * stays a refusal and does not masquerade as a network hiccup.
+ */
+async function commitViaServer(
+  projectId: string,
+  tx: DocumentTransaction,
+): Promise<DrainOutcome> {
+  try {
+    const result = await commitDocument(projectId, tx);
+    return result.ok ? result.value : serverSyncErrorToOutcome(result.code);
+  } catch {
+    return { status: "transport_error" };
+  }
+}
+
 /** The state a failed local probe lands in, derived from the machine itself. */
 function stateAfterLocalFailure(reason: LocalSaveFailureReason): SyncState {
   return syncReducer(syncReducer(INITIAL_SYNC_STATE, { type: "LOCAL_SAVE_STARTED" }), {
@@ -132,6 +166,7 @@ function stateAfterLocalFailure(reason: LocalSaveFailureReason): SyncState {
 
 export default function EditorClient({
   documentId,
+  projectId,
   initialServerDocument,
   serverRevision,
 }: EditorClientProps) {
@@ -217,6 +252,7 @@ export default function EditorClient({
         key={`${documentId}:no-journal`}
         db={null}
         documentId={documentId}
+        projectId={projectId}
         document={resolved.document}
         baseRevision={resolved.revision}
         initialSyncState={stateAfterLocalFailure(boot.reason)}
@@ -240,6 +276,7 @@ export default function EditorClient({
       key={documentId}
       db={boot.writable ? boot.db : null}
       documentId={documentId}
+      projectId={projectId}
       document={resolved.document}
       baseRevision={resolved.revision}
       initialSyncState={
@@ -277,6 +314,8 @@ type JournalledEditorProps = {
   /** `null` when this session must not write: no journal, or not the writer. */
   db: JournalDatabase | null;
   documentId: string;
+  /** The project whose canonical server document the drain commits to. */
+  projectId: string;
   document: CanonicalDocument;
   baseRevision: number;
   initialSyncState: SyncState;
@@ -290,6 +329,7 @@ type JournalledEditorProps = {
 function JournalledEditor({
   db,
   documentId,
+  projectId,
   document,
   baseRevision,
   initialSyncState,
@@ -301,6 +341,43 @@ function JournalledEditor({
   const base = useRef(baseRevision);
   const lastError = useRef<LocalSaveFailureReason | undefined>(undefined);
   const flushRef = useMemo<EditorFlushHandle>(() => ({ current: null }), []);
+  const runner = useRef<DrainRunner | null>(null);
+
+  /*
+   * The drain, for the writer tab only.
+   *
+   * `db` is null when this session must not write — no journal, or another tab
+   * holds the lock — and a session that must not write must not commit either:
+   * two tabs draining the same queue would race for the same rows and the
+   * loser would be raising conflicts against its own twin.
+   *
+   * `onServerRevision` moves the base every later save is written against.
+   * That is the only place a revision enters this component from outside a
+   * server answer; nothing here ever increments one.
+   *
+   * `dispatch` from `useReducer` is stable, and so are the refs, so this runs
+   * once per journal — and `stop()` on teardown cancels the timers and makes
+   * the runner ignore whatever is still in flight.
+   */
+  useEffect(() => {
+    if (!db) {
+      return;
+    }
+    const drain = createDrainRunner({
+      db,
+      documentId,
+      commit: (tx) => commitViaServer(projectId, tx),
+      dispatch,
+      onServerRevision: (revision) => {
+        base.current = revision;
+      },
+    });
+    runner.current = drain;
+    return () => {
+      drain.stop();
+      runner.current = null;
+    };
+  }, [db, documentId, projectId]);
 
   // Persist the states that must survive a reload. Fire-and-forget: this is a
   // best-effort record, and a store that cannot take it is already reflected
@@ -360,6 +437,9 @@ function JournalledEditor({
         if (result.ok) {
           lastError.current = undefined;
           dispatch({ type: "LOCAL_SAVE_OK" });
+          // Durable locally — now it owes the server. The runner coalesces a
+          // burst of these into one round trip.
+          runner.current?.notifyLocalSave();
           return;
         }
         lastError.current = result.reason;

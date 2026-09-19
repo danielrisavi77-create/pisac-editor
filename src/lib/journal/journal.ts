@@ -55,6 +55,10 @@ export type MarkStateResult =
   | { ok: true; meta: SyncMeta }
   | { ok: false; reason: LocalSaveFailureReason };
 
+export type MarkSyncedResult =
+  | { ok: true; meta: SyncMeta; revision: number }
+  | { ok: false; reason: LocalSaveFailureReason };
+
 /**
  * How many pending rows one document may keep.
  *
@@ -241,6 +245,74 @@ export async function clearPending(
     });
 
     return { ok: true, cleared };
+  } catch (error) {
+    return { ok: false, reason: classifyJournalError(error) };
+  }
+}
+
+/**
+ * Records a server ACK in the journal, atomically (F1-4b).
+ *
+ * Two facts land together, or neither does:
+ *   1. the snapshot's base revision becomes `revision` — the revision the
+ *      server just assigned to those bytes;
+ *   2. `meta.state` records that the ACK happened.
+ *
+ * This is the ONLY function in this file that writes a revision, and it does
+ * not invent one: `revision` comes from the server's `committed`/`duplicate`
+ * answer and from nowhere else. Local durable state is still not canonical
+ * server state — this is the moment the two are allowed to agree.
+ *
+ * The recorded state is SYNCED only when the queue is empty. If the author
+ * kept typing while the commit was in flight, rows newer than the acknowledged
+ * one are still owed to the server, and calling that SYNCED would be the
+ * generic "saved" the constitution forbids — LOCAL_DURABLE is the honest
+ * claim, and the drain will come back for the rest. Callers therefore run
+ * `clearPending` for the acknowledged prefix BEFORE this.
+ *
+ * A document with no snapshot row (nothing was ever journalled locally) still
+ * gets its meta written; there is simply no revision to place.
+ */
+export async function markSynced(
+  db: JournalDb,
+  documentId: string,
+  revision: number,
+): Promise<MarkSyncedResult> {
+  if (!Number.isSafeInteger(revision) || revision < 0) {
+    // A revision that is not a whole, safe number cannot be compared against
+    // on the next CAS, so it is refused rather than stored.
+    return { ok: false, reason: "unknown" };
+  }
+
+  try {
+    const meta = await db.transaction(
+      "rw",
+      db.snapshots,
+      db.pending,
+      db.meta,
+      async () => {
+        const snapshot = await db.snapshots.get(documentId);
+        if (snapshot) {
+          await db.snapshots.put({ ...snapshot, revision });
+        }
+
+        const outstanding = await db.pending
+          .where("documentId")
+          .equals(documentId)
+          .count();
+
+        const current = await db.meta.get(documentId);
+        const next: SyncMeta = {
+          documentId,
+          state: (outstanding === 0 ? "SYNCED" : "LOCAL_DURABLE") satisfies SyncState,
+          localSeq: current?.localSeq ?? 0,
+        };
+        await db.meta.put(next);
+        return next;
+      },
+    );
+
+    return { ok: true, meta, revision };
   } catch (error) {
     return { ok: false, reason: classifyJournalError(error) };
   }

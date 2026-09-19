@@ -17,7 +17,14 @@ import {
   openJournal,
   type JournalDb,
 } from "./db";
-import { PENDING_LIMIT, clearPending, loadJournal, markState, saveLocal } from "./journal";
+import {
+  PENDING_LIMIT,
+  clearPending,
+  loadJournal,
+  markState,
+  markSynced,
+  saveLocal,
+} from "./journal";
 import { restoreSyncState } from "@/domain/sync";
 
 const DOC_A = "11111111-1111-4111-8111-111111111111";
@@ -555,5 +562,96 @@ describe("reload restores the sticky states", () => {
       throw new Error("expected a successful load");
     }
     expect(restoreSyncState(loaded.contents)).toBe("LOCAL_DURABLE");
+  });
+});
+
+describe("markSynced — recording a server ACK (F1-4b)", () => {
+  it("moves the snapshot onto the revision the server named", async () => {
+    await saveLocal(db, DOC_A, emptyDocument(uuidSeq()), 0, uuidSeq("b"));
+    await clearPending(db, DOC_A, 1);
+
+    const result = await markSynced(db, DOC_A, 5);
+    expect(result.ok).toBe(true);
+
+    const loaded = await loadJournal(db, DOC_A);
+    if (!loaded.ok) {
+      throw new Error("expected a successful load");
+    }
+    expect(loaded.contents.snapshot?.revision).toBe(5);
+    expect(loaded.contents.meta?.state).toBe("SYNCED");
+  });
+
+  it("leaves the candidate itself untouched", async () => {
+    const doc = docWithText("ostaje isti", uuidSeq());
+    await saveLocal(db, DOC_A, doc, 0, uuidSeq("b"));
+    await clearPending(db, DOC_A, 1);
+    await markSynced(db, DOC_A, 2);
+
+    const loaded = await loadJournal(db, DOC_A);
+    if (!loaded.ok) {
+      throw new Error("expected a successful load");
+    }
+    expect(loaded.contents.snapshot?.document).toEqual(doc);
+  });
+
+  it("refuses to claim SYNCED while rows are still owed to the server", async () => {
+    await saveLocal(db, DOC_A, emptyDocument(uuidSeq()), 0, uuidSeq("b"));
+    await saveLocal(db, DOC_A, emptyDocument(uuidSeq()), 0, uuidSeq("c"));
+    await clearPending(db, DOC_A, 1);
+
+    await markSynced(db, DOC_A, 3);
+
+    const loaded = await loadJournal(db, DOC_A);
+    if (!loaded.ok) {
+      throw new Error("expected a successful load");
+    }
+    expect(loaded.contents.pending).toHaveLength(1);
+    expect(loaded.contents.meta?.state).toBe("LOCAL_DURABLE");
+    // The revision the server named still lands, so the next CAS is honest.
+    expect(loaded.contents.snapshot?.revision).toBe(3);
+  });
+
+  it("keeps the local sequence as a high-water mark", async () => {
+    await saveLocal(db, DOC_A, emptyDocument(uuidSeq()), 0, uuidSeq("b"));
+    await saveLocal(db, DOC_A, emptyDocument(uuidSeq()), 0, uuidSeq("c"));
+    await clearPending(db, DOC_A, 2);
+    await markSynced(db, DOC_A, 1);
+
+    const loaded = await loadJournal(db, DOC_A);
+    if (!loaded.ok) {
+      throw new Error("expected a successful load");
+    }
+    expect(loaded.contents.meta?.localSeq).toBe(2);
+  });
+
+  it("refuses a revision that is not a whole, safe number", async () => {
+    await saveLocal(db, DOC_A, emptyDocument(uuidSeq()), 0, uuidSeq("b"));
+    expect(await markSynced(db, DOC_A, 1.5)).toEqual({ ok: false, reason: "unknown" });
+    expect(await markSynced(db, DOC_A, -1)).toEqual({ ok: false, reason: "unknown" });
+
+    const loaded = await loadJournal(db, DOC_A);
+    if (!loaded.ok) {
+      throw new Error("expected a successful load");
+    }
+    expect(loaded.contents.snapshot?.revision).toBe(0);
+  });
+
+  it("writes meta even when nothing was ever journalled locally", async () => {
+    const result = await markSynced(db, DOC_B, 4);
+    expect(result.ok && result.meta.state).toBe("SYNCED");
+
+    const loaded = await loadJournal(db, DOC_B);
+    if (!loaded.ok) {
+      throw new Error("expected a successful load");
+    }
+    expect(loaded.contents.snapshot).toBeNull();
+  });
+
+  it("maps a failing store to a reason instead of throwing", async () => {
+    const error = Object.assign(new Error("gone"), { name: "DatabaseClosedError" });
+    expect(await markSynced(failingDb(db, error), DOC_A, 1)).toEqual({
+      ok: false,
+      reason: "unavailable",
+    });
   });
 });
