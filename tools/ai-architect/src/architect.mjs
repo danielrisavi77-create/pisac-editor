@@ -49,6 +49,13 @@ function userPrompt(taskText, context) {
   return sections.join("\n\n");
 }
 
+function canonicalModelId(value = "") {
+  return String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/^(openai|anthropic|google|deepseek|x-ai|meta-llama|mistralai)\//, "");
+}
+
 function failureResult(plan, code, message, attempts = [], extra = {}) {
   return {
     ok: false,
@@ -393,7 +400,7 @@ export class AIArchitect {
         const sameActualModel = Boolean(
           primary.actualModel &&
           checked.actualModel &&
-          String(primary.actualModel) === String(checked.actualModel)
+          canonicalModelId(primary.actualModel) === canonicalModelId(checked.actualModel)
         );
         verificationAttempts.push({
           provider: checked.provider,
