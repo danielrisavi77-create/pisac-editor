@@ -126,6 +126,17 @@ export class AIArchitect {
     const candidates = uniqueCandidateOrder(plan, available);
     if (!candidates.length) {
       await this.#recordFailure(plan, taskText, context, "NO_PROVIDER_AVAILABLE", [], 0);
+      if (context.allowDegraded && context.degradedOutput) {
+        return {
+          ok:false,
+          status:"degraded",
+          code:"NO_PROVIDER_AVAILABLE",
+          message:"No live provider is available. Returning the explicitly allowed, clearly labelled degraded response.",
+          plan,
+          output:String(context.degradedOutput),
+          attempts:[]
+        };
+      }
       return failureResult(
         plan,
         "NO_PROVIDER_AVAILABLE",
