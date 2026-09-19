@@ -1,17 +1,24 @@
 const RULES = [
-  ["citation_verification", /cit(e|ation)|citation|reference|izvor|referenc|doi|bibliograph/i],
   ["security_review", /security|sigurnost|secret|token|vulnerab|xss|csrf|sql injection|auth/i],
   ["document_repair", /docx|word|ooxml|format|repair|poprav|field|bookmark|footnote|header|footer/i],
   ["architecture", /architect|arhitektur|system design|workflow|orchestrat|repo structure/i],
   ["coding", /code|bug|fix|implement|refactor|typescript|javascript|python|api|test|ci|github action/i],
-  ["research", /research|istraž|literature|literatura|web search|deep research/i],
+  ["research", /research|istraž|literature|literatura|source synthesis|sintez.*izvor|web search|deep research/i],
   ["data_analysis", /statistic|analiz.*podat|dataset|csv|regression|correlation|anova|jamovi/i],
   ["rewrite", /rewrite|prepi|uredi|polish|improve|poboljš|sažmi|summari/i],
   ["grammar", /grammar|gramatik|pravopis|spelling|lekt/i]
 ];
 
+const VERIFY_INTENT = /verify|verification|provjer|check|validate|validir|potvrd|točnost/i;
+const CITATION_SIGNAL = /citation|citat|doi|reference|referenc|bibliograph|izvor/i;
+
 export function classifyTask(text = "") {
   const normalized = String(text).trim();
+
+  if (VERIFY_INTENT.test(normalized) && CITATION_SIGNAL.test(normalized)) {
+    return "citation_verification";
+  }
+
   for (const [kind, regex] of RULES) {
     if (regex.test(normalized)) return kind;
   }
