@@ -28,9 +28,10 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 
 - DONE d9b4d32 F1-5b recovery flow (explicit salvage-local/adopt-server, resetJournalDatabase on user choice, RECOVERED carries via) + named immutable checkpoints (migration 2026091906 PREPARED, definer RPC, server-truth snapshot, honest unsynced note).
 
+- DONE 3d5e708 F1-6 DOCX export of F1 subset: fidelity manifest (SUPPORTED_EXACT/UNKNOWN paths, PARTIAL overall), lazy docx import, honest HR labels incl. local-changes note, PK smoke verified.
+
 ## Queue (top = next). Tags: [review] = reviewer pass required.
 
-- IN_PROGRESS F1-6 DOCX export: `docx` JS, explicit F1 subset, fidelity labels (SUPPORTED_EXACT/APPROXIMATED/UNKNOWN) in export manifest.
 - TODO F1-7 Fixtures + Playwright E2E for the F1 fixture IDs; evidence record fixture→test→SHA.
 
 ## Blocked / questions for owner
