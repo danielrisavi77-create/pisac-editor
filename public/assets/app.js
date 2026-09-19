@@ -610,10 +610,39 @@
     generate:"Inkrementalizam ostaje dominantan okvir za razumijevanje javnih politika jer prepoznaje ograničenja ljudske racionalnosti i institucionalne inercije, no teško objašnjava rijetke, ali značajne zaokrete."
   };
   var PLBL={explain:"objašnjenje",brainstorm:"brainstorming",language:"jezik",translate:"prijevod",restructure:"struktura",generate:"generiranje"};
-  $("ask").addEventListener("click",function(){
+  function assistantSelection(){
+    var s=window.getSelection();
+    if (!s||s.isCollapsed||!ed.contains(s.anchorNode)) return "";
+    return s.toString().slice(0,6000);
+  }
+  $("ask").addEventListener("click",async function(){
     var q=$("prompt").value.trim(); if(!q) return;
-    var p=$("purpose").value, it={id:"AI"+(ledger.length+1),prompt:q,response:CANNED[p],purpose:p};
-    ledger.push(it); push("ai_query",{interaction_id:it.id,purpose:p});
+    var p=$("purpose").value, id="AI"+(ledger.length+1), btn=$("ask"), oldLabel=btn.textContent;
+    var selectedText=assistantSelection(), it=null;
+    btn.disabled=true; btn.textContent="Šaljem…";
+    push("ai_query",{interaction_id:id,purpose:p,execution_mode:"architect"});
+    try {
+      if (!window.PisacAI||typeof window.PisacAI.ask!=="function") throw Object.assign(new Error("AI Architect client nije učitan."),{code:"CLIENT_UNAVAILABLE"});
+      var result=await window.PisacAI.ask({prompt:q,purpose:p,selectedText:selectedText});
+      it={id:id,prompt:q,response:result.output,purpose:p,execution:result.execution||{status:"live"}};
+      push("ai_result",{
+        interaction_id:id,
+        provider:it.execution.provider||null,
+        model:it.execution.actualModel||null,
+        workflow:it.execution.workflow?it.execution.workflow.id:null,
+        prompt_version:it.execution.prompt?it.execution.prompt.version:null
+      });
+    } catch(error) {
+      it={id:id,prompt:q,response:CANNED[p],purpose:p,execution:{
+        status:"demo_fallback",
+        code:error&&error.code?error.code:"AI_UNAVAILABLE"
+      }};
+      push("ai_fallback",{interaction_id:id,reason:it.execution.code});
+      toast("Live AI nije dostupan — prikazan je jasno označen demo odgovor.");
+    } finally {
+      btn.disabled=false; btn.textContent=oldLabel;
+    }
+    ledger.push(it);
     $("prompt").value=""; renderAI(); renderStatus(); });
   function renderAI(){
     $("ai-count").textContent=ledger.length+" interakcija";
@@ -623,6 +652,15 @@
       var tg=document.createElement("span"); tg.className="tag"; tg.textContent=PLBL[l.purpose];
       var q=document.createElement("div"); q.className="q"; q.textContent=l.prompt;
       var a=document.createElement("div"); a.className="a"; a.textContent=l.response;
+      var meta=document.createElement("div"); meta.className="note";
+      if (l.execution&&l.execution.status==="live"){
+        meta.textContent="AI Architect · "+(l.execution.provider||"provider")+" / "+(l.execution.actualModel||l.execution.requestedModel||"model")
+          +(l.execution.verificationStatus&&l.execution.verificationStatus!=="not-required"?" · verifikacija: "+l.execution.verificationStatus:"");
+      } else if (l.execution&&l.execution.status==="demo_fallback"){
+        meta.textContent="Demo odgovor · live AI nije dostupan ("+(l.execution.code||"AI_UNAVAILABLE")+")";
+      } else {
+        meta.textContent="Demo zapis iz prototipa";
+      }
       var r=document.createElement("div"); r.className="row";
       var bi=document.createElement("button"); bi.className="btn sm"; bi.textContent="Umetni";
       bi.onclick=function(){ push("ai_accept",{interaction_id:l.id,accepted_chars:l.response.length});
@@ -632,7 +670,7 @@
         if (navigator.clipboard) navigator.clipboard.writeText(l.response);
         toast("Kopirano — paste će nositi AI podrijetlo"); };
       r.appendChild(bi); r.appendChild(bc);
-      d.appendChild(tg); d.appendChild(q); d.appendChild(a); d.appendChild(r); box.appendChild(d); }); }
+      d.appendChild(tg); d.appendChild(q); d.appendChild(a); d.appendChild(meta); d.appendChild(r); box.appendChild(d); }); }
   function renderNB(){
     var box=$("p-nb"); box.innerHTML="";
     var used={}; Array.prototype.forEach.call(ed.querySelectorAll(".cite"),function(c){ used[c.dataset.src]=(used[c.dataset.src]||0)+1; });
@@ -795,7 +833,9 @@
       else if (ev.type==="footnote_insert") desc="fusnota "+ev.payload.n;
       else if (ev.type==="comment_add") desc="komentar "+ev.payload.id;
       else if (ev.type==="comment_resolve") desc="riješen "+ev.payload.id;
-      else if (ev.type==="ai_query"){ kind="k-ai"; desc=ev.payload.purpose; }
+      else if (ev.type==="ai_query"){ kind="k-ai"; desc=ev.payload.purpose+" · "+(ev.payload.execution_mode||"demo"); }
+      else if (ev.type==="ai_result"){ kind="k-ai"; desc=(ev.payload.provider||"provider")+" / "+(ev.payload.model||"model"); }
+      else if (ev.type==="ai_fallback"){ kind="k-ai"; desc="demo fallback · "+(ev.payload.reason||"nedostupno"); }
       else if (ev.type==="ai_accept"){ kind="k-ai"; desc=ev.payload.accepted_chars+" zn."; }
       else if (ev.type==="notebook_copy"){ kind="k-int"; desc=ev.payload.entry_id; }
       else if (ev.type==="reconciliation"){ kind="k-paste"; desc="usklađeno na "+ev.payload.at+" (+"+ev.payload.added+"/−"+ev.payload.removed+")"; }

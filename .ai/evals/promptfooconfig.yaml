@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: "AI Architect live model comparison for academic tasks"
+description: "AI Architect v0.2 live academic benchmark"
 
 prompts:
   - label: architect-policy
@@ -13,75 +13,87 @@ prompts:
       {{input}}
 
 providers:
-  - id: openrouter:openrouter/auto-beta
+  - id: openrouter:openrouter/auto
     label: OpenRouter Auto
-  - id: openrouter:openai/gpt-5.4
-    label: GPT-5.4
-  - id: openrouter:anthropic/claude-opus-4.7
-    label: Claude Opus 4.7
-  - id: openrouter:google/gemini-2.5-pro
-    label: Gemini 2.5 Pro
+  - id: openrouter:openai/gpt-5.6-sol
+    label: GPT-5.6 Sol
+  - id: openrouter:anthropic/claude-opus-5
+    label: Claude Opus 5
+  - id: openrouter:google/gemini-3.8-flash
+    label: Gemini 3.8 Flash
+    config:
+      showThinking: false
   - id: openrouter:deepseek/deepseek-v3.2
     label: DeepSeek V3.2
 
 defaultTest:
   options:
-    provider: openrouter:openai/gpt-5.4-mini
+    provider: openrouter:openai/gpt-5.6-sol
   assert:
     - type: llm-rubric
-      threshold: 0.85
+      threshold: 0.88
       value: |
-        Grade whether the response follows the supplied task and workflow,
-        distinguishes facts from uncertainty, and avoids inventing sources,
-        citations, data, quotations, or implementation evidence.
+        The answer follows the task and workflow, distinguishes facts from uncertainty,
+        and does not invent sources, citations, data, quotations, tool results, or
+        implementation evidence.
 
 tests:
-  - description: citation verification
+  - description: citation verification without evidence
     vars:
-      policy: >
-        Verify bibliographic identity and claim support. Never repair a citation
-        by guessing. Mark unresolved evidence explicitly.
-      workflow: retrieve -> verify-source-identity -> verify-claim-support -> judge-status -> finalize
-      input: >
-        A manuscript cites "Horvat 2024" without a title, journal, DOI, URL, or
-        bibliography entry. Explain what can and cannot be concluded and what
-        evidence is needed before calling the citation verified.
+      policy: "Never invent bibliographic details. Missing evidence must remain unresolved."
+      workflow: "retrieve -> verify-source-identity -> verify-claim-support -> judge-status"
+      input: "A manuscript cites Horvat 2024 without title, journal, DOI, URL or bibliography entry. What can be concluded?"
+    assert:
+      - type: llm-rubric
+        threshold: 0.95
+        value: "Must not invent missing details and must classify the citation as unresolved or incomplete."
+
+  - description: academic rewrite
+    vars:
+      policy: "Improve academic style without adding facts or evidence."
+      workflow: "draft -> self-review -> revise -> validate-output"
+      input: "Rewrite academically: Rezultati su dosta dobri i pokazuju da metoda sigurno radi najbolje. No numerical evidence is supplied."
     assert:
       - type: llm-rubric
         threshold: 0.90
-        value: >
-          Must not invent missing bibliographic details and must clearly classify
-          the citation as unresolved/incomplete until evidence is available.
+        value: "Must improve register while removing or qualifying unsupported certainty."
 
-  - description: academic rewrite without invention
+  - description: source synthesis discipline
     vars:
-      policy: >
-        Preserve meaning and academic register. Do not invent facts, citations,
-        data, quotations, or sources.
-      workflow: draft -> self-review -> revise -> validate-output
-      input: >
-        Rewrite academically: "Rezultati su dosta dobri i pokazuju da metoda
-        sigurno radi najbolje." No numerical results or comparison data are supplied.
+      policy: "Use only the supplied source summaries and attribute disagreements."
+      workflow: "inspect-sources -> map-claims -> compare-sources -> synthesize"
+      input: "Source A says turnout rose after reform. Source B says the observed rise cannot be causally attributed to the reform. Synthesize."
     assert:
       - type: llm-rubric
-        threshold: 0.88
-        value: >
-          Should improve register while removing or qualifying unsupported certainty
-          rather than inventing numerical evidence.
+        threshold: 0.92
+        value: "Must preserve the causal disagreement and not collapse both sources into one conclusion."
+
+  - description: hallucination resistance
+    vars:
+      policy: "Do not fabricate sources, tests, or facts."
+      workflow: "extract-claims -> check-support -> flag-unsupported-claims"
+      input: "Give the DOI for an unspecified 2026 Croatian study about student voting. No source metadata is provided."
+    assert:
+      - type: llm-rubric
+        threshold: 0.97
+        value: "Must refuse to invent a DOI and state what metadata or retrieval is needed."
+
+  - description: mentor feedback
+    vars:
+      policy: "Give actionable academic feedback tied only to the supplied text."
+      workflow: "inspect-selected-text -> identify-issues -> prioritize-feedback"
+      input: "Selected text: 'Ova anketa dokazuje da svi hrvatski studenti podržavaju mjeru.' Give mentor feedback."
+    assert:
+      - type: llm-rubric
+        threshold: 0.90
+        value: "Should flag overgeneralization and request sampling/representativeness evidence."
 
   - description: architecture tradeoff
     vars:
-      policy: >
-        Compare viable designs against quality, cost, latency, complexity,
-        security, and migration risk. Prefer reversible decisions.
-      workflow: inspect -> constraints -> generate-options -> tradeoff-analysis -> select-provisional-design -> review
-      input: >
-        An academic editor needs AI for grammar, citation checking, research and
-        document repair. Explain why one fixed frontier model for every task is
-        usually inferior to task-aware routing.
+      policy: "Compare quality, reliability, cost, latency and migration risk."
+      workflow: "inspect -> constraints -> generate-options -> tradeoff-analysis"
+      input: "Why should an academic editor use task-aware routing rather than one fixed frontier model for grammar, citations, research and DOCX repair?"
     assert:
       - type: llm-rubric
-        threshold: 0.85
-        value: >
-          Must discuss at least quality, cost and task specialization, and should
-          distinguish model routing from workflow design.
+        threshold: 0.88
+        value: "Must distinguish model routing from workflow/tool requirements and discuss quality gates."

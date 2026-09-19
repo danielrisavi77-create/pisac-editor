@@ -1,29 +1,31 @@
-const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
+import { createOpenRouterProvider } from "./providers/openrouter.mjs";
 
-export async function routeAndExecute({messages, model="openrouter/auto-beta", apiKey=process.env.OPENROUTER_API_KEY}) {
-  if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set.");
-
-  const response = await fetch(ENDPOINT, {
-    method:"POST",
-    headers:{
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type":"application/json",
-      "HTTP-Referer": process.env.AI_ARCHITECT_SITE_URL || "https://github.com/danielrisavi77-create/pisac-editor",
-      "X-Title": process.env.AI_ARCHITECT_APP_NAME || "AI Architect"
-    },
-    body:JSON.stringify({model,messages})
+/**
+ * Backward-compatible v0.1 helper.
+ * New code should use AIArchitect.execute() so routing, validation, fallback,
+ * verification and telemetry cannot be bypassed.
+ */
+export async function routeAndExecute({
+  messages,
+  model = "openrouter/auto",
+  apiKey = process.env.OPENROUTER_API_KEY
+}) {
+  const provider = createOpenRouterProvider(
+    { keyEnv:"OPENROUTER_API_KEY" },
+    { env:{ ...process.env, OPENROUTER_API_KEY:apiKey } }
+  );
+  const system = messages?.find((m) => m.role === "system")?.content || "";
+  const user = messages?.filter((m) => m.role !== "system").map((m) => m.content).join("\n") || "";
+  const result = await provider.execute({
+    model,
+    system,
+    user,
+    plan:{ budgets:{ maxLatencyMs:30000 } }
   });
-
-  const json = await response.json();
-  if (!response.ok) {
-    throw new Error(`OpenRouter error ${response.status}: ${JSON.stringify(json)}`);
-  }
-
   return {
-    requestedModel:model,
-    selectedModel:json.model || null,
-    usage:json.usage || null,
-    output:json.choices?.[0]?.message?.content ?? null,
-    raw:json
+    requestedModel:result.requestedModel,
+    selectedModel:result.actualModel,
+    usage:result.usage,
+    output:result.output
   };
 }

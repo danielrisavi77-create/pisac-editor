@@ -5,31 +5,80 @@ on:
     paths:
       - ".ai/**"
       - "tools/ai-architect/**"
+      - "netlify/functions/**"
+      - "public/assets/ai-client.js"
+      - "public/assets/app.js"
+      - "public/index.html"
+      - "netlify.toml"
       - ".github/workflows/ai-architect.yml"
+      - ".github/workflows/ai-architect-live-eval.yml"
+      - "AI_ARCHITECT.md"
+      - "docs/AI_FEATURE_AUDIT.md"
+      - "README.md"
+      - ".env.example"
   push:
     branches: [main]
     paths:
       - ".ai/**"
       - "tools/ai-architect/**"
+      - "netlify/functions/**"
+      - "public/assets/ai-client.js"
+      - "public/assets/app.js"
+      - "public/index.html"
+      - "netlify.toml"
+      - "AI_ARCHITECT.md"
+      - "docs/AI_FEATURE_AUDIT.md"
+      - "README.md"
+      - ".env.example"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  deterministic-router-tests:
+  deterministic-gates:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
-      - name: Run AI Architect tests
+          node-version: "24"
+
+      - name: Unit and regression tests
         working-directory: tools/ai-architect
         run: npm test
-      - name: Smoke-test repo scan
+
+      - name: Validate AI Architect configuration
+        working-directory: tools/ai-architect
+        run: npm run validate
+
+      - name: Run deterministic golden eval quality gate
+        working-directory: tools/ai-architect
+        run: npm run eval
+
+      - name: Smoke-test ProjectProfile scan
         working-directory: tools/ai-architect
         run: npm run scan
+
       - name: Smoke-test recommendation
         working-directory: tools/ai-architect
         run: npm run recommend -- "Provjeri sve citate i DOI-jeve u akademskom radu"
+
+      - name: Smoke-test public decision explanation
+        working-directory: tools/ai-architect
+        run: npm run explain -- "Jezično doradi ovaj akademski odlomak"
+
+      - name: Syntax-check browser and server execution layers
+        run: |
+          node --check public/assets/ai-client.js
+          node --check public/assets/app.js
+          node --check netlify/functions/ai-execute.mjs
+          node --check tools/ai-architect/src/architect.mjs
+
+      - name: Assert no live API secrets are required by default CI
+        run: |
+          test -z "${OPENROUTER_API_KEY:-}"
+          test -z "${OPENAI_API_KEY:-}"
+          test -z "${ANTHROPIC_API_KEY:-}"
+          test -z "${GEMINI_API_KEY:-}"

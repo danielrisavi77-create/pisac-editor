@@ -1,69 +1,127 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "workflows": {
-    "direct": [
-      "prepare",
-      "execute",
-      "validate-output"
-    ],
-    "draft-review": [
-      "draft",
-      "self-review",
-      "revise",
-      "validate-output"
-    ],
-    "retrieve-synthesize-verify": [
-      "retrieve",
-      "rank-evidence",
-      "synthesize",
-      "independent-verify",
-      "finalize"
-    ],
-    "retrieve-verify-judge": [
-      "retrieve",
-      "verify-source-identity",
-      "verify-claim-support",
-      "judge-status",
-      "finalize"
-    ],
-    "plan-execute-test-review": [
-      "inspect",
-      "plan",
-      "execute",
-      "targeted-tests",
-      "review-diff",
-      "finalize"
-    ],
-    "analyze-options-decide-review": [
-      "inspect",
-      "constraints",
-      "generate-options",
-      "tradeoff-analysis",
-      "select-provisional-design",
-      "review"
-    ],
-    "inspect-threat-model-test-review": [
-      "inspect",
-      "threat-model",
-      "findings",
-      "reproduce-or-test",
-      "remediate",
-      "review"
-    ],
-    "inspect-plan-repair-verify": [
-      "inspect-structure",
-      "find-first-divergence",
-      "repair-minimally",
-      "verify-fidelity",
-      "regression-check"
-    ],
-    "inspect-analyze-validate": [
-      "inspect-data",
-      "validate-inputs",
-      "analyze",
-      "assumption-checks",
-      "interpret",
-      "validate-output"
-    ]
+    "direct": {
+      "version": "2.0.0",
+      "steps": [
+        "prepare",
+        "execute",
+        "validate-output"
+      ]
+    },
+    "draft-review": {
+      "version": "2.0.0",
+      "steps": [
+        "draft",
+        "self-review",
+        "revise",
+        "validate-output"
+      ]
+    },
+    "mentor-review": {
+      "version": "2.0.0",
+      "steps": [
+        "inspect-selected-text",
+        "identify-issues",
+        "prioritize-feedback",
+        "validate-output"
+      ]
+    },
+    "retrieve-synthesize-verify": {
+      "version": "2.0.0",
+      "steps": [
+        "retrieve",
+        "rank-evidence",
+        "synthesize",
+        "independent-verify",
+        "finalize"
+      ]
+    },
+    "source-synthesis": {
+      "version": "2.0.0",
+      "steps": [
+        "inspect-sources",
+        "map-claims",
+        "compare-sources",
+        "synthesize",
+        "independent-verify",
+        "finalize"
+      ]
+    },
+    "retrieve-verify-judge": {
+      "version": "2.0.0",
+      "steps": [
+        "retrieve",
+        "verify-source-identity",
+        "verify-claim-support",
+        "judge-status",
+        "independent-verify",
+        "finalize"
+      ]
+    },
+    "verify-output": {
+      "version": "2.0.0",
+      "steps": [
+        "extract-claims",
+        "check-support",
+        "flag-unsupported-claims",
+        "independent-verify",
+        "finalize"
+      ]
+    },
+    "plan-execute-test-review": {
+      "version": "2.0.0",
+      "steps": [
+        "inspect",
+        "plan",
+        "execute",
+        "targeted-tests",
+        "review-diff",
+        "finalize"
+      ]
+    },
+    "analyze-options-decide-review": {
+      "version": "2.0.0",
+      "steps": [
+        "inspect",
+        "constraints",
+        "generate-options",
+        "tradeoff-analysis",
+        "select-provisional-design",
+        "review"
+      ]
+    },
+    "inspect-threat-model-test-review": {
+      "version": "2.0.0",
+      "steps": [
+        "inspect",
+        "threat-model",
+        "findings",
+        "reproduce-or-test",
+        "remediate",
+        "independent-review"
+      ]
+    },
+    "inspect-plan-repair-verify": {
+      "version": "2.0.0",
+      "steps": [
+        "inspect-structure",
+        "find-first-divergence",
+        "repair-minimally",
+        "verify-fidelity",
+        "regression-check"
+      ]
+    },
+    "inspect-analyze-validate": {
+      "version": "2.0.0",
+      "steps": [
+        "inspect-data",
+        "validate-inputs",
+        "analyze",
+        "assumption-checks",
+        "interpret",
+        "independent-review"
+      ]
+    }
   }
 }

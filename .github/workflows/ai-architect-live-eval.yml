@@ -7,13 +7,15 @@ permissions:
   contents: read
 
 jobs:
-  promptfoo:
+  promptfoo-live-quality-gate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
+
       - name: Require OpenRouter key
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
@@ -22,15 +24,19 @@ jobs:
             echo "OPENROUTER_API_KEY GitHub Actions secret is required for this manual live eval."
             exit 1
           fi
-      - name: Run Promptfoo comparison
+
+      - name: Run Promptfoo live benchmark and quality gate
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          PROMPTFOO_DISABLE_TELEMETRY: "1"
         run: |
           mkdir -p .ai/runtime
           npx --yes promptfoo@latest eval             -c .ai/evals/promptfooconfig.yaml             --no-table             --output .ai/runtime/promptfoo-results.json
-      - name: Upload eval results
+
+      - name: Upload live eval artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ai-architect-promptfoo-results
           path: .ai/runtime/promptfoo-results.json
-          if-no-files-found: error
+          if-no-files-found: warn
