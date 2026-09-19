@@ -1,0 +1,28 @@
+name: AI Router CI
+
+on:
+  push:
+    branches:
+      - main
+      - feature/ai-router-v1
+      - feature/ai-router-v1-rebased
+  pull_request:
+    paths:
+      - 'src/ai-router/**'
+      - 'netlify/functions/ai-router.mjs'
+      - 'tests/ai-router.test.mjs'
+      - 'package.json'
+      - '.github/workflows/ai-router.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm test
