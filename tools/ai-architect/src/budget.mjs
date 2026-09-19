@@ -124,6 +124,19 @@ export function applyAttemptUsage(ledger,{usage={},costUsd=null,latencyMs=0}={})
   return ledger;
 }
 
+export function assertLedgerWithinBudget(ledger,now=Date.now()){
+  const b=ledger.budget||{};
+  if(b.maxCostUsd!=null){
+    if(ledger.unknownCost)throw budgetError("ACTUAL_COST_UNKNOWN");
+    if(ledger.actual.costUsd>b.maxCostUsd)throw budgetError("AGGREGATE_COST_BUDGET_EXCEEDED");
+  }
+  if(b.maxInputTokens!=null&&ledger.actual.inputTokens>b.maxInputTokens)throw budgetError("AGGREGATE_INPUT_BUDGET_EXCEEDED");
+  if(b.maxOutputTokens!=null&&ledger.actual.outputTokens>b.maxOutputTokens)throw budgetError("AGGREGATE_OUTPUT_BUDGET_EXCEEDED");
+  if(b.maxTotalTokens!=null&&ledger.actual.totalTokens>b.maxTotalTokens)throw budgetError("AGGREGATE_TOKEN_BUDGET_EXCEEDED");
+  if(b.maxLatencyMs!=null&&now-ledger.startedAt>b.maxLatencyMs)throw budgetError("LATENCY_BUDGET_EXCEEDED");
+  return true;
+}
+
 export function canUseAttemptKind(ledger,kind){
   const b=ledger.budget||{};
   if(kind==="retry") return ledger.retries<(b.maxRetries??0);
