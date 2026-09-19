@@ -37,3 +37,29 @@ test("Not Diamond remains gated until explicitly enabled and enough evals exist"
   assert.equal(readiness.ready, false);
   assert.equal(readiness.reason, "disabled");
 });
+
+test("disabled providers stay unavailable even when a credential exists", () => {
+  const registry=createProviderRegistry({
+    providers:{
+      openrouter:{enabled:false,keyEnv:"OPENROUTER_API_KEY"},
+      openai:{enabled:false,keyEnv:"OPENAI_API_KEY"},
+      anthropic:{enabled:false,keyEnv:"ANTHROPIC_API_KEY"},
+      gemini:{enabled:false,keyEnv:"GEMINI_API_KEY"},
+      local:{enabled:false},
+      notdiamond:{enabled:false}
+    }
+  },{
+    env:{
+      OPENROUTER_API_KEY:"test",
+      OPENAI_API_KEY:"test",
+      ANTHROPIC_API_KEY:"test",
+      GEMINI_API_KEY:"test"
+    },
+    allowMock:true
+  });
+  assert.equal(registry.get("openrouter").available(),false);
+  assert.equal(registry.get("openai").available(),false);
+  assert.equal(registry.get("anthropic").available(),false);
+  assert.equal(registry.get("gemini").available(),false);
+  assert.equal(registry.get("local").available({}),false);
+});
