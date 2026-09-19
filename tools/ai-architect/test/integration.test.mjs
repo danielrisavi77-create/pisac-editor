@@ -39,3 +39,26 @@ test("Netlify function bundle explicitly includes dynamic Architect config files
   assert.ok(toml.includes('".ai/**"'));
   assert.ok(toml.includes('"tools/ai-architect/**"'));
 });
+
+test("AI integration preserves core Pisač editor regression markers", async () => {
+  const app=await readFile(resolve(root,"public/assets/app.js"),"utf8");
+  const html=await readFile(resolve(root,"public/index.html"),"utf8");
+  for(const marker of [
+    'id="m-student"',
+    'id="m-mentor"'
+  ]) assert.ok(html.includes(marker), marker);
+
+  for(const marker of [
+    "function chainHash(",
+    "function verifyChain(",
+    'originKind:"unattributed"',
+    'insertAtEnd(l.response,"ai_insert"',
+    'push("ai_accept"',
+    "navigator.clipboard.writeText(l.response)",
+    'push("comment_add"',
+    'push("cite_insert"',
+    "function insertCitation(",
+    "function seed()",
+    'ledger.push({id:"AI1"'
+  ]) assert.ok(app.includes(marker), marker);
+});
