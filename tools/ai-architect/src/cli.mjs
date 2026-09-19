@@ -27,14 +27,31 @@ if (command === "scan") {
     process.exit(2);
   }
   const rec = await recommend(text, root);
+  const workflow = rec.recommendation.workflowSteps.join(" -> ");
+  const system = [
+    rec.recommendation.promptText,
+    `Selected workflow: ${workflow}.`,
+    `Reasoning level: ${rec.recommendation.reasoning}.`,
+    rec.recommendation.needsIndependentVerification
+      ? "Independent verification is mandatory before finalizing."
+      : ""
+  ].filter(Boolean).join("\n\n");
+
   const result = await routeAndExecute({
     model: rec.recommendation.exactModel || "openrouter/auto-beta",
     messages:[
-      {role:"system",content:`You are executing a task selected by AI Architect. Workflow: ${rec.recommendation.workflow}. Reasoning level: ${rec.recommendation.reasoning}. Be precise and verify claims when risk is high.`},
+      {role:"system",content:system},
       {role:"user",content:text}
     ]
   });
-  console.log(JSON.stringify({recommendation:rec,result:{selectedModel:result.selectedModel,usage:result.usage,output:result.output}}, null, 2));
+  console.log(JSON.stringify({
+    recommendation:rec,
+    result:{
+      selectedModel:result.selectedModel,
+      usage:result.usage,
+      output:result.output
+    }
+  }, null, 2));
 } else {
   console.log("AI Architect v0.1");
   console.log('Commands: scan | recommend "task" | execute "task"');
