@@ -12,9 +12,10 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 
 - DONE 1b31f9b F1-1b workspace+project schema (2026091904, RLS owner-only, anon revoked, updated_at trigger; PREPARED not applied), server actions + /workspace UI; review round applied. Deferred nits: title not preserved on error, repeated getUser calls.
 
+- DONE dd79364 F1-2a canonical document model src/domain/document/* (schema, validate 20 codes, normalize idempotent, REPLACE_DOCUMENT CAS, equality; 78 tests).
+
 ## Queue (top = next). Tags: [review] = reviewer pass required.
 
-- IN_PROGRESS F1-2a Canonical document model: `src/domain/document/*` — DocumentNode with opaque UUID ids, schema (paragraph, heading 1–3, text, bold, italic), REPLACE_DOCUMENT transaction type, pure validators + unit tests.
 - TODO F1-2b Tiptap editor bound to the canonical model: `app/(workspace)/d/[id]/page.tsx`, editor extension set limited to F1 schema, projection editor→canonical candidate, no execCommand.
 - TODO F1-3a [review] Local durable journal (Dexie): atomic tx storing snapshot + pending transaction + local sequence + sync state; state machine EDITING/SAVING_LOCAL/LOCAL_DURABLE/SYNCING/SYNCED/CONFLICT/ERROR/RECOVERY_REQUIRED as a pure reducer + tests.
 - TODO F1-3b Sync status UI: status chip bound to the reducer; never shows generic "Saved"; Croatian labels.
