@@ -66,12 +66,14 @@ export class AIArchitect {
     env = process.env,
     fetchImpl = globalThis.fetch,
     outcomeSink = null,
+    statsSource = null,
     allowMock = false
   } = {}) {
     this.repoRoot = repoRoot;
     this.env = env;
     this.fetchImpl = fetchImpl;
     this.outcomeSink = outcomeSink;
+    this.statsSource = statsSource;
     this.allowMock = allowMock;
     this._config = null;
   }
@@ -82,7 +84,11 @@ export class AIArchitect {
   }
 
   async plan(taskText, context = {}) {
-    return recommend(taskText, this.repoRoot, context);
+    const outcomeStats = this.statsSource ? await this.statsSource() : context.outcomeStats;
+    return recommend(taskText, this.repoRoot, {
+      ...context,
+      ...(Array.isArray(outcomeStats) ? { outcomeStats } : {})
+    });
   }
 
   async explain(taskText, context = {}) {
@@ -99,6 +105,7 @@ export class AIArchitect {
     );
 
     if (plan.retrieval.required && !plan.retrieval.evidenceProvided) {
+      await this.#recordFailure(plan, taskText, context, "RETRIEVAL_REQUIRED", [], 0);
       return failureResult(
         plan,
         "RETRIEVAL_REQUIRED",
@@ -118,6 +125,7 @@ export class AIArchitect {
     });
     const candidates = uniqueCandidateOrder(plan, available);
     if (!candidates.length) {
+      await this.#recordFailure(plan, taskText, context, "NO_PROVIDER_AVAILABLE", [], 0);
       return failureResult(
         plan,
         "NO_PROVIDER_AVAILABLE",
@@ -158,6 +166,7 @@ export class AIArchitect {
           attempts.push(attemptRecord);
 
           if (!validation.passed) {
+            attemptRecord.error = "OUTPUT_VALIDATION_FAILED";
             finalFailure = "OUTPUT_VALIDATION_FAILED";
             continue;
           }
@@ -246,6 +255,14 @@ export class AIArchitect {
     }
 
     if (context.allowDegraded && context.degradedOutput) {
+      await this.#recordFailure(
+        plan,
+        taskText,
+        context,
+        finalFailure || "DEGRADED_FALLBACK",
+        attempts,
+        attempts.reduce((sum, a) => sum + (a.latencyMs || 0), 0)
+      );
       return {
         ok: false,
         status: "degraded",
@@ -286,6 +303,35 @@ export class AIArchitect {
       "No candidate produced an output that passed all required gates.",
       attempts
     );
+  }
+
+  async #recordFailure(plan, taskText, context, failureReason, attempts = [], latencyMs = 0) {
+    await this.recordOutcome({
+      project:plan.project?.name,
+      feature:plan.feature,
+      taskClass:plan.task,
+      taskText,
+      workflow:{id:plan.workflow.id,version:plan.workflow.version},
+      prompt:{id:plan.prompt.id,version:plan.prompt.version},
+      provider:attempts.at(-1)?.provider || null,
+      requestedModel:attempts.at(-1)?.requestedModel || null,
+      actualModel:attempts.at(-1)?.actualModel || null,
+      reasoningLevel:plan.reasoning,
+      tools:plan.tools,
+      usage:{inputTokens:0,outputTokens:0,totalTokens:0},
+      latencyMs,
+      retries:attempts.length,
+      fallbacks:attempts.map((a) => ({
+        provider:a.provider,
+        model:a.requestedModel,
+        error:a.error ? String(a.error).slice(0,300) : null
+      })),
+      validation:null,
+      verification:null,
+      qualityScore:context.qualityScore,
+      success:false,
+      failureReason
+    });
   }
 
   async #verify({ taskText, safeContext, plan, primary, primaryCandidate, candidates, registry }) {
