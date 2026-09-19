@@ -38,9 +38,10 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 
 - DONE 4b9e4e6 Public /demo route: no-auth editor with local-only journal (honest LOCAL_DURABLE cap), landing CTA, 6 new E2E (27 total).
 
+- DONE 7588080 F1-10 security hardening: legacy XSS fixed, CSP+XFO+Referrer headers (E2E canary green), auth-first in 3 actions, best-effort OTP rate limit + 100-project cap, demo storage isolated (pisac-journal-demo), resolved-conflict trim 20, interop prototype check.
+
 ## Queue (top = next). Tags: [review] = reviewer pass required.
 - BLOCKED(owner) F1-8 Activate: restore Supabase project Pisac (needs a free active slot or Pro), apply migrations 2026091904-06 via MCP, set NEXT_PUBLIC_* env in Netlify, run authenticated E2E, flip fixture statuses toward PASS with evidence (SHA+env+result).
-- IN_PROGRESS F1-10 [review] Security pass: run /security-review skill over the branch diff; fix findings.
 - TODO F1-11 Perf: bundle budget check (first-load JS per route recorded in docs/F1_STATE.md Notes), lazy-load conflict/recovery panels, measure editor keystroke→projection latency with a unit benchmark.
 
 
