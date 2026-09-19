@@ -8,9 +8,10 @@ import { recordOutcome, summarizeOutcomes } from "./outcomes.mjs";
 function uniqueCandidateOrder(plan, available) {
   const pref = plan.modelSelection?.preferred;
   const key = (c) => c ? `${c.provider}|${c.model}` : "";
+  const availableKeys = new Set(available.map(key));
   const seen = new Set();
   const ordered = [];
-  for (const candidate of [pref, ...available]) {
+  for (const candidate of [availableKeys.has(key(pref)) ? pref : null, ...available]) {
     if (!candidate) continue;
     const k = key(candidate);
     if (seen.has(k)) continue;
@@ -202,6 +203,7 @@ export class AIArchitect {
               finalFailure = verification.status === "unavailable"
                 ? "VERIFICATION_UNAVAILABLE"
                 : "VERIFICATION_FAILED";
+              attemptRecord.error = finalFailure;
               continue;
             }
           }
@@ -251,7 +253,10 @@ export class AIArchitect {
 
           return result;
         } catch (error) {
-          finalFailure = error?.name === "AbortError" ? "PROVIDER_TIMEOUT" : "PROVIDER_ERROR";
+          const status = Number(error?.status) || null;
+          const timedOut = error?.name === "AbortError";
+          const retryable = timedOut || status === 408 || status === 429 || (status != null && status >= 500);
+          finalFailure = timedOut ? "PROVIDER_TIMEOUT" : status === 429 ? "PROVIDER_RATE_LIMITED" : "PROVIDER_ERROR";
           attempts.push({
             provider: candidate.provider,
             requestedModel: candidate.model,
@@ -259,8 +264,10 @@ export class AIArchitect {
             attempt: attempt + 1,
             latencyMs: Date.now() - started,
             validation: null,
-            error: String(error?.message || error)
+            error: finalFailure,
+            status
           });
+          if (!retryable) break;
         }
       }
     }
@@ -349,8 +356,7 @@ export class AIArchitect {
     const alternatives = candidates.filter((c) =>
       c.provider !== primaryCandidate.provider || c.model !== primaryCandidate.model
     );
-    const verifierCandidate = alternatives.find((c) => registry.isAvailable(c, safeContext));
-    if (!verifierCandidate) {
+    if (!alternatives.length) {
       return {
         required: true,
         status: "unavailable",
@@ -359,7 +365,6 @@ export class AIArchitect {
       };
     }
 
-    const verifier = registry.get(verifierCandidate.provider);
     const verifierSystem = [
       "You are an independent verifier.",
       "Check whether the proposed answer is supported by the task and supplied evidence.",
@@ -373,34 +378,60 @@ export class AIArchitect {
       : "";
     const verifierUser = `TASK:\n${taskText}${evidence}\n\nANSWER TO VERIFY:\n${primary.output}`;
 
-    try {
-      const checked = await verifier.execute({
-        model: verifierCandidate.model,
-        system: verifierSystem,
-        user: verifierUser,
-        plan,
-        context: safeContext
-      });
-      const verdict = parseVerifierVerdict(checked.output);
-      return {
-        required: true,
-        status: verdict.passed ? "passed" : "failed",
-        passed: verdict.passed,
-        provider: checked.provider,
-        requestedModel: checked.requestedModel,
-        actualModel: checked.actualModel,
-        malformed: Boolean(verdict.malformed)
-      };
-    } catch (error) {
-      return {
-        required: true,
-        status: "unavailable",
-        passed: false,
-        provider: verifierCandidate.provider,
-        requestedModel: verifierCandidate.model,
-        reason: String(error?.message || error)
-      };
+    const verificationAttempts = [];
+    for (const verifierCandidate of alternatives) {
+      if (!registry.isAvailable(verifierCandidate, safeContext)) continue;
+      const verifier = registry.get(verifierCandidate.provider);
+      try {
+        const checked = await verifier.execute({
+          model: verifierCandidate.model,
+          system: verifierSystem,
+          user: verifierUser,
+          plan,
+          context: safeContext
+        });
+        const sameActualModel = Boolean(
+          primary.actualModel &&
+          checked.actualModel &&
+          String(primary.actualModel) === String(checked.actualModel)
+        );
+        verificationAttempts.push({
+          provider: checked.provider,
+          requestedModel: checked.requestedModel,
+          actualModel: checked.actualModel,
+          sameActualModel
+        });
+        if (sameActualModel) continue;
+
+        const verdict = parseVerifierVerdict(checked.output);
+        return {
+          required: true,
+          status: verdict.passed ? "passed" : "failed",
+          passed: verdict.passed,
+          provider: checked.provider,
+          requestedModel: checked.requestedModel,
+          actualModel: checked.actualModel,
+          malformed: Boolean(verdict.malformed),
+          attempts: verificationAttempts
+        };
+      } catch (error) {
+        verificationAttempts.push({
+          provider: verifierCandidate.provider,
+          requestedModel: verifierCandidate.model,
+          actualModel: null,
+          error: error?.name === "AbortError" ? "PROVIDER_TIMEOUT" : "PROVIDER_ERROR",
+          status: Number(error?.status) || null
+        });
+      }
     }
+
+    return {
+      required: true,
+      status: "unavailable",
+      passed: false,
+      reason: "No distinct actual model completed independent verification.",
+      attempts: verificationAttempts
+    };
   }
 
   async recordOutcome(record) {
