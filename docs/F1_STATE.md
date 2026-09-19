@@ -42,11 +42,12 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 
 - DONE 4eae4fe F1-11 perf: bundle budget + CI gate (check:bundle, gzip-accurate), lazy conflict/recovery panels (own 1.3kB chunk), latency tripwires (round-trip p50 1.2ms vs 25ms ceiling), journal throughput guard. docs/PERF_BUDGET.md.
 
+- DONE 9c6a111 F1-12 README rewritten (HR, 49 lines) for the Next.js F1 kernel; stale prototype instructions removed.
+
 ## Queue (top = next). Tags: [review] = reviewer pass required.
 - BLOCKED(owner) F1-8 Activate: restore Supabase project Pisac (needs a free active slot or Pro), apply migrations 2026091904-06 via MCP, set NEXT_PUBLIC_* env in Netlify, run authenticated E2E, flip fixture statuses toward PASS with evidence (SHA+env+result).
 
 
-- IN_PROGRESS F1-12 README + docs refresh: rewrite README.md for the Next.js app (HR: pokretanje, demo, struktura, testovi, deploy noti), remove stale prototype instructions; verify docs/ index links. (sonnet)
 - TODO F1-13 Quality pass: run the /simplify recipe over the branch diff (reuse, dead code, duplication); apply safe cleanups only; tests stay green. (opus)
 
 ## Blocked / questions for owner
