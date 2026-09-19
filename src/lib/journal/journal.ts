@@ -548,6 +548,50 @@ async function targetConflict(
   return rows.length === 0 ? null : rows[rows.length - 1];
 }
 
+/**
+ * How many RESOLVED conflicts one document keeps.
+ *
+ * The constitution requires a conflict to stay recorded rather than be deleted
+ * on resolution — which means the store grows by one row, holding two whole
+ * documents, every time an author resolves one. On a document that conflicts
+ * often (two devices, a flaky connection) that is unbounded growth in the same
+ * origin quota the pending queue and the snapshots live in, and the first
+ * thing it breaks is saving.
+ *
+ * So resolved rows are capped, oldest first, and UNRESOLVED rows are never
+ * touched by the trim at any count: those are the decisions the author still
+ * owes, and dropping one would be exactly the silent last-write-wins the
+ * conflict machinery exists to prevent. What the cap drops is history of
+ * decisions already made — the 21st-oldest resolved conflict, not a pending
+ * question.
+ */
+export const RESOLVED_CONFLICT_LIMIT = 20;
+
+/**
+ * Deletes all but the newest `RESOLVED_CONFLICT_LIMIT` resolved rows of one
+ * document. Runs INSIDE the caller's `rw` transaction on `conflicts`, so the
+ * store is never observed over its cap and a failed trim rolls back the
+ * resolution it accompanies rather than leaving half a prune behind.
+ */
+async function trimResolvedConflicts(
+  db: JournalDb,
+  documentId: string,
+): Promise<void> {
+  const rows = await db.conflicts.where("documentId").equals(documentId).toArray();
+  const resolved = rows
+    .filter((row) => isResolvedConflict(row))
+    .sort((a, b) => (a.detectedAt < b.detectedAt ? -1 : a.detectedAt > b.detectedAt ? 1 : 0));
+
+  if (resolved.length <= RESOLVED_CONFLICT_LIMIT) {
+    return;
+  }
+
+  const oldest = resolved.slice(0, resolved.length - RESOLVED_CONFLICT_LIMIT);
+  await db.conflicts.bulkDelete(
+    oldest.map((row) => [row.documentId, row.detectedAt] as [string, string]),
+  );
+}
+
 /** True when two rows describe the same detection, resolution aside. */
 function sameDetection(a: ConflictRecord, b: ConflictRecord): boolean {
   if (
@@ -648,6 +692,9 @@ export async function loadUnresolvedConflict(
  * was. Returns `{ conflict: null }` when there was nothing unresolved to act
  * on, which is not an error: a double click, or a resolution recorded by
  * another path, must not fail the author's action.
+ *
+ * The same transaction then trims this document's resolved history to
+ * `RESOLVED_CONFLICT_LIMIT` (F1-10). Unresolved rows are never trimmed.
  */
 export async function markConflictResolved(
   db: JournalDb,
@@ -664,6 +711,7 @@ export async function markConflictResolved(
       }
       const next: ConflictRecord = { ...target, resolvedVia: via, resolvedAt: nowFn() };
       await db.conflicts.put(next);
+      await trimResolvedConflicts(db, documentId);
       return next;
     });
 

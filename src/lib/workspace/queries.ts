@@ -130,6 +130,29 @@ export async function listProjectsIn(
 }
 
 /**
+ * How many projects a workspace holds.
+ *
+ * `head: true` with an exact count: Postgres answers with the number and no
+ * rows at all, so the cap check in `createProject` costs one count rather than
+ * a copy of every project the author owns.
+ */
+export async function countProjectsIn(
+  supabase: SupabaseClient,
+  workspaceId: string,
+): Promise<ActionResult<number>> {
+  const { count, error } = await supabase
+    .from("pisac_projects")
+    .select("id", { count: "exact", head: true })
+    .eq("workspace_id", workspaceId);
+
+  if (error || typeof count !== "number") {
+    return fail("citanje");
+  }
+
+  return { ok: true, value: count };
+}
+
+/**
  * Insert one project into a workspace.
  *
  * The title must already be validated: this is the storage half of

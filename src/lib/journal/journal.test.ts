@@ -20,6 +20,7 @@ import {
 } from "./db";
 import {
   PENDING_LIMIT,
+  RESOLVED_CONFLICT_LIMIT,
   adoptServerDocument,
   rebaseLocal,
   recoverConflict,
@@ -885,6 +886,95 @@ describe("markConflictResolved", () => {
       ok: false,
       reason: "corrupt",
     });
+  });
+});
+
+/**
+ * Resolved conflicts are kept, so they have to be capped: each row holds two
+ * whole documents in the same origin quota the pending queue and the snapshots
+ * live in. The cap drops decisions already made — never a question still open.
+ */
+describe("markConflictResolved — resolved-history trim (F1-10)", () => {
+  /** `2026-09-19T12:00:00.000Z`, `...01.000Z`, … — ordered, and unique keys. */
+  function detectedAtSeq(n: number): string {
+    return `2026-09-19T12:${String(Math.floor(n / 60)).padStart(2, "0")}:${String(
+      n % 60,
+    ).padStart(2, "0")}.000Z`;
+  }
+
+  async function recordMany(count: number): Promise<string[]> {
+    const stamps: string[] = [];
+    for (let i = 0; i < count; i += 1) {
+      const at = detectedAtSeq(i);
+      // Distinct text, so no two are the same detection and deduplicated.
+      await recordConflict(db, conflictAt(at, { localText: `verzija ${i}` }));
+      stamps.push(at);
+    }
+    return stamps;
+  }
+
+  it("keeps every resolved conflict up to the limit", async () => {
+    const stamps = await recordMany(RESOLVED_CONFLICT_LIMIT);
+    for (const at of stamps) {
+      await markConflictResolved(db, DOC_A, "rebase", at);
+    }
+
+    expect(await db.conflicts.where("documentId").equals(DOC_A).count()).toBe(
+      RESOLVED_CONFLICT_LIMIT,
+    );
+  });
+
+  it("trims to the newest 20 resolved rows, dropping the oldest", async () => {
+    const stamps = await recordMany(RESOLVED_CONFLICT_LIMIT + 5);
+    for (const at of stamps) {
+      await markConflictResolved(db, DOC_A, "rebase", at);
+    }
+
+    const kept = await db.conflicts.where("documentId").equals(DOC_A).toArray();
+    expect(kept).toHaveLength(RESOLVED_CONFLICT_LIMIT);
+
+    const keptStamps = kept.map((row) => row.detectedAt).sort();
+    expect(keptStamps).toEqual(stamps.slice(5));
+    // The five oldest decisions are the ones that went.
+    for (const gone of stamps.slice(0, 5)) {
+      expect(await db.conflicts.get([DOC_A, gone])).toBeUndefined();
+    }
+  });
+
+  it("never trims an UNRESOLVED row, however many there are", async () => {
+    const stamps = await recordMany(RESOLVED_CONFLICT_LIMIT + 8);
+    // Resolve all but the newest three; the trim runs on the last of them.
+    const open = stamps.slice(-3);
+    for (const at of stamps.slice(0, -3)) {
+      await markConflictResolved(db, DOC_A, "rebase", at);
+    }
+
+    const rows = await db.conflicts.where("documentId").equals(DOC_A).toArray();
+    const unresolved = rows.filter((row) => row.resolvedVia === undefined);
+    const resolved = rows.filter((row) => row.resolvedVia !== undefined);
+
+    expect(unresolved.map((row) => row.detectedAt).sort()).toEqual(open);
+    expect(resolved).toHaveLength(RESOLVED_CONFLICT_LIMIT);
+  });
+
+  it("counts per document, so one document's history cannot evict another's", async () => {
+    const stamps = await recordMany(RESOLVED_CONFLICT_LIMIT + 3);
+    for (const at of stamps) {
+      await markConflictResolved(db, DOC_A, "rebase", at);
+    }
+
+    const otherAt = "2026-09-19T09:00:00.000Z";
+    await recordConflict(db, {
+      ...conflictAt(otherAt, { localText: "drugi rad" }),
+      documentId: DOC_B,
+    });
+    await markConflictResolved(db, DOC_B, "discard", otherAt);
+
+    // Older than every trimmed DOC_A row, and still there.
+    expect(await db.conflicts.get([DOC_B, otherAt])).toBeDefined();
+    expect(await db.conflicts.where("documentId").equals(DOC_A).count()).toBe(
+      RESOLVED_CONFLICT_LIMIT,
+    );
   });
 });
 

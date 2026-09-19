@@ -4,17 +4,20 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { DEFAULT_WORKSPACE_NAME } from "@/domain/workspace/types";
 
 import {
+  countProjectsIn,
   ensureWorkspaceFor,
   insertProject,
   listProjectsIn,
   loadWorkspaceOverview,
 } from "./queries";
 
-type Reply = { data: unknown; error: unknown };
+/** `count` is only set by the head-count replies; the rest carry rows. */
+type Reply = { data: unknown; error: unknown; count?: unknown };
 
 type Recorded = {
   table: string;
   select?: string;
+  selectOptions?: unknown;
   filters: Record<string, unknown>;
   insert?: unknown;
   order?: { column: string; ascending?: boolean };
@@ -41,9 +44,23 @@ function fakeClient(replies: Reply[]) {
         return Promise.resolve(next());
       };
       const chain = {
-        select(columns: string) {
+        select(columns: string, options?: unknown) {
           recorded.select = columns;
+          if (options !== undefined) {
+            recorded.selectOptions = options;
+          }
           return chain;
+        },
+        /**
+         * A head count has no terminal call: the builder itself is awaited.
+         * Making the chain thenable is what lets `countProjectsIn` be tested
+         * through the same stand-in as everything else.
+         */
+        then(
+          resolve: (reply: Reply) => unknown,
+          reject?: (reason: unknown) => unknown,
+        ) {
+          return finish("await").then(resolve, reject);
         },
         eq(column: string, value: unknown) {
           recorded.filters[column] = value;
@@ -258,5 +275,46 @@ describe("loadWorkspaceOverview", () => {
     expect(workspace).toEqual(projects);
     expect(workspace.ok).toBe(false);
     expect(calls).toHaveLength(1);
+  });
+});
+
+describe("countProjectsIn", () => {
+  it("asks for a head count, not for the rows", async () => {
+    const { client, calls } = fakeClient([{ data: null, error: null, count: 7 }]);
+
+    expect(await countProjectsIn(client, "w1")).toEqual({ ok: true, value: 7 });
+    expect(calls[0]).toMatchObject({
+      table: "pisac_projects",
+      selectOptions: { count: "exact", head: true },
+      filters: { workspace_id: "w1" },
+    });
+  });
+
+  it("reports zero for an empty workspace", async () => {
+    const { client } = fakeClient([{ data: null, error: null, count: 0 }]);
+
+    expect(await countProjectsIn(client, "w1")).toEqual({ ok: true, value: 0 });
+  });
+
+  it("fails on a read error rather than reporting a count of nothing", async () => {
+    const { client } = fakeClient([
+      { data: null, error: { message: "permission denied" }, count: null },
+    ]);
+
+    expect(await countProjectsIn(client, "w1")).toEqual({
+      ok: false,
+      code: "citanje",
+      message: expect.any(String),
+    });
+  });
+
+  it("fails when the answer carried no count at all", async () => {
+    const { client } = fakeClient([{ data: null, error: null }]);
+
+    expect(await countProjectsIn(client, "w1")).toEqual({
+      ok: false,
+      code: "citanje",
+      message: expect.any(String),
+    });
   });
 });

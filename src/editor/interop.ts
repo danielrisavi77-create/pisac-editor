@@ -142,8 +142,20 @@ export function canonicalToTiptap(doc: CanonicalDocument): TiptapDocumentJSON {
 
 /* ------------------------------------------------------- tiptap → canonical */
 
+/**
+ * Same rule as `validate.ts`: a *plain* object, not merely an object.
+ *
+ * The prototype check is the part that matters (F1-10). ProseMirror JSON can
+ * arrive from outside this process — a paste, a stored document, a future
+ * import — and a class instance or a `JSON.parse`-forged `__proto__` carrier
+ * would otherwise be read as a node and have its properties trusted.
+ */
 function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
 }
 
 type Projection = {

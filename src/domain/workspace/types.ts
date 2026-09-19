@@ -25,6 +25,30 @@ export type Project = {
 export const WORKSPACE_NAME_MAX_LENGTH = 120;
 export const PROJECT_TITLE_MAX_LENGTH = 200;
 
+/**
+ * How many projects one workspace may hold (F1-10).
+ *
+ * `createProject` is an authenticated action, so this is not a spam gate: it
+ * is a bound on what a single signed-in session — or a loop someone left
+ * running — can do to the table and to a workspace page that renders every
+ * row. A hundred academic works in one personal workspace is already far past
+ * plausible use, which is what makes refusing at that point honest rather than
+ * stingy.
+ *
+ * Enforced server-side in the action, on a counted read, not in the form.
+ */
+export const PROJECT_LIMIT = 100;
+
+/** True when a workspace already holding `count` projects may not take another. */
+export function exceedsProjectLimit(count: number): boolean {
+  if (!Number.isFinite(count)) {
+    // An uncountable workspace is not an empty one: refuse rather than let an
+    // unknown count read as room.
+    return true;
+  }
+  return count >= PROJECT_LIMIT;
+}
+
 /** Default name of the personal workspace created on first sign-in. */
 export const DEFAULT_WORKSPACE_NAME = "Moj radni prostor";
 
@@ -62,6 +86,7 @@ export type ActionErrorCode =
   | "naziv-prazan"
   | "naziv-dug"
   | "naziv-neispravan"
+  | "previse-radova"
   | "spremanje"
   | "citanje";
 
@@ -69,6 +94,7 @@ export const ACTION_ERROR_MESSAGES: Record<ActionErrorCode, string> = {
   "naziv-prazan": "Upiši naziv rada.",
   "naziv-dug": `Naziv rada je predug (najviše ${PROJECT_TITLE_MAX_LENGTH} znakova).`,
   "naziv-neispravan": "Naziv rada nije ispravno poslan. Pokušaj ponovno.",
+  "previse-radova": "Dosegnut je najveći broj radova.",
   spremanje: "Rad nije spremljen. Pokušaj ponovno.",
   citanje: "Radove trenutačno nije moguće dohvatiti.",
 };

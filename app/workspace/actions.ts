@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import {
+  countProjectsIn,
   ensureWorkspaceFor,
   fail,
   insertProject,
@@ -13,6 +14,7 @@ import {
   type ActionResult,
 } from "@/lib/workspace/queries";
 import {
+  exceedsProjectLimit,
   type Project,
   type Workspace,
   validateProjectTitle,
@@ -70,8 +72,15 @@ export async function listProjects(): Promise<ActionResult<Project[]>> {
   return listProjectsIn(supabase, workspace.value.id);
 }
 
-/** Create one project from the workspace form. */
+/**
+ * Create one project from the workspace form.
+ *
+ * Session first (F1-10): the form parsing and the title rules below are work
+ * this process should only do for a caller it has already identified.
+ */
 export async function createProject(formData: FormData): Promise<ActionResult<Project>> {
+  const { supabase, userId } = await requireSession();
+
   // `FormData.get` yields a File for a file input, so a forged multipart body
   // must never be coerced to a string like "[object File]".
   const raw = formData.get("naziv");
@@ -84,11 +93,19 @@ export async function createProject(formData: FormData): Promise<ActionResult<Pr
     return fail(title.reason === "empty" ? "naziv-prazan" : "naziv-dug");
   }
 
-  const { supabase, userId } = await requireSession();
-
   const workspace = await ensureWorkspaceFor(supabase, userId);
   if (!workspace.ok) {
     return workspace;
+  }
+
+  // Server-side cap (F1-10). The form cannot enforce it — the action is the
+  // endpoint, and a count that could not be read refuses rather than guesses.
+  const count = await countProjectsIn(supabase, workspace.value.id);
+  if (!count.ok) {
+    return count;
+  }
+  if (exceedsProjectLimit(count.value)) {
+    return fail("previse-radova");
   }
 
   const created = await insertProject(supabase, workspace.value.id, title.value);

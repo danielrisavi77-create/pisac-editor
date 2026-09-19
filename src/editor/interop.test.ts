@@ -597,3 +597,79 @@ describe("TiptapDocumentJSON", () => {
     expect(json.content).toHaveLength(3);
   });
 });
+
+/**
+ * `isPlainObject` now applies the same prototype rule as `validate.ts` (F1-10).
+ * ProseMirror JSON is not always ours — it can come from a paste, from storage
+ * or from a future import — and a class instance or a forged `__proto__`
+ * carrier must not be read as a node and have its properties trusted.
+ */
+describe("tiptapToCanonical — plain objects only", () => {
+  class Doc {
+    type = "doc";
+    content: unknown[] = [];
+  }
+
+  it("refuses a prototype-bearing object as the document root", () => {
+    const result = tiptapToCanonical(new Doc(), factory(ID_A));
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.errors).toEqual([
+      { path: "$", code: "TIPTAP_NOT_OBJECT" },
+    ]);
+  });
+
+  it("refuses a prototype-bearing object as a block node", () => {
+    class Paragraph {
+      type = "paragraph";
+      content: unknown[] = [];
+    }
+
+    const result = tiptapToCanonical(
+      { type: "doc", content: [new Paragraph()] },
+      factory(ID_A),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.errors).toContainEqual({
+      path: "$.content[0]",
+      code: "TIPTAP_NODE_NOT_OBJECT",
+    });
+  });
+
+  it("refuses prototype-bearing attrs", () => {
+    class Attrs {
+      [NODE_ID_ATTRIBUTE] = ID_A;
+    }
+
+    const result = tiptapToCanonical(
+      { type: "doc", content: [{ type: "paragraph", attrs: new Attrs(), content: [] }] },
+      factory(ID_B),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.errors).toContainEqual({
+      path: "$.content[0].attrs",
+      code: "TIPTAP_ATTRS_NOT_OBJECT",
+    });
+  });
+
+  it("still accepts a null-prototype object, as validate.ts does", () => {
+    const paragraph = Object.assign(Object.create(null) as Record<string, unknown>, {
+      type: "paragraph",
+      attrs: Object.assign(Object.create(null) as Record<string, unknown>, {
+        [NODE_ID_ATTRIBUTE]: ID_A,
+      }),
+      content: [{ type: "text", text: "bez prototipa" }],
+    });
+    const root = Object.assign(Object.create(null) as Record<string, unknown>, {
+      type: "doc",
+      content: [paragraph],
+    });
+
+    const result = tiptapToCanonical(root, factory(ID_B));
+
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.doc.nodes[0].id).toBe(ID_A);
+  });
+});

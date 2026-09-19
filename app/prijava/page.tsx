@@ -1,7 +1,10 @@
+import { createHash } from "node:crypto";
+
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 
+import { createOtpLimiter, RATE_LIMIT_MESSAGE } from "@/lib/rate/limiter";
 import { getSiteUrl, resolveAuthOrigin } from "@/lib/supabase/config";
 import {
   EMAIL_PARAM,
@@ -19,6 +22,33 @@ const notice = {
   padding: "1rem",
   margin: "0 0 1.5rem",
 } as const;
+
+/**
+ * Sending a magic link is an unauthenticated action that makes this server mail
+ * a stranger's address (F1-10). Unlimited, it is both a way to spend the
+ * project's e-mail quota and a way to use us to spam someone.
+ *
+ * BEST EFFORT, AND ONLY THAT. The limiter is per process and in memory: a
+ * serverless cold start resets it and parallel instances each hold their own.
+ * The limits that actually hold are Supabase Auth's own per-address/per-hour
+ * e-mail caps and an edge rule in front of the site — see `RATE LIMITS` in
+ * `.env.example`. This is the cheap half that stops one browser leaning on the
+ * button, not a boundary anyone should rely on.
+ */
+const otpLimiter = createOtpLimiter();
+
+/**
+ * The limiter key. A HASH, never the address: the map outlives the request,
+ * and a list of who tried to sign in is not something this process should be
+ * holding in the clear. Case- and whitespace-normalised first, so
+ * `Ime@Primjer.hr ` cannot buy a second slot.
+ */
+function otpKey(email: string): string {
+  return createHash("sha256").update(email.trim().toLowerCase()).digest("hex");
+}
+
+/** `?greska=` value that asks the page for the rate-limit sentence. */
+const RATE_LIMITED_PARAM = "prebrzo";
 
 /** `/prijava`, carrying the return target when there is a safe one. */
 function signInUrl(query: string, returnPath: string | null): string {
@@ -41,6 +71,12 @@ async function signIn(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
   if (email === "") {
     redirect(signInUrl("greska=1", returnPath));
+  }
+
+  // Before the Supabase client, before the mail: a refused attempt should cost
+  // this process a hash and nothing else.
+  if (!otpLimiter.check(otpKey(email)).allowed) {
+    redirect(signInUrl(`greska=${RATE_LIMITED_PARAM}`, returnPath));
   }
 
   const supabase = await createClient();
@@ -141,7 +177,11 @@ export default async function PrijavaPage({
         </div>
       ) : (
         <>
-          {params.greska === "1" ? (
+          {params.greska === RATE_LIMITED_PARAM ? (
+            <div style={notice}>
+              <p style={{ margin: 0 }}>{RATE_LIMIT_MESSAGE}</p>
+            </div>
+          ) : params.greska === "1" ? (
             <div style={notice}>
               <p style={{ margin: 0 }}>
                 Prijava nije uspjela. Pokušaj ponovno.

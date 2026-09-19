@@ -841,8 +841,14 @@
       else if (ev.type==="reconciliation"){ kind="k-paste"; desc="usklađeno na "+ev.payload.at+" (+"+ev.payload.added+"/−"+ev.payload.removed+")"; }
       else if (ev.type==="milestone") desc=ev.payload.label;
       var d=document.createElement("div");
-      d.innerHTML='<span class="seq">'+ev.seq+'</span><span class="'+kind+'">'+ev.type+'</span><span>'+desc
-        +'</span><span class="hash">'+(ev.hash?ev.hash.slice(0,7):"…")+'</span>';
+      /* Nodes, not markup. `desc` carries provider/model/reason strings that
+         arrive in the /api/ai response, i.e. from outside this page; an
+         innerHTML here would let a crafted answer render as HTML. Same
+         createElement+textContent path as renderPolicy above. */
+      [["seq",String(ev.seq)],[kind,ev.type],["",desc],["hash",ev.hash?ev.hash.slice(0,7):"…"]]
+        .forEach(function(p){ var s=document.createElement("span");
+          if (p[0]) s.className=p[0];
+          s.textContent=p[1]; d.appendChild(s); });
       el.appendChild(d); });
     var c=$("chain"); if (!c) return;
     c.textContent="provjeravam lanac…"; c.style.color="var(--ink-3)";

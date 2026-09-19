@@ -36,7 +36,7 @@ environment → result → artifact.
 | FX-X-REL-001 | `src/lib/sync/drainRunner.test.ts` (backoff/jitter/single-flight), `src/lib/journal/lock.test.ts` | UNIT-COVERED (E2E pending Supabase project) |
 | FX-X-CLIENT-001 | `e2e/smoke.spec.ts`, `e2e/demo.spec.ts`, `src/lib/journal/journal.test.ts` | E2E-PARTIAL (shell + `/legacy/` + in-browser journal to LOCAL_DURABLE on `/demo`; authenticated offline flow BLOCKED: Supabase project paused) |
 | FX-X-DG-001 | `src/domain/workspace/migration.test.ts`, `src/domain/serverSync/migration.test.ts`, `src/lib/journal/journal.test.ts` | UNIT-COVERED (E2E pending Supabase project) |
-| FX-X-SEC-001 | `e2e/auth-guard.spec.ts`, `src/lib/supabase/guard.test.ts` | E2E-PARTIAL (deny path + no-secret-leak; authenticated allow path BLOCKED: Supabase project paused) |
+| FX-X-SEC-001 | `e2e/auth-guard.spec.ts`, `e2e/security-headers.spec.ts`, `src/lib/supabase/guard.test.ts`, `src/lib/rate/limiter.test.ts` | E2E-PARTIAL (deny path + no-secret-leak + CSP/XFO on every route with the demo typing canary passing under the policy; authenticated allow path and the OTP limiter's live leg BLOCKED: Supabase project paused. The app-layer limiter is per process and best effort by construction — the real limits are Supabase/edge config, see `.env.example`) |
 
 UNIT-COVERED means the mechanism has executable unit tests, not that the
 fixture passes end to end. No fixture is marked PASS.

@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   ACTION_ERROR_MESSAGES,
   DEFAULT_WORKSPACE_NAME,
+  PROJECT_LIMIT,
   PROJECT_TITLE_MAX_LENGTH,
   WORKSPACE_NAME_MAX_LENGTH,
+  exceedsProjectLimit,
   validateProjectTitle,
   parseActionErrorCode,
   sanitizeProjectTitleParam,
@@ -228,6 +230,29 @@ describe("sanitizeProjectTitleParam", () => {
     const url = new URL(`https://pisac.test/workspace?naziv=${encodeURIComponent(title)}`);
     expect(sanitizeProjectTitleParam(url.searchParams.get("naziv") ?? undefined)).toBe(
       title,
+    );
+  });
+});
+
+describe("exceedsProjectLimit", () => {
+  it("leaves room right up to the limit", () => {
+    expect(exceedsProjectLimit(0)).toBe(false);
+    expect(exceedsProjectLimit(PROJECT_LIMIT - 1)).toBe(false);
+  });
+
+  it("refuses at the limit and beyond", () => {
+    expect(exceedsProjectLimit(PROJECT_LIMIT)).toBe(true);
+    expect(exceedsProjectLimit(PROJECT_LIMIT + 1)).toBe(true);
+  });
+
+  it("treats an uncountable workspace as full rather than as empty", () => {
+    expect(exceedsProjectLimit(Number.NaN)).toBe(true);
+    expect(exceedsProjectLimit(Number.POSITIVE_INFINITY)).toBe(true);
+  });
+
+  it("has a Croatian message for the refusal", () => {
+    expect(ACTION_ERROR_MESSAGES["previse-radova"]).toBe(
+      "Dosegnut je najveći broj radova.",
     );
   });
 });

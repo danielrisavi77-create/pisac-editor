@@ -152,15 +152,21 @@ function parseCommitPayload(raw: unknown): DocumentTransaction | null {
 /**
  * One compare-and-set round trip.
  *
- * Order matters: the payload is validated and measured, then the document row
- * is ensured, then the RPC runs — all on one session. Nothing is written on a
- * payload the canonical model cannot express, and an oversized document never
- * leaves this process.
+ * Order matters, and the FIRST thing that has to happen is authentication
+ * (F1-10). A server action is a public POST endpoint: validating first meant
+ * an anonymous caller could make this process parse, structurally validate and
+ * size a document-shaped payload of its choosing, over and over, before ever
+ * being asked who it was. Session first, then parse — the work is only done
+ * for someone who is allowed to ask for it. Nothing is written on a payload
+ * the canonical model cannot express, and an oversized document never leaves
+ * this process.
  */
 export async function commitDocument(
   projectId: string,
   payload: unknown,
 ): Promise<ServerSyncResult<CommitOutcome>> {
+  const supabase = await requireSession();
+
   const tx = parseCommitPayload(payload);
   if (!tx) {
     return fail("zapis-neispravan");
@@ -169,8 +175,6 @@ export async function commitDocument(
   if (exceedsDocumentSizeLimit(tx.document)) {
     return fail("prevelik");
   }
-
-  const supabase = await requireSession();
 
   const row = await ensureDocumentRow(supabase, projectId);
   if (!row.ok) {
@@ -230,18 +234,19 @@ function checkpointFail(code: CheckpointErrorCode): CheckpointError {
  *
  * The name is validated by the same pure rule the RPC applies, before the
  * round trip, so an empty or over-long name never becomes a call that can
- * only fail.
+ * only fail — but after the session is resolved (F1-10), because an anonymous
+ * caller has no business reaching this action's validators at all.
  */
 export async function createCheckpoint(
   projectId: string,
   name: string,
 ): Promise<CheckpointResult<CreatedCheckpoint>> {
+  const supabase = await requireSession();
+
   const validated = validateCheckpointName(name);
   if (!validated.ok) {
     return checkpointFail(checkpointNameErrorCode(validated.reason));
   }
-
-  const supabase = await requireSession();
 
   // The checkpoint is of the server's document row, so that row has to exist
   // (and be the caller's) before there is anything to name.

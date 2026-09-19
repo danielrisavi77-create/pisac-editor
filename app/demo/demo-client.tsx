@@ -63,6 +63,18 @@ import DocxExportBar from "../d/[id]/docx-export-bar";
  */
 export const DEMO_DOCUMENT_ID = "demo";
 
+/**
+ * The demo gets its OWN IndexedDB database, not a row inside the signed-in
+ * journal (F1-10).
+ *
+ * `/demo` is unauthenticated: anyone at this browser can open it, type, and —
+ * before this — would have had the same `pisac-journal` handle open as the
+ * author's real documents, sharing its quota, its schema upgrades and its
+ * recovery path. A separate database name is the smallest boundary that makes
+ * the public route unable to touch an author's unsent work at all.
+ */
+export const DEMO_JOURNAL_DB_NAME = "pisac-journal-demo";
+
 /** Names the exported DOCX file. */
 const DEMO_TITLE = "Demo";
 
@@ -122,7 +134,7 @@ export default function DemoClient() {
     let release = () => {};
 
     void (async () => {
-      const opened = await openJournal();
+      const opened = await openJournal(DEMO_JOURNAL_DB_NAME);
       if (cancelled) {
         return;
       }
