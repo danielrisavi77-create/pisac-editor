@@ -54,10 +54,10 @@ Prijenos na GitHub sam po sebi ne mijenja postojeću Netlify stranicu.
 5. Autentifikacija i mentorska suradnja ako su potrebne.
 6. Integracije s Lektom, Katedrom i WordReplicom kao zasebne, naknadne funkcionalnosti.
 
-## AI Architect v0.2
+## AI Architect v0.3
 
-Repo sada sadrži centralni AI planning/execution sloj u `.ai/` i `tools/ai-architect/`, te server-side Netlify funkciju za postojeći Asistent UI. Architect zasebno bira workflow, verzionirani prompt, capability/model/provider strategiju, reasoning, retrieval/verification policy, alate i budžete; high-risk taskovi failaju zatvoreno ako nedostaje dokaz ili neovisna verifikacija.
+Repo sada ima jedan canonical AI orchestration sustav: `AI Architect`. Model registry, provider adapteri, token/cost prediction, context budgeting, aggregate hard budgets, retry/fallback/escalation, deterministic contract verification, independent actual-model verification i outcome calibration žive unutar `tools/ai-architect/`. Paralelni `AI Router` runtime i `/api/ai-router` endpoint su superseded.
 
-Statički Python preview i dalje radi bez API ključeva. U tom načinu Asistent koristi jasno označeni demo fallback. Za live AI deployment ključevi se postavljaju samo u Netlify server environment.
+Statički Python preview i dalje radi bez API ključeva uz jasno označeni demo fallback. Javni live inference ostaje namjerno ugašen: `AI_ARCHITECT_LIVE_ENABLED=false` i `AI_ARCHITECT_USAGE_POLICY_READY=false` dok Pisač nema pouzdanu user identity, per-user kvote/budžete i distribuirani rate limit.
 
-Detalji: [AI_ARCHITECT.md](AI_ARCHITECT.md) i [docs/AI_FEATURE_AUDIT.md](docs/AI_FEATURE_AUDIT.md).
+Detalji: [AI_ARCHITECT.md](AI_ARCHITECT.md), [docs/AI_FEATURE_AUDIT.md](docs/AI_FEATURE_AUDIT.md) i [docs/AI_ARCHITECT_V03_RECONCILIATION.md](docs/AI_ARCHITECT_V03_RECONCILIATION.md).
