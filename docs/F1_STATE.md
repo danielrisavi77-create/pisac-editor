@@ -36,6 +36,8 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 
 - DONE e60bb73 F1-9b HR plurals/dates (pluralHr+countHr, 25 tests), empty states, shared .btn/.input, mobile-first 360px (4 new E2E, 21 total); /workspace i /d mobile pass CSS-reviewed only (auth-gated).
 
+- DONE 4b9e4e6 Public /demo route: no-auth editor with local-only journal (honest LOCAL_DURABLE cap), landing CTA, 6 new E2E (27 total).
+
 ## Queue (top = next). Tags: [review] = reviewer pass required.
 - BLOCKED(owner) F1-8 Activate: restore Supabase project Pisac (needs a free active slot or Pro), apply migrations 2026091904-06 via MCP, set NEXT_PUBLIC_* env in Netlify, run authenticated E2E, flip fixture statuses toward PASS with evidence (SHA+env+result).
 - TODO F1-10 [review] Security pass: run /security-review skill over the branch diff; fix findings.
