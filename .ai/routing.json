@@ -1,77 +1,387 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "default": {
-    "workflow": "direct",
-    "prompt": "general",
-    "modelStrategy": "openrouter-auto",
-    "reasoning": "medium"
+    "workflow": {
+      "id": "direct"
+    },
+    "prompt": {
+      "id": "general"
+    },
+    "capability": "medium",
+    "reasoning": "medium",
+    "qualityGate": 0.88,
+    "tools": [],
+    "retrieval": {
+      "required": false,
+      "strategy": null
+    },
+    "verification": {
+      "required": false,
+      "independent": false,
+      "strategy": "structural"
+    },
+    "contextBudget": {
+      "maxChars": 8000
+    },
+    "generation": {
+      "temperature": 0.2,
+      "maxOutputTokens": 4096
+    },
+    "budgets": {
+      "maxCostUsd": 0.05,
+      "maxLatencyMs": 30000
+    },
+    "fallbackPolicy": "standard"
   },
   "routes": {
-    "grammar": {
-      "workflow": "direct",
-      "prompt": "academic-writing",
-      "reasoning": "low",
-      "qualityGate": 0.86
+    "generic": {
+      "workflow": {
+        "id": "direct"
+      },
+      "prompt": {
+        "id": "general"
+      },
+      "capability": "medium",
+      "reasoning": "medium",
+      "qualityGate": 0.88
     },
-    "rewrite": {
-      "workflow": "draft-review",
-      "prompt": "academic-writing",
+    "explanation": {
+      "workflow": {
+        "id": "direct"
+      },
+      "prompt": {
+        "id": "explanation"
+      },
+      "capability": "medium",
       "reasoning": "medium",
       "qualityGate": 0.9
     },
-    "research": {
-      "workflow": "retrieve-synthesize-verify",
-      "prompt": "research",
-      "reasoning": "high",
-      "qualityGate": 0.93
+    "brainstorm": {
+      "workflow": {
+        "id": "direct"
+      },
+      "prompt": {
+        "id": "brainstorm"
+      },
+      "capability": "low",
+      "reasoning": "low",
+      "qualityGate": 0.84,
+      "generation": {
+        "temperature": 0.7,
+        "maxOutputTokens": 2500
+      }
     },
-    "citation_verification": {
-      "workflow": "retrieve-verify-judge",
-      "prompt": "citation-verification",
+    "grammar": {
+      "workflow": {
+        "id": "direct"
+      },
+      "prompt": {
+        "id": "academic-writing"
+      },
+      "capability": "low",
+      "reasoning": "low",
+      "qualityGate": 0.9,
+      "generation": {
+        "temperature": 0.1,
+        "maxOutputTokens": 2500
+      }
+    },
+    "translation": {
+      "workflow": {
+        "id": "direct"
+      },
+      "prompt": {
+        "id": "translation"
+      },
+      "capability": "low",
+      "reasoning": "low",
+      "qualityGate": 0.91,
+      "generation": {
+        "temperature": 0.1,
+        "maxOutputTokens": 3000
+      }
+    },
+    "rewrite": {
+      "workflow": {
+        "id": "draft-review"
+      },
+      "prompt": {
+        "id": "academic-writing"
+      },
+      "capability": "medium",
+      "reasoning": "medium",
+      "qualityGate": 0.93,
+      "generation": {
+        "temperature": 0.15,
+        "maxOutputTokens": 3500
+      }
+    },
+    "generation": {
+      "workflow": {
+        "id": "draft-review"
+      },
+      "prompt": {
+        "id": "academic-writing"
+      },
+      "capability": "medium",
+      "reasoning": "medium",
+      "qualityGate": 0.93,
+      "generation": {
+        "temperature": 0.3,
+        "maxOutputTokens": 4000
+      },
+      "verification": {
+        "required": true,
+        "independent": true,
+        "strategy": "independent-model-review"
+      }
+    },
+    "mentor_feedback": {
+      "workflow": {
+        "id": "mentor-review"
+      },
+      "prompt": {
+        "id": "mentor-feedback"
+      },
+      "capability": "medium",
+      "reasoning": "medium",
+      "qualityGate": 0.93,
+      "contextBudget": {
+        "maxChars": 10000
+      }
+    },
+    "research": {
+      "workflow": {
+        "id": "retrieve-synthesize-verify"
+      },
+      "prompt": {
+        "id": "research"
+      },
+      "capability": "high",
       "reasoning": "high",
-      "qualityGate": 0.97
+      "qualityGate": 0.95,
+      "tools": [
+        "web.search",
+        "web.fetch"
+      ],
+      "retrieval": {
+        "required": true,
+        "strategy": "authoritative-first"
+      },
+      "verification": {
+        "required": true,
+        "independent": true,
+        "strategy": "independent-model-review"
+      },
+      "contextBudget": {
+        "maxChars": 14000
+      },
+      "budgets": {
+        "maxCostUsd": 0.12,
+        "maxLatencyMs": 45000
+      }
     },
     "source_synthesis": {
-      "workflow": "retrieve-synthesize-verify",
-      "prompt": "research",
+      "workflow": {
+        "id": "source-synthesis"
+      },
+      "prompt": {
+        "id": "source-synthesis"
+      },
+      "capability": "high",
       "reasoning": "high",
-      "qualityGate": 0.95
+      "qualityGate": 0.96,
+      "tools": [
+        "source.read"
+      ],
+      "retrieval": {
+        "required": true,
+        "strategy": "provided-evidence"
+      },
+      "verification": {
+        "required": true,
+        "independent": true,
+        "strategy": "independent-model-review"
+      },
+      "contextBudget": {
+        "maxChars": 16000
+      }
+    },
+    "citation_verification": {
+      "workflow": {
+        "id": "retrieve-verify-judge"
+      },
+      "prompt": {
+        "id": "citation-verification"
+      },
+      "capability": "critical",
+      "reasoning": "high",
+      "qualityGate": 0.98,
+      "tools": [
+        "web.search",
+        "web.fetch"
+      ],
+      "retrieval": {
+        "required": true,
+        "strategy": "identity-and-claim-support"
+      },
+      "verification": {
+        "required": true,
+        "independent": true,
+        "strategy": "independent-model-review"
+      },
+      "contextBudget": {
+        "maxChars": 14000
+      },
+      "budgets": {
+        "maxCostUsd": 0.16,
+        "maxLatencyMs": 50000
+      }
+    },
+    "hallucination_check": {
+      "workflow": {
+        "id": "verify-output"
+      },
+      "prompt": {
+        "id": "hallucination-check"
+      },
+      "capability": "critical",
+      "reasoning": "high",
+      "qualityGate": 0.98,
+      "verification": {
+        "required": true,
+        "independent": true,
+        "strategy": "independent-model-review"
+      },
+      "contextBudget": {
+        "maxChars": 12000
+      }
     },
     "coding": {
-      "workflow": "plan-execute-test-review",
-      "prompt": "code-change",
+      "workflow": {
+        "id": "plan-execute-test-review"
+      },
+      "prompt": {
+        "id": "code-change"
+      },
+      "capability": "high",
       "reasoning": "high",
-      "qualityGate": 0.92
+      "qualityGate": 0.95,
+      "tools": [
+        "repo.inspect",
+        "tests.run"
+      ],
+      "verification": {
+        "required": true,
+        "independent": true,
+        "strategy": "review-after-tests"
+      },
+      "contextBudget": {
+        "maxChars": 16000
+      },
+      "budgets": {
+        "maxCostUsd": 0.15,
+        "maxLatencyMs": 60000
+      }
     },
     "architecture": {
-      "workflow": "analyze-options-decide-review",
-      "prompt": "architecture",
+      "workflow": {
+        "id": "analyze-options-decide-review"
+      },
+      "prompt": {
+        "id": "architecture"
+      },
+      "capability": "high",
       "reasoning": "high",
-      "qualityGate": 0.94
+      "qualityGate": 0.95,
+      "tools": [
+        "repo.inspect"
+      ],
+      "contextBudget": {
+        "maxChars": 16000
+      },
+      "budgets": {
+        "maxCostUsd": 0.14,
+        "maxLatencyMs": 50000
+      }
     },
     "security_review": {
-      "workflow": "inspect-threat-model-test-review",
-      "prompt": "security-review",
+      "workflow": {
+        "id": "inspect-threat-model-test-review"
+      },
+      "prompt": {
+        "id": "security-review"
+      },
+      "capability": "critical",
       "reasoning": "high",
-      "qualityGate": 0.98
+      "qualityGate": 0.99,
+      "tools": [
+        "repo.inspect",
+        "security.test"
+      ],
+      "verification": {
+        "required": true,
+        "independent": true,
+        "strategy": "independent-model-review"
+      },
+      "contextBudget": {
+        "maxChars": 16000
+      },
+      "budgets": {
+        "maxCostUsd": 0.18,
+        "maxLatencyMs": 60000
+      }
     },
     "document_repair": {
-      "workflow": "inspect-plan-repair-verify",
-      "prompt": "document-repair",
+      "workflow": {
+        "id": "inspect-plan-repair-verify"
+      },
+      "prompt": {
+        "id": "document-repair"
+      },
+      "capability": "critical",
       "reasoning": "high",
-      "qualityGate": 0.98
+      "qualityGate": 0.99,
+      "tools": [
+        "document.inspect",
+        "document.repair",
+        "document.verify"
+      ],
+      "verification": {
+        "required": true,
+        "independent": true,
+        "strategy": "structural-plus-independent-review"
+      },
+      "contextBudget": {
+        "maxChars": 14000
+      },
+      "budgets": {
+        "maxCostUsd": 0.16,
+        "maxLatencyMs": 60000
+      }
     },
     "data_analysis": {
-      "workflow": "inspect-analyze-validate",
-      "prompt": "data-analysis",
+      "workflow": {
+        "id": "inspect-analyze-validate"
+      },
+      "prompt": {
+        "id": "data-analysis"
+      },
+      "capability": "high",
       "reasoning": "high",
-      "qualityGate": 0.95
-    },
-    "generic": {
-      "workflow": "direct",
-      "prompt": "general",
-      "reasoning": "medium",
-      "qualityGate": 0.88
+      "qualityGate": 0.96,
+      "tools": [
+        "data.inspect",
+        "analysis.run"
+      ],
+      "verification": {
+        "required": true,
+        "independent": true,
+        "strategy": "assumption-and-result-review"
+      },
+      "contextBudget": {
+        "maxChars": 14000
+      }
     }
   }
 }
