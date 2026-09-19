@@ -167,7 +167,8 @@ export class AIArchitect{
             model:prepared.model,
             system:systemPrompt(plan),
             user:userPrompt(executionTask,plan.optimizedContext),
-            plan:{...plan,reasoning:prepared.effort,outputBudgetTokens:Math.min(plan.outputBudgetTokens,prepared.maxOutputTokens??prepared.applicationOutputCap??plan.outputBudgetTokens)}
+            plan:{...plan,reasoning:prepared.effort,outputBudgetTokens:Math.min(plan.outputBudgetTokens,prepared.maxOutputTokens??prepared.applicationOutputCap??plan.outputBudgetTokens)},
+            context
           });
           const latencyMs=response.latencyMs??(Date.now()-started);
           const catalogModel=getModel(prepared.id);
@@ -349,7 +350,8 @@ export class AIArchitect{
       try{
         const checked=await verifier.execute({
           model:prepared.model,system:"Independent verification only.",user:userPrompt(verifierTask,plan.optimizedContext),
-          plan:{...plan,reasoning:prepared.effort,outputBudgetTokens:Math.min(800,plan.outputBudgetTokens)}
+          plan:{...plan,reasoning:prepared.effort,outputBudgetTokens:Math.min(800,plan.outputBudgetTokens)},
+          context
         });
         const cost=checked.costUsd!=null
           ?{status:checked.costStatus||"verified-actual",totalUsd:Number(checked.costUsd)}
