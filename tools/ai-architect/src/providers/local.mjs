@@ -2,7 +2,7 @@ export function createLocalProvider(config = {}, runtime = {}) {
   return {
     id: "local",
     available(context = {}) {
-      return Boolean(runtime.allowMock || context.allowMock || context.mockResponse);
+      return config.enabled !== false && Boolean(runtime.allowMock || context.allowMock || context.mockResponse);
     },
     async execute({ model = "local/mock", context = {} }) {
       if (!(runtime.allowMock || context.allowMock || context.mockResponse)) {
