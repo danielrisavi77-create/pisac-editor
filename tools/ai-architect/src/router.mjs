@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { classifyTask, estimateComplexity, estimateRisk } from "./classify.mjs";
+import { loadPrompt, loadWorkflow } from "./prompt.mjs";
 
 async function loadJson(path) {
   return JSON.parse(await readFile(path,"utf8"));
@@ -26,6 +27,10 @@ export async function recommend(taskText, repoRoot = process.cwd()) {
   const risk = estimateRisk(taskText, task);
   const route = routing.routes[task] || routing.routes.generic || routing.default;
   const tier = capabilityTier(complexity, risk);
+  const [promptText, workflowSteps] = await Promise.all([
+    loadPrompt(route.prompt, repoRoot),
+    loadWorkflow(route.workflow, repoRoot)
+  ]);
 
   const exactSelector = models.selectors.find(s =>
     s.enabled && s.type !== "local" && (!s.requiresEnv || process.env[s.requiresEnv])
@@ -39,7 +44,9 @@ export async function recommend(taskText, repoRoot = process.cwd()) {
     project: project.project,
     recommendation:{
       workflow: route.workflow,
+      workflowSteps,
       prompt: route.prompt,
+      promptText,
       reasoning: complexity >= 4 ? "high" : route.reasoning,
       qualityGate: route.qualityGate,
       capabilityTier: tier,
