@@ -16,7 +16,7 @@ const RULES = [
   ["mentor_feedback", /mentor feedback|komentar mentora|povratna informacija mentora|review rada/i],
   ["hallucination_check", /hallucinat|izmišlj|fabricat|ne izmišlj/i],
   ["source_synthesis", /source synthesis|sintez.*izvor|synthesize.*source/i],
-  ["research", /research|istraž|literature|literatura|web search|deep research/i],
+  ["research", /research|istraž|literatur|pronađ.*izvor|web search|deep research/i],
   ["data_analysis", /statistic|analiz.*podat|dataset|csv|regression|correlation|anova|jamovi/i],
   ["translation", /translate|prijevod|preved/i],
   ["brainstorm", /brainstorm|ideje|mogući pravci/i],
