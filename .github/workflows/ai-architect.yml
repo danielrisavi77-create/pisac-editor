@@ -12,6 +12,10 @@ on:
       - "netlify.toml"
       - ".github/workflows/ai-architect.yml"
       - ".github/workflows/ai-architect-live-eval.yml"
+      - "AI_ARCHITECT.md"
+      - "docs/AI_FEATURE_AUDIT.md"
+      - "README.md"
+      - ".env.example"
   push:
     branches: [main]
     paths:
@@ -22,6 +26,10 @@ on:
       - "public/assets/app.js"
       - "public/index.html"
       - "netlify.toml"
+      - "AI_ARCHITECT.md"
+      - "docs/AI_FEATURE_AUDIT.md"
+      - "README.md"
+      - ".env.example"
   workflow_dispatch:
 
 permissions:
