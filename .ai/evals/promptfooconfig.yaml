@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: "AI Architect v0.2 live academic benchmark"
+description: "AI Architect v0.3 manual paid academic benchmark"
 
 prompts:
   - label: architect-policy
@@ -21,10 +21,8 @@ providers:
     label: Claude Opus 5
   - id: openrouter:google/gemini-3.8-flash
     label: Gemini 3.8 Flash
-    config:
-      showThinking: false
-  - id: openrouter:deepseek/deepseek-v3.2
-    label: DeepSeek V3.2
+  - id: openrouter:x-ai/grok-4.6
+    label: Grok 4.6
 
 defaultTest:
   options:
