@@ -16,6 +16,8 @@ on:
       - "docs/AI_FEATURE_AUDIT.md"
       - "README.md"
       - ".env.example"
+      - "supabase/migrations/2026091903_ai_architect_v03.sql"
+      - "docs/AI_ARCHITECT_V03_RECONCILIATION.md"
   push:
     branches: [main]
     paths:
@@ -30,6 +32,8 @@ on:
       - "docs/AI_FEATURE_AUDIT.md"
       - "README.md"
       - ".env.example"
+      - "supabase/migrations/2026091903_ai_architect_v03.sql"
+      - "docs/AI_ARCHITECT_V03_RECONCILIATION.md"
   workflow_dispatch:
 
 permissions:
@@ -69,6 +73,13 @@ jobs:
         working-directory: tools/ai-architect
         run: npm run explain -- "Jezično doradi ovaj akademski odlomak"
 
+      - name: Validate Supabase migration security boundary
+        run: |
+          grep -q "enable row level security" supabase/migrations/2026091903_ai_architect_v03.sql
+          grep -q "security_invoker=true" supabase/migrations/2026091903_ai_architect_v03.sql
+          grep -q "from anon, authenticated" supabase/migrations/2026091903_ai_architect_v03.sql
+          grep -q "to service_role" supabase/migrations/2026091903_ai_architect_v03.sql
+
       - name: Syntax-check browser and server execution layers
         run: |
           node --check public/assets/ai-client.js
@@ -82,3 +93,5 @@ jobs:
           test -z "${OPENAI_API_KEY:-}"
           test -z "${ANTHROPIC_API_KEY:-}"
           test -z "${GEMINI_API_KEY:-}"
+          test -z "${XAI_API_KEY:-}"
+          test -z "${SUPABASE_SERVICE_ROLE_KEY:-}"
