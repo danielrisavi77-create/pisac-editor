@@ -35,7 +35,7 @@ export async function recommend(taskText, repoRoot = process.cwd(), context = {}
     loadPrompt(route.prompt, repoRoot),
     loadWorkflow(route.workflow, repoRoot),
     context.projectProfile ? Promise.resolve(context.projectProfile) : scanRepo(repoRoot),
-    summarizeOutcomes(repoRoot)
+    Array.isArray(context.outcomeStats) ? Promise.resolve(context.outcomeStats) : summarizeOutcomes(repoRoot)
   ]);
 
   const reasoning = complexity >= 4 && route.reasoning !== "max" ? "high" : (route.reasoning || "medium");
