@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { emptyDocument } from "@/domain/document";
 import { createClient } from "@/lib/supabase/server";
 
+import { ensureDocument } from "./actions";
 import EditorClient from "./editor-client";
 
 // Auth state must never be cached at build time.
@@ -54,6 +55,10 @@ export default async function DocumentPage({
 
   const project = data as ProjectRow;
 
+  // Get-or-create the canonical server document, so a first visit already has
+  // a row at revision 0 to compare-and-set against (F1-4a).
+  const server = await ensureDocument(project.id);
+
   return (
     <main style={page}>
       <p style={{ margin: "0 0 0.5rem" }}>
@@ -64,11 +69,22 @@ export default async function DocumentPage({
       <h1 style={{ fontSize: "1.75rem", margin: "0 0 1.5rem" }}>{project.title}</h1>
 
       {/*
-        There is no server document yet (F1-4a). The empty document is only a
-        fallback: the client reads the local durable journal first and starts
-        from its snapshot when there is one.
+        Three sources, in order of authority for *starting* the editor:
+        the local journal snapshot (read in the client, see editor-client),
+        then the canonical server document, then an empty document.
+
+        `server` being unreadable is not fatal: the page stays editable and
+        simply makes no claim about a server revision. Passing the empty
+        document at `serverRevision` 0 instead would invite the author to
+        commit over canonical text this request failed to read.
       */}
-      <EditorClient documentId={project.id} initialDocument={emptyDocument()} />
+      <EditorClient
+        documentId={project.id}
+        projectId={project.id}
+        initialDocument={emptyDocument()}
+        initialServerDocument={server.ok ? server.value.document : null}
+        serverRevision={server.ok ? server.value.revision : null}
+      />
     </main>
   );
 }

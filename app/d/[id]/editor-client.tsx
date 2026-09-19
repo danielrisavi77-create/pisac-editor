@@ -6,8 +6,12 @@
  * F1-3a gives this view the local durable journal: every debounced canonical
  * candidate is written to IndexedDB in one atomic transaction and the sync
  * state machine is driven from the result. There is still no server sync
- * (F1-4), so a document here can reach LOCAL_DURABLE and never SYNCED — and
+ * (F1-4b), so a document here can reach LOCAL_DURABLE and never SYNCED — and
  * it says exactly that, rather than a generic "saved".
+ *
+ * F1-4a adds one thing only: the canonical server document and its revision
+ * arrive as props and seed the bootstrap when the journal is empty. Nothing
+ * here sends anything yet; the pending queue is still drained by nobody.
  *
  * Three honesty rules shape the wiring:
  *
@@ -88,8 +92,20 @@ const statusBar = {
 type BlockedReason = LocalSaveFailureReason | "multi-tab";
 
 export type EditorClientProps = {
+  /** Journal key for the local store. Today the project id; it is the id the journal was written under. */
   documentId: string;
+  /**
+   * The project whose canonical server document this view commits to.
+   * Plumbed in by F1-4a and consumed by the pending-queue drain in F1-4b;
+   * nothing in this step sends anything to the server.
+   */
+  projectId: string;
+  /** Last-resort fallback when there is neither a journal snapshot nor a server document. */
   initialDocument: CanonicalDocument;
+  /** Canonical server document, or `null` when this request could not read one. */
+  initialServerDocument: CanonicalDocument | null;
+  /** Canonical server revision, or `null` when unknown. Never invented locally. */
+  serverRevision: number | null;
 };
 
 type Boot =
@@ -114,8 +130,19 @@ function stateAfterLocalFailure(reason: LocalSaveFailureReason): SyncState {
 export default function EditorClient({
   documentId,
   initialDocument,
+  initialServerDocument,
+  serverRevision,
 }: EditorClientProps) {
   const [boot, setBoot] = useState<Boot>({ status: "loading" });
+
+  /**
+   * What to start from when the journal has nothing: the canonical server
+   * document, and only then an empty one. The base revision follows the same
+   * source — claiming the server's revision for a document that did not come
+   * from the server would make the next compare-and-set lie.
+   */
+  const serverDocument = initialServerDocument ?? initialDocument;
+  const serverBase = initialServerDocument !== null ? (serverRevision ?? 0) : 0;
 
   // Open the journal, claim the writer lock and read the journal before the
   // editor mounts: the editor takes its initial content once, so starting it
@@ -180,8 +207,8 @@ export default function EditorClient({
         key={`${documentId}:no-journal`}
         db={null}
         documentId={documentId}
-        document={initialDocument}
-        baseRevision={0}
+        document={serverDocument}
+        baseRevision={serverBase}
         initialSyncState={stateAfterLocalFailure(boot.reason)}
         blocked={boot.reason}
       />
@@ -195,8 +222,8 @@ export default function EditorClient({
       key={documentId}
       db={boot.writable ? boot.db : null}
       documentId={documentId}
-      document={snapshot?.document ?? initialDocument}
-      baseRevision={snapshot?.revision ?? 0}
+      document={snapshot?.document ?? serverDocument}
+      baseRevision={snapshot?.revision ?? serverBase}
       initialSyncState={
         boot.writable
           ? restoreSyncState(boot.contents)
