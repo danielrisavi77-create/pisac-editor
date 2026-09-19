@@ -59,10 +59,10 @@ export class SupabaseOutcomeStore extends OutcomeStore {
   }
   async writeBundle(bundle){
     if(!this.configured())return{stored:false,reason:"not-configured"};
-    await this.insert("ai_architect_requests",[bundle.request]);
-    await this.insert("ai_architect_attempts",bundle.attempts||[]);
-    await this.insert("ai_architect_verifications",bundle.verifications||[]);
-    await this.insert("ai_architect_results",[bundle.final]);
+    await this.insert("ai_architect_requests",[toDbRequest(bundle.request)]);
+    await this.insert("ai_architect_attempts",(bundle.attempts||[]).map(toDbAttempt));
+    await this.insert("ai_architect_verifications",(bundle.verifications||[]).map(toDbVerification));
+    await this.insert("ai_architect_results",[toDbFinal(bundle.final)]);
     return{stored:true,backend:"supabase",attempts:bundle.attempts?.length||0,verifications:bundle.verifications?.length||0};
   }
   async loadCalibration({taskClass}={}){
@@ -128,3 +128,48 @@ function summarizeCalibration(finals,attempts){
   };
 }
 function num(v){if(v==null)return null;const n=Number(v);return Number.isFinite(n)?n:null;}
+
+export function toDbRequest(r={}){
+  return compact({
+    request_id:r.requestId,created_at:r.createdAt,project:r.project,feature:r.feature,task_class:r.taskClass,
+    risk:r.risk,complexity:r.complexity,profile:r.profile,workflow_id:r.workflowId,workflow_version:r.workflowVersion,
+    prompt_id:r.promptId,prompt_version:r.promptVersion,context_tokens_before:r.contextTokensBefore,
+    context_tokens_after:r.contextTokensAfter,prompt_fingerprint:r.promptFingerprint
+  });
+}
+export function toDbAttempt(r={}){
+  return compact({
+    request_id:r.requestId,attempt_number:r.attemptNumber,attempt_kind:r.attemptKind,task_class:r.taskClass,
+    provider:r.provider,requested_model:r.requestedModel,actual_model:r.actualModel,reasoning_level:r.reasoningLevel,
+    input_token_method:r.inputTokenMethod,predicted_input_tokens:r.predictedInputTokens,actual_input_tokens:r.actualInputTokens,
+    predicted_output_p50:r.predictedOutputP50,predicted_output_p90:r.predictedOutputP90,predicted_output_p95:r.predictedOutputP95,
+    predicted_reasoning_p90:r.predictedReasoningP90,actual_output_tokens:r.actualOutputTokens,
+    actual_visible_output_tokens:r.actualVisibleOutputTokens,actual_reasoning_tokens:r.actualReasoningTokens,
+    cache_read_tokens:r.cacheReadTokens,cache_write_tokens:r.cacheWriteTokens,predicted_cost_usd:r.predictedCostUsd,
+    predicted_budget_ceiling_usd:r.predictedBudgetCeilingUsd,actual_cost_usd:r.actualCostUsd,
+    actual_cost_status:r.actualCostStatus,latency_ms:r.latencyMs,contract_passed:r.contractPassed,
+    success:r.success,error_type:r.errorType,transient_error:r.transientError,created_at:r.createdAt
+  });
+}
+export function toDbVerification(r={}){
+  return compact({
+    verification_id:r.verificationId,request_id:r.requestId,parent_attempt_number:r.parentAttemptNumber,
+    provider:r.provider,requested_model:r.requestedModel,actual_model:r.actualModel,same_actual_model:r.sameActualModel,
+    passed:r.passed,verdict:r.verdict,malformed:r.malformed,input_tokens:r.inputTokens,output_tokens:r.outputTokens,
+    total_tokens:r.totalTokens,actual_cost_usd:r.actualCostUsd,actual_cost_status:r.actualCostStatus,
+    latency_ms:r.latencyMs,error_type:r.errorType,created_at:r.createdAt
+  });
+}
+export function toDbFinal(r={}){
+  return compact({
+    request_id:r.requestId,created_at:r.createdAt,project:r.project,feature:r.feature,task_class:r.taskClass,
+    provider:r.provider,requested_model:r.requestedModel,actual_model:r.actualModel,reasoning_level:r.reasoningLevel,
+    total_actual_cost_usd:r.totalActualCostUsd,total_input_tokens:r.totalInputTokens,total_output_tokens:r.totalOutputTokens,
+    total_tokens:r.totalTokens,total_latency_ms:r.totalLatencyMs,retry_count:r.retryCount,fallback_count:r.fallbackCount,
+    escalation_count:r.escalationCount,first_pass_success:r.firstPassSuccess,
+    final_verified_success:r.finalVerifiedSuccess,quality_score:r.qualityScore,failure_class:r.failureClass
+  });
+}
+function compact(value){
+  return Object.fromEntries(Object.entries(value).filter(([,v])=>v!==undefined));
+}
