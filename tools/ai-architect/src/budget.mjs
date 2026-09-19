@@ -104,7 +104,15 @@ export function assertNextAttemptFits({ledger,candidate,predictedCostUsd,inputTo
   return true;
 }
 
-export function applyAttemptUsage(ledger,{usage={},costUsd=null,latencyMs=0,kind="initial"}={}){
+export function noteAttemptKind(ledger,kind="initial"){
+  ledger.attempts+=1;
+  if(kind==="retry")ledger.retries+=1;
+  if(kind==="fallback")ledger.fallbacks+=1;
+  if(kind==="escalation")ledger.escalations+=1;
+  return ledger;
+}
+
+export function applyAttemptUsage(ledger,{usage={},costUsd=null,latencyMs=0}={}){
   const input=Number(usage.inputTokens)||0;
   const output=Number(usage.outputTokens)||0;
   ledger.actual.inputTokens+=input;
@@ -113,10 +121,6 @@ export function applyAttemptUsage(ledger,{usage={},costUsd=null,latencyMs=0,kind
   ledger.actual.latencyMs+=Number(latencyMs)||0;
   if(costUsd==null||!Number.isFinite(Number(costUsd))) ledger.unknownCost=true;
   else ledger.actual.costUsd+=Number(costUsd);
-  ledger.attempts+=1;
-  if(kind==="retry") ledger.retries+=1;
-  if(kind==="fallback") ledger.fallbacks+=1;
-  if(kind==="escalation") ledger.escalations+=1;
   return ledger;
 }
 
