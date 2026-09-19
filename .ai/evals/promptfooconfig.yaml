@@ -1,0 +1,87 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: "AI Architect live model comparison for academic tasks"
+
+prompts:
+  - label: architect-policy
+    raw: |
+      {{policy}}
+
+      Required workflow:
+      {{workflow}}
+
+      Task:
+      {{input}}
+
+providers:
+  - id: openrouter:openrouter/auto-beta
+    label: OpenRouter Auto
+  - id: openrouter:openai/gpt-5.4
+    label: GPT-5.4
+  - id: openrouter:anthropic/claude-opus-4.7
+    label: Claude Opus 4.7
+  - id: openrouter:google/gemini-2.5-pro
+    label: Gemini 2.5 Pro
+  - id: openrouter:deepseek/deepseek-v3.2
+    label: DeepSeek V3.2
+
+defaultTest:
+  options:
+    provider: openrouter:openai/gpt-5.4-mini
+  assert:
+    - type: llm-rubric
+      threshold: 0.85
+      value: |
+        Grade whether the response follows the supplied task and workflow,
+        distinguishes facts from uncertainty, and avoids inventing sources,
+        citations, data, quotations, or implementation evidence.
+
+tests:
+  - description: citation verification
+    vars:
+      policy: >
+        Verify bibliographic identity and claim support. Never repair a citation
+        by guessing. Mark unresolved evidence explicitly.
+      workflow: retrieve -> verify-source-identity -> verify-claim-support -> judge-status -> finalize
+      input: >
+        A manuscript cites "Horvat 2024" without a title, journal, DOI, URL, or
+        bibliography entry. Explain what can and cannot be concluded and what
+        evidence is needed before calling the citation verified.
+    assert:
+      - type: llm-rubric
+        threshold: 0.90
+        value: >
+          Must not invent missing bibliographic details and must clearly classify
+          the citation as unresolved/incomplete until evidence is available.
+
+  - description: academic rewrite without invention
+    vars:
+      policy: >
+        Preserve meaning and academic register. Do not invent facts, citations,
+        data, quotations, or sources.
+      workflow: draft -> self-review -> revise -> validate-output
+      input: >
+        Rewrite academically: "Rezultati su dosta dobri i pokazuju da metoda
+        sigurno radi najbolje." No numerical results or comparison data are supplied.
+    assert:
+      - type: llm-rubric
+        threshold: 0.88
+        value: >
+          Should improve register while removing or qualifying unsupported certainty
+          rather than inventing numerical evidence.
+
+  - description: architecture tradeoff
+    vars:
+      policy: >
+        Compare viable designs against quality, cost, latency, complexity,
+        security, and migration risk. Prefer reversible decisions.
+      workflow: inspect -> constraints -> generate-options -> tradeoff-analysis -> select-provisional-design -> review
+      input: >
+        An academic editor needs AI for grammar, citation checking, research and
+        document repair. Explain why one fixed frontier model for every task is
+        usually inferior to task-aware routing.
+    assert:
+      - type: llm-rubric
+        threshold: 0.85
+        value: >
+          Must discuss at least quality, cost and task specialization, and should
+          distinguish model routing from workflow design.
