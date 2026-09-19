@@ -20,9 +20,10 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 
 - DONE c0f606a F1-3b sync status chip (8 HR labels per F1_PLAN, blocked precedence, a11y aria-live, dark mode, no generic Saved; LOCAL_DURABLE neutral tone vs SYNCED ok).
 
+- DONE faab08a F1-4a server document store: definer RPCs pisac_commit_document/pisac_ensure_document (CAS+row lock, idempotency digest, too_large/txid_reused, ownership in-body), direct writes revoked, honest load failure; migration 2026091905 PREPARED not applied; review round applied.
+
 ## Queue (top = next). Tags: [review] = reviewer pass required.
 
-- IN_PROGRESS F1-4a [review] Server sync: `documents`, `document_revisions` tables + RLS; CAS on base revision; idempotency (document_id, actor_id, client_transaction_id); server action commit.
 - TODO F1-4b Pending queue drain + ACK → SYNCED; retry with backoff; lost-response replay is idempotent.
 - TODO F1-5a [review] Conflict: stale base → CONFLICT; explicit rebase / explicit discard; original conflict recorded; no LWW.
 - TODO F1-5b Recovery: corrupt/unavailable IndexedDB → RECOVERY_REQUIRED flow; checkpoint = named immutable snapshot (server + local).
