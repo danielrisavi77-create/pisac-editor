@@ -1,6 +1,6 @@
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { utility } from "./router.mjs";
+import { privacyEnvelope } from "./context.mjs";
 
 const DEFAULT_BASELINES = {
   costUsd: 0.10,
@@ -12,72 +12,119 @@ function clamp01(v) {
   return Math.max(0, Math.min(1, Number(v) || 0));
 }
 
-export function normalizeOutcome(input = {}, baselines = DEFAULT_BASELINES) {
-  const quality = clamp01(input.quality);
-  const cost = clamp01((Number(input.costUsd) || 0) / baselines.costUsd);
-  const latency = clamp01((Number(input.latencyMs) || 0) / baselines.latencyMs);
-  const tokens = clamp01((Number(input.tokens) || 0) / baselines.tokens);
-  const failed = input.success === false || Boolean(input.failed);
-
-  return {
-    quality,
-    cost,
-    latency,
-    tokens,
-    failed
-  };
+export function normalizedUtility(record = {}, baselines = DEFAULT_BASELINES, weights = {}) {
+  const quality = Number.isFinite(Number(record.qualityScore)) ? clamp01(record.qualityScore) : null;
+  if (quality == null) return null;
+  const cost = clamp01((Number(record.costUsd) || 0) / baselines.costUsd);
+  const latency = clamp01((Number(record.latencyMs) || 0) / baselines.latencyMs);
+  const tokens = clamp01((Number(record.usage?.totalTokens) || 0) / baselines.tokens);
+  const failure = record.success === false ? 1 : 0;
+  const w = { quality:0.62, cost:0.12, latency:0.08, tokens:0.06, failure:0.12, ...weights };
+  return w.quality * quality - w.cost * cost - w.latency * latency - w.tokens * tokens - w.failure * failure;
 }
 
 export function outcomeKey(record) {
   return [
-    record.task || "generic",
-    record.workflow || "unknown-workflow",
-    record.prompt || "unknown-prompt",
-    record.model || record.modelSelector || "unknown-model"
+    record.taskClass || "generic",
+    `${record.workflow?.id || "workflow"}@${record.workflow?.version || "unknown"}`,
+    `${record.prompt?.id || "prompt"}@${record.prompt?.version || "unknown"}`,
+    record.provider || "provider",
+    record.actualModel || record.requestedModel || "model",
+    record.reasoningLevel || "reasoning",
+    (record.tools || []).slice().sort().join(",")
   ].join("|");
 }
 
-export async function recordOutcome(record, repoRoot = process.cwd()) {
-  if (!record || typeof record !== "object") throw new TypeError("record must be an object");
-  const normalized = normalizeOutcome(record);
-  const enriched = {
-    timestamp: new Date().toISOString(),
-    ...record,
-    normalized,
-    utility: utility(normalized),
-    key: outcomeKey(record)
+export function sanitizeOutcome(record = {}) {
+  const privacy = privacyEnvelope(record.taskText || "", record.outputText, {});
+  const clean = {
+    project: record.project || null,
+    feature: record.feature || null,
+    taskClass: record.taskClass || "generic",
+    workflow: record.workflow || null,
+    prompt: record.prompt || null,
+    provider: record.provider || null,
+    requestedModel: record.requestedModel || null,
+    actualModel: record.actualModel || null,
+    reasoningLevel: record.reasoningLevel || null,
+    tools: Array.isArray(record.tools) ? record.tools : [],
+    usage: {
+      inputTokens: Number(record.usage?.inputTokens) || 0,
+      outputTokens: Number(record.usage?.outputTokens) || 0,
+      totalTokens: Number(record.usage?.totalTokens) || 0
+    },
+    costUsd: Number.isFinite(Number(record.costUsd)) ? Number(record.costUsd) : null,
+    latencyMs: Number(record.latencyMs) || 0,
+    retries: Number(record.retries) || 0,
+    fallbacks: Array.isArray(record.fallbacks) ? record.fallbacks : [],
+    validation: record.validation || null,
+    verification: record.verification || null,
+    qualityScore: Number.isFinite(Number(record.qualityScore)) ? Number(record.qualityScore) : null,
+    success: record.success !== false,
+    failureReason: record.failureReason || null,
+    timestamp: record.timestamp || new Date().toISOString(),
+    privacy
   };
-
-  const path = resolve(repoRoot, ".ai", "runtime", "outcomes.jsonl");
-  await mkdir(dirname(path), {recursive:true});
-  await appendFile(path, JSON.stringify(enriched) + "\n", "utf8");
-  return enriched;
+  clean.utility = normalizedUtility(clean);
+  clean.key = outcomeKey(clean);
+  clean.eligibleForLearning = clean.qualityScore != null;
+  return clean;
 }
 
-export async function summarizeOutcomes(repoRoot = process.cwd()) {
+export async function recordOutcome(record, repoRoot = process.cwd(), sink = null) {
+  const clean = sanitizeOutcome(record);
+  if (typeof sink === "function") {
+    await sink(clean);
+    return clean;
+  }
+  const path = resolve(repoRoot, ".ai", "runtime", "outcomes.jsonl");
+  await mkdir(dirname(path), { recursive:true });
+  await appendFile(path, JSON.stringify(clean) + "\n", "utf8");
+  return clean;
+}
+
+export async function readOutcomes(repoRoot = process.cwd()) {
   const path = resolve(repoRoot, ".ai", "runtime", "outcomes.jsonl");
   let text = "";
   try { text = await readFile(path, "utf8"); } catch { return []; }
+  return text.split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
+}
 
-  const rows = text.split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
+export async function summarizeOutcomes(repoRoot = process.cwd()) {
+  const rows = await readOutcomes(repoRoot);
   const groups = new Map();
 
   for (const row of rows) {
-    const key = row.key || outcomeKey(row);
-    const current = groups.get(key) || {key,count:0,totalUtility:0,totalQuality:0,failures:0};
+    const current = groups.get(row.key) || {
+      key: row.key,
+      taskClass: row.taskClass,
+      provider: row.provider,
+      actualModel: row.actualModel,
+      count:0,
+      evaluatedCount:0,
+      totalUtility:0,
+      totalQuality:0,
+      failures:0
+    };
     current.count += 1;
-    current.totalUtility += Number(row.utility) || 0;
-    current.totalQuality += Number(row.normalized?.quality) || 0;
-    current.failures += row.normalized?.failed ? 1 : 0;
-    groups.set(key,current);
+    current.failures += row.success ? 0 : 1;
+    if (row.qualityScore != null && row.utility != null) {
+      current.evaluatedCount += 1;
+      current.totalUtility += Number(row.utility);
+      current.totalQuality += Number(row.qualityScore);
+    }
+    groups.set(row.key, current);
   }
 
-  return [...groups.values()]
-    .map(g => ({
-      ...g,
-      meanUtility:g.totalUtility / g.count,
-      meanQuality:g.totalQuality / g.count,
-      failureRate:g.failures / g.count
-    }))
-    .sort((a,b) => b.meanUtility - a.meanUtility);
+  return [...groups.values()].map((g) => ({
+    key:g.key,
+    taskClass:g.taskClass,
+    provider:g.provider,
+    actualModel:g.actualModel,
+    count:g.count,
+    evaluatedCount:g.evaluatedCount,
+    meanUtility:g.evaluatedCount ? g.totalUtility / g.evaluatedCount : null,
+    meanQuality:g.evaluatedCount ? g.totalQuality / g.evaluatedCount : null,
+    failureRate:g.count ? g.failures / g.count : 0
+  })).sort((a,b) => (b.meanUtility ?? -Infinity) - (a.meanUtility ?? -Infinity));
 }
