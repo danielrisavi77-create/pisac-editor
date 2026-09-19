@@ -20,7 +20,7 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 
 ## Queue (top = next). Tags: [review] = reviewer pass required.
 
-- TODO F1-3b Sync status UI: status chip bound to the reducer; never shows generic "Saved"; Croatian labels.
+- IN_PROGRESS F1-3b Sync status UI: status chip bound to the reducer; never shows generic "Saved"; Croatian labels.
 - TODO F1-4a [review] Server sync: `documents`, `document_revisions` tables + RLS; CAS on base revision; idempotency (document_id, actor_id, client_transaction_id); server action commit.
 - TODO F1-4b Pending queue drain + ACK → SYNCED; retry with backoff; lost-response replay is idempotent.
 - TODO F1-5a [review] Conflict: stale base → CONFLICT; explicit rebase / explicit discard; original conflict recorded; no LWW.
