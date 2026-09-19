@@ -76,6 +76,64 @@ describe("decideAccess", () => {
       }),
     ).toBe("allow");
   });
+
+  it("allows a signed-in user into a document route", () => {
+    expect(
+      decideAccess({
+        hasUser: true,
+        isConfigured: true,
+        pathname: "/d/8f14e45f-ceea-4671-aa11-1e4b1a2d0f0a",
+      }),
+    ).toBe("allow");
+  });
+
+  it("redirects an anonymous visitor from a document route to /prijava", () => {
+    expect(
+      decideAccess({
+        hasUser: false,
+        isConfigured: true,
+        pathname: "/d/8f14e45f-ceea-4671-aa11-1e4b1a2d0f0a",
+      }),
+    ).toBe("redirect:/prijava");
+  });
+
+  it("redirects an anonymous visitor from the bare /d to /prijava", () => {
+    expect(decideAccess({ hasUser: false, isConfigured: true, pathname: "/d" })).toBe(
+      "redirect:/prijava",
+    );
+  });
+
+  it("sends an unconfigured deployment to /postavljanje from a document route", () => {
+    expect(
+      decideAccess({ hasUser: false, isConfigured: false, pathname: "/d/abc" }),
+    ).toBe("redirect:/postavljanje");
+  });
+
+  it("does not treat /documents as the document route", () => {
+    expect(
+      decideAccess({ hasUser: false, isConfigured: true, pathname: "/documents" }),
+    ).toBe("allow");
+  });
+
+  it("does not treat /dokumenti as the document route", () => {
+    expect(
+      decideAccess({ hasUser: false, isConfigured: true, pathname: "/dokumenti/1" }),
+    ).toBe("allow");
+  });
+
+  it("protects a deeper document path", () => {
+    expect(
+      decideAccess({ hasUser: false, isConfigured: true, pathname: "/d/abc/verzije" }),
+    ).toBe("redirect:/prijava");
+  });
+});
+
+describe("middleware matcher", () => {
+  it("covers every protected prefix the guard knows about", async () => {
+    const { config } = await import("../../../middleware");
+    expect(config.matcher).toContain("/workspace/:path*");
+    expect(config.matcher).toContain("/d/:path*");
+  });
 });
 
 describe("refreshSession (unconfigured)", () => {

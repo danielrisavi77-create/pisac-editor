@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
@@ -142,7 +143,9 @@ export default async function WorkspacePage({
         <ul style={{ padding: 0, margin: "0 0 2rem" }}>
           {projects.value.map((project) => (
             <li key={project.id} style={listItem}>
-              <span style={{ display: "block" }}>{project.title}</span>
+              <Link href={`/d/${project.id}`} style={{ display: "block" }}>
+                {project.title}
+              </Link>
               <small style={{ color: "var(--muted)" }}>
                 Stvoreno {formatDate(project.createdAt)}
               </small>

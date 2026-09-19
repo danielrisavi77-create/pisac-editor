@@ -28,5 +28,5 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   // Deliberately narrow: never runs on /legacy or static assets.
-  matcher: ["/workspace/:path*", "/prijava"],
+  matcher: ["/workspace/:path*", "/d/:path*", "/prijava"],
 };

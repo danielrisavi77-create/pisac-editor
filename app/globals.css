@@ -35,3 +35,24 @@ body {
 a {
   color: inherit;
 }
+
+/* Editor surface (F1-2b). ProseMirror renders into `.tiptap`. */
+.tiptap {
+  outline: none;
+}
+
+.tiptap :first-child {
+  margin-top: 0;
+}
+
+/*
+ * The placeholder is a CSS decoration on the empty first block, not text in
+ * the document: it must never reach the canonical model.
+ */
+.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}

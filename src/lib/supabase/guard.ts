@@ -14,9 +14,19 @@ export type GuardDecision = "allow" | "redirect:/prijava" | "redirect:/postavlja
 export const SIGN_IN_PATH = "/prijava";
 export const SETUP_PATH = "/postavljanje";
 export const WORKSPACE_PATH = "/workspace";
+/** Document editor route: `/d/<project id>`. */
+export const DOCUMENT_PATH = "/d";
+
+/**
+ * Prefixes that require a session. Matching is on a whole path segment, so
+ * `/documents` is not `/d` and `/workspaces-public` is not `/workspace`.
+ */
+const PROTECTED_PREFIXES = [WORKSPACE_PATH, DOCUMENT_PATH] as const;
 
 function isProtected(pathname: string): boolean {
-  return pathname === WORKSPACE_PATH || pathname.startsWith(`${WORKSPACE_PATH}/`);
+  return PROTECTED_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
 }
 
 export function decideAccess({
