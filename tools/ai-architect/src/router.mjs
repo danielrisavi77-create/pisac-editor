@@ -38,10 +38,17 @@ export async function recommend(taskText, repoRoot = process.cwd(), context = {}
     summarizeOutcomes(repoRoot)
   ]);
 
+  const reasoning = complexity >= 4 && route.reasoning !== "max" ? "high" : (route.reasoning || "medium");
+  const tools = route.tools || [];
   const candidates = config.models.capabilityCandidates?.[tier] || [];
   const adaptive = selectAdaptiveCandidate(candidates, stats, {
     qualityGate: route.qualityGate || 0,
-    minSamples: config.models.learning?.minEvaluatedSamples || 3
+    minSamples: config.models.learning?.minEvaluatedSamples || 3,
+    taskClass: task,
+    workflow,
+    prompt,
+    reasoningLevel: reasoning,
+    tools
   });
 
   const verificationRequired = Boolean(
@@ -63,8 +70,8 @@ export async function recommend(taskText, repoRoot = process.cwd(), context = {}
     workflow,
     prompt,
     capabilityTier: tier,
-    reasoning: complexity >= 4 && route.reasoning !== "max" ? "high" : (route.reasoning || "medium"),
-    tools: route.tools || [],
+    reasoning,
+    tools,
     retrieval: {
       required: retrievalRequired,
       evidenceProvided,
