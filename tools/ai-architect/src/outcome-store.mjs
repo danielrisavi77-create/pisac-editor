@@ -23,23 +23,20 @@ export class LocalOutcomeStore extends OutcomeStore {
     try{text=await readFile(this.path,"utf8");}catch{return[];}
     return text.split(/\r?\n/).filter(Boolean).map(line=>JSON.parse(line));
   }
-  async loadCalibration({taskClass,provider,model,reasoningLevel}={}){
-    const rows=(await this.readRecords()).filter(r=>
-      r.recordType==="final"&&
-      (!taskClass||r.taskClass===taskClass)&&
-      (!provider||r.provider===provider)&&
-      (!model||r.requestedModel===model)&&
-      (!reasoningLevel||r.reasoningLevel===reasoningLevel)
-    );
-    if(!rows.length)return{};
-    const attempts=(await this.readRecords()).filter(r=>
-      r.recordType==="attempt"&&
-      (!taskClass||r.taskClass===taskClass)&&
-      (!provider||r.provider===provider)&&
-      (!model||r.requestedModel===model)&&
-      (!reasoningLevel||r.reasoningLevel===reasoningLevel)
-    );
-    return summarizeCalibration(rows,attempts);
+  async loadCalibration({taskClass}={}){
+    const records=await this.readRecords();
+    const finals=records.filter(r=>r.recordType==="final"&&(!taskClass||r.taskClass===taskClass));
+    const attempts=records.filter(r=>r.recordType==="attempt"&&(!taskClass||r.taskClass===taskClass));
+    const keys=new Set(attempts.map(r=>[r.taskClass,r.provider,r.requestedModel,r.reasoningLevel||"provider-default"].join("|")));
+    const result={};
+    for(const key of keys){
+      const [task,provider,model,effort]=key.split("|");
+      const a=attempts.filter(r=>r.taskClass===task&&r.provider===provider&&r.requestedModel===model&&(r.reasoningLevel||"provider-default")===effort);
+      const requestIds=new Set(a.map(x=>x.requestId));
+      const f=finals.filter(r=>requestIds.has(r.requestId));
+      result[key]=summarizeCalibration(f,a);
+    }
+    return result;
   }
 }
 
