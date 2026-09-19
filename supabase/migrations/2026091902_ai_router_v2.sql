@@ -238,3 +238,208 @@ grant select on public.ai_router_calibration_stats to service_role;
 grant select on public.ai_router_dashboard_daily to service_role;
 grant select on public.ai_router_provider_share to service_role;
 grant select on public.ai_router_task_model_stats to service_role;
+
+
+-- V2.1 distributed AI Router rate limiting
+
+create schema if not exists private;
+
+revoke all on schema private from public;
+revoke all on schema private from anon, authenticated;
+grant usage on schema private to service_role;
+
+create table if not exists private.ai_router_rate_limits (
+  identity_hash text not null,
+  scope text not null check (scope in ('preview', 'count', 'execute')),
+  window_start timestamptz not null,
+  window_seconds integer not null check (window_seconds > 0),
+  request_count integer not null default 0 check (request_count >= 0),
+  first_seen_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  primary key (identity_hash, scope, window_start)
+);
+
+create table if not exists private.ai_router_rate_limit_events (
+  id bigint generated always as identity primary key,
+  occurred_at timestamptz not null default now(),
+  request_id text,
+  scope text not null check (scope in ('preview', 'count', 'execute')),
+  identity_hash text not null,
+  limit_value integer not null,
+  current_count integer not null,
+  retry_after_seconds integer not null,
+  window_start timestamptz not null
+);
+
+create index if not exists ai_router_rate_limits_last_seen_idx
+  on private.ai_router_rate_limits(last_seen_at);
+
+create index if not exists ai_router_rate_limit_events_occurred_idx
+  on private.ai_router_rate_limit_events(occurred_at desc, scope);
+
+alter table private.ai_router_rate_limits enable row level security;
+alter table private.ai_router_rate_limit_events enable row level security;
+
+revoke all on private.ai_router_rate_limits from public, anon, authenticated;
+revoke all on private.ai_router_rate_limit_events from public, anon, authenticated;
+grant select, insert, update, delete on private.ai_router_rate_limits to service_role;
+grant select, insert, update, delete on private.ai_router_rate_limit_events to service_role;
+grant usage, select on sequence private.ai_router_rate_limit_events_id_seq to service_role;
+
+create or replace function public.claim_ai_router_rate_slot(
+  p_identity_hash text,
+  p_scope text,
+  p_window_seconds integer,
+  p_limit integer,
+  p_request_id text default null
+)
+returns jsonb
+language plpgsql
+security invoker
+set search_path = pg_catalog, public, private
+as $$
+declare
+  v_now timestamptz := clock_timestamp();
+  v_window_start timestamptz;
+  v_window_end timestamptz;
+  v_count integer;
+  v_allowed boolean;
+  v_retry_after integer;
+begin
+  if p_identity_hash is null or p_identity_hash !~ '^[0-9a-f]{64}$' then
+    raise exception 'invalid identity hash';
+  end if;
+  if p_scope not in ('preview', 'count', 'execute') then
+    raise exception 'invalid rate-limit scope';
+  end if;
+  if p_window_seconds is null or p_window_seconds < 1 or p_window_seconds > 3600 then
+    raise exception 'invalid rate-limit window';
+  end if;
+  if p_limit is null or p_limit < 1 or p_limit > 100000 then
+    raise exception 'invalid rate-limit value';
+  end if;
+
+  v_window_start := to_timestamp(
+    floor(extract(epoch from v_now) / p_window_seconds) * p_window_seconds
+  );
+  v_window_end := v_window_start + make_interval(secs => p_window_seconds);
+
+  insert into private.ai_router_rate_limits as rl (
+    identity_hash,
+    scope,
+    window_start,
+    window_seconds,
+    request_count,
+    first_seen_at,
+    last_seen_at
+  )
+  values (
+    p_identity_hash,
+    p_scope,
+    v_window_start,
+    p_window_seconds,
+    1,
+    v_now,
+    v_now
+  )
+  on conflict (identity_hash, scope, window_start)
+  do update set
+    request_count = rl.request_count + 1,
+    last_seen_at = excluded.last_seen_at
+  returning request_count into v_count;
+
+  v_allowed := v_count <= p_limit;
+  v_retry_after := greatest(
+    1,
+    ceil(extract(epoch from (v_window_end - v_now)))::integer
+  );
+
+  if not v_allowed then
+    insert into private.ai_router_rate_limit_events (
+      request_id,
+      scope,
+      identity_hash,
+      limit_value,
+      current_count,
+      retry_after_seconds,
+      window_start
+    )
+    values (
+      left(p_request_id, 128),
+      p_scope,
+      p_identity_hash,
+      p_limit,
+      v_count,
+      v_retry_after,
+      v_window_start
+    );
+  end if;
+
+  return jsonb_build_object(
+    'allowed', v_allowed,
+    'limit', p_limit,
+    'current_count', v_count,
+    'remaining', greatest(p_limit - v_count, 0),
+    'retry_after_seconds', case when v_allowed then 0 else v_retry_after end,
+    'window_seconds', p_window_seconds,
+    'window_start', v_window_start,
+    'window_end', v_window_end
+  );
+end;
+$$;
+
+create or replace function public.purge_ai_router_rate_limit_data(
+  p_before timestamptz default now() - interval '2 days'
+)
+returns integer
+language plpgsql
+security invoker
+set search_path = pg_catalog, public, private
+as $$
+declare
+  v_limit_rows integer := 0;
+  v_event_rows integer := 0;
+begin
+  delete from private.ai_router_rate_limits
+  where last_seen_at < p_before;
+  get diagnostics v_limit_rows = row_count;
+
+  delete from private.ai_router_rate_limit_events
+  where occurred_at < p_before;
+  get diagnostics v_event_rows = row_count;
+
+  return v_limit_rows + v_event_rows;
+end;
+$$;
+
+revoke all on function public.claim_ai_router_rate_slot(text, text, integer, integer, text)
+  from public, anon, authenticated;
+revoke all on function public.purge_ai_router_rate_limit_data(timestamptz)
+  from public, anon, authenticated;
+
+grant execute on function public.claim_ai_router_rate_slot(text, text, integer, integer, text)
+  to service_role;
+grant execute on function public.purge_ai_router_rate_limit_data(timestamptz)
+  to service_role;
+
+create or replace view public.ai_router_rate_limit_daily
+with (security_invoker = true)
+as
+select
+  date_trunc('day', occurred_at) as day,
+  scope,
+  count(*)::integer as rejected_requests,
+  count(distinct identity_hash)::integer as rejected_identities,
+  max(current_count)::integer as peak_window_count
+from private.ai_router_rate_limit_events
+group by date_trunc('day', occurred_at), scope;
+
+revoke all on public.ai_router_rate_limit_daily from public, anon, authenticated;
+grant select on public.ai_router_rate_limit_daily to service_role;
+
+comment on table private.ai_router_rate_limits is
+  'Atomic AI Router rate-limit counters. Stores only HMAC-pseudonymized identities.';
+comment on table private.ai_router_rate_limit_events is
+  'Rejected AI Router requests only. No prompt, output, raw IP, user ID, auth header, or provider payload.';
+comment on function public.claim_ai_router_rate_slot(text, text, integer, integer, text) is
+  'Service-role-only atomic rate slot claim using INSERT ON CONFLICT increment.';
