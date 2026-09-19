@@ -25,9 +25,15 @@ test("Netlify bundle includes Architect config/core and no ai-router redirect",a
   assert.ok(toml.includes('".ai/**"'));assert.ok(toml.includes('"tools/ai-architect/**"'));assert.equal(toml.includes("/api/ai-router"),false);
 });
 test("superseded active AI Router V1 surfaces are removed",async()=>{
-  for(const path of [".github/workflows/ai-router.yml","netlify/functions/ai-router.mjs","src/ai-router/service.mjs","package.json"]){
+  for(const path of [".github/workflows/ai-router.yml","netlify/functions/ai-router.mjs","src/ai-router/service.mjs"]){
     await assert.rejects(access(resolve(root,path)));
   }
+  // The root manifest may exist again, but only as a delegation shim: it must carry no
+  // Router V1 test/benchmark surface of its own.
+  const rootPkg=JSON.parse(await readFile(resolve(root,"package.json"),"utf8"));
+  assert.equal(JSON.stringify(rootPkg).includes("ai-router"),false);
+  assert.deepEqual(Object.keys(rootPkg.scripts||{}),["test"]);
+  assert.ok(rootPkg.scripts.test.includes("tools/ai-architect"));
   await access(resolve(root,"supabase/migrations/2026091901_ai_router_v1.sql")); // legacy migration history only
   await access(resolve(root,"supabase/migrations/2026091903_ai_architect_v03.sql"));
 });

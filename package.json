@@ -1,0 +1,11 @@
+{
+  "name": "pisac-editor",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "npm --prefix tools/ai-architect test"
+  }
+}
