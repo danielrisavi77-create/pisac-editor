@@ -1,6 +1,6 @@
 {
   "name": "@ris/ai-architect",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -9,8 +9,12 @@
   "scripts": {
     "scan": "node src/cli.mjs scan",
     "recommend": "node src/cli.mjs recommend",
-    "test": "node --test test/*.test.mjs",
+    "explain": "node src/cli.mjs explain",
+    "execute": "node src/cli.mjs execute",
     "record": "node src/cli.mjs record",
-    "stats": "node src/cli.mjs stats"
+    "stats": "node src/cli.mjs stats",
+    "eval": "node src/cli.mjs eval",
+    "validate": "node src/cli.mjs validate",
+    "test": "node --test test/*.test.mjs"
   }
 }
