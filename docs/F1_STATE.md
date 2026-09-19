@@ -24,9 +24,10 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 
 - DONE ea33f50 F1-4b drain runner: newest-pending supersession, ACK clears pending + markSynced (SYNCED only when queue empty), backoff+jitter, single-flight, fastForwardBase for in-flight saves, stale_base halts for F1-5a.
 
+- DONE d8b691d F1-5a explicit conflict resolution: recorded conflicts (never deleted), journal frozen in CONFLICT (3 layers), no-lockout degraded panel, rebase uses newest durable text, discard re-fetches fresh server doc; review round applied.
+
 ## Queue (top = next). Tags: [review] = reviewer pass required.
 
-- IN_PROGRESS F1-5a [review] Conflict: stale base → CONFLICT; explicit rebase / explicit discard; original conflict recorded; no LWW.
 - TODO F1-5b Recovery: corrupt/unavailable IndexedDB → RECOVERY_REQUIRED flow; checkpoint = named immutable snapshot (server + local).
 - TODO F1-6 DOCX export: `docx` JS, explicit F1 subset, fidelity labels (SUPPORTED_EXACT/APPROXIMATED/UNKNOWN) in export manifest.
 - TODO F1-7 Fixtures + Playwright E2E for the F1 fixture IDs; evidence record fixture→test→SHA.
