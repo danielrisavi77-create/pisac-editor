@@ -26,9 +26,10 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 
 - DONE d8b691d F1-5a explicit conflict resolution: recorded conflicts (never deleted), journal frozen in CONFLICT (3 layers), no-lockout degraded panel, rebase uses newest durable text, discard re-fetches fresh server doc; review round applied.
 
+- DONE d9b4d32 F1-5b recovery flow (explicit salvage-local/adopt-server, resetJournalDatabase on user choice, RECOVERED carries via) + named immutable checkpoints (migration 2026091906 PREPARED, definer RPC, server-truth snapshot, honest unsynced note).
+
 ## Queue (top = next). Tags: [review] = reviewer pass required.
 
-- IN_PROGRESS F1-5b Recovery: corrupt/unavailable IndexedDB → RECOVERY_REQUIRED flow; checkpoint = named immutable snapshot (server + local).
 - TODO F1-6 DOCX export: `docx` JS, explicit F1 subset, fidelity labels (SUPPORTED_EXACT/APPROXIMATED/UNKNOWN) in export manifest.
 - TODO F1-7 Fixtures + Playwright E2E for the F1 fixture IDs; evidence record fixture→test→SHA.
 
