@@ -24,13 +24,15 @@
  *      journal at all (see `acquireDocumentLock`), because replacing the
  *      snapshot behind another tab's back is a silent last-write-wins.
  *
- * The status chip itself is F1-3b: until then the raw state constant lives in
- * `data-sync-state` plus one unobtrusive text node, and only the multi-tab
- * notice is written out in Croatian.
+ * The state is shown by the F1-3b status chip, which reads its wording from
+ * `@/domain/sync/labels`. The raw constant stays in `data-sync-state` (and the
+ * multi-tab flag in `data-sync-blocked`) purely as an E2E hook: tests assert on
+ * the machine's vocabulary, authors read Croatian.
  */
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
+import SyncStatusChip from "@/components/SyncStatusChip";
 import DocumentEditor, { type EditorFlushHandle } from "@/editor/Editor";
 import { countNodes, countWords, type CanonicalCandidate } from "@/editor/interop";
 import type { CanonicalDocument } from "@/domain/document";
@@ -60,6 +62,21 @@ const problem = {
   borderRadius: "0.5rem",
   padding: "0.75rem 1rem",
   margin: "0.75rem 0 0",
+} as const;
+
+/**
+ * The chip rides above the editor and stays put while the author scrolls: a
+ * status claim that can be scrolled out of sight is a status claim the author
+ * stops checking.
+ */
+const statusBar = {
+  position: "sticky",
+  top: 0,
+  zIndex: 2,
+  display: "flex",
+  justifyContent: "flex-end",
+  padding: "0.35rem 0",
+  background: "var(--bg)",
 } as const;
 
 /**
@@ -290,6 +307,10 @@ function JournalledEditor({
 
   return (
     <div data-sync-state={syncState} data-sync-blocked={blocked ?? undefined}>
+      <div style={statusBar}>
+        <SyncStatusChip state={syncState} blocked={blocked === "multi-tab"} />
+      </div>
+
       <DocumentEditor
         initialDocument={document}
         onCanonicalChange={handleChange}
@@ -297,23 +318,19 @@ function JournalledEditor({
         flushRef={flushRef}
       />
 
-      {blocked === "multi-tab" ? (
-        <div style={problem}>
-          <p style={{ margin: 0 }}>Dokument je otvoren u drugoj kartici.</p>
-        </div>
-      ) : null}
+      {/*
+        The multi-tab notice is not repeated here: the chip above already
+        carries that exact sentence, and saying it twice would suggest two
+        different facts.
+      */}
 
       {rejected === null ? (
-        <p style={statusRow}>
-          {candidate !== null && candidate.ok ? (
-            <>
-              <span>Blokova: {countNodes(candidate.doc)}</span>
-              <span>Riječi: {countWords(candidate.doc)}</span>
-            </>
-          ) : null}
-          {/* F1-3b replaces the raw constant with the Croatian status chip. */}
-          <span data-testid="sync-state">{syncState}</span>
-        </p>
+        candidate !== null && candidate.ok ? (
+          <p style={statusRow}>
+            <span>Blokova: {countNodes(candidate.doc)}</span>
+            <span>Riječi: {countWords(candidate.doc)}</span>
+          </p>
+        ) : null
       ) : (
         <div style={problem}>
           <p style={{ margin: 0 }}>

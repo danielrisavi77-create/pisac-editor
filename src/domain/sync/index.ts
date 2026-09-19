@@ -2,3 +2,4 @@
 export * from "./states";
 export * from "./journal-types";
 export * from "./restore";
+export * from "./labels";

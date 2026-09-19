@@ -3,6 +3,22 @@
   --bg: #ffffff;
   --fg: #16181d;
   --muted: #5c6270;
+
+  /*
+   * Sync chip tones (F1-3b). One pair per tone in src/domain/sync/labels.ts.
+   * Colour is decoration: the chip's label always says which of the eight
+   * states this is, so a reader who cannot tell the tones apart loses nothing.
+   */
+  --tone-neutral-fg: #3c414d;
+  --tone-neutral-bg: #eceef2;
+  --tone-progress-fg: #1f4f8f;
+  --tone-progress-bg: #e3eefc;
+  --tone-ok-fg: #1c5c3a;
+  --tone-ok-bg: #e0f2e7;
+  --tone-warn-fg: #7a4a06;
+  --tone-warn-bg: #fbeed3;
+  --tone-error-fg: #8c2018;
+  --tone-error-bg: #fbe3e1;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -10,6 +26,17 @@
     --bg: #101216;
     --fg: #ecedf0;
     --muted: #9aa1ae;
+
+    --tone-neutral-fg: #c7ccd6;
+    --tone-neutral-bg: #23262d;
+    --tone-progress-fg: #9dc4f5;
+    --tone-progress-bg: #17253a;
+    --tone-ok-fg: #8fd3ad;
+    --tone-ok-bg: #122b1f;
+    --tone-warn-fg: #ecc271;
+    --tone-warn-bg: #322511;
+    --tone-error-fg: #f2a19a;
+    --tone-error-bg: #341715;
   }
 }
 
@@ -55,4 +82,75 @@ a {
   float: left;
   height: 0;
   pointer-events: none;
+}
+
+/*
+ * Sync status chip (F1-3b). The tone comes from the domain as `data-tone`;
+ * this file only maps it to the token pair declared on :root.
+ */
+.sync-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.15rem 0.6rem 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  white-space: nowrap;
+  color: var(--tone-neutral-fg);
+  background: var(--tone-neutral-bg);
+}
+
+.sync-chip__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex: none;
+  background: currentColor;
+}
+
+.sync-chip[data-tone="neutral"] {
+  color: var(--tone-neutral-fg);
+  background: var(--tone-neutral-bg);
+}
+
+.sync-chip[data-tone="progress"] {
+  color: var(--tone-progress-fg);
+  background: var(--tone-progress-bg);
+}
+
+.sync-chip[data-tone="ok"] {
+  color: var(--tone-ok-fg);
+  background: var(--tone-ok-bg);
+}
+
+.sync-chip[data-tone="warn"] {
+  color: var(--tone-warn-fg);
+  background: var(--tone-warn-bg);
+}
+
+.sync-chip[data-tone="error"] {
+  color: var(--tone-error-fg);
+  background: var(--tone-error-bg);
+}
+
+/* Only work that is actually in flight moves. */
+.sync-chip[data-tone="progress"] .sync-chip__dot {
+  animation: sync-chip-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes sync-chip-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sync-chip[data-tone="progress"] .sync-chip__dot {
+    animation: none;
+  }
 }
