@@ -56,6 +56,38 @@ function canonicalModelId(value = "") {
     .replace(/^(openai|anthropic|google|deepseek|x-ai|meta-llama|mistralai)\//, "");
 }
 
+function addUsage(a = {}, b = {}) {
+  const inputTokens = (Number(a.inputTokens) || 0) + (Number(b.inputTokens) || 0);
+  const outputTokens = (Number(a.outputTokens) || 0) + (Number(b.outputTokens) || 0);
+  return { inputTokens, outputTokens, totalTokens:inputTokens + outputTokens };
+}
+
+function sumKnownCosts(values = []) {
+  if (!values.length) return 0;
+  let total = 0;
+  for (const value of values) {
+    if (value === null || value === undefined || value === "" || !Number.isFinite(Number(value))) return null;
+    total += Number(value);
+  }
+  return total;
+}
+
+function aggregateAttempts(attempts = []) {
+  let usage = {inputTokens:0,outputTokens:0,totalTokens:0};
+  let latencyMs = 0;
+  const costs = [];
+  for (const attempt of attempts) {
+    usage = addUsage(usage, attempt.usage || {});
+    latencyMs += Number(attempt.latencyMs) || 0;
+    costs.push(attempt.costUsd ?? null);
+  }
+  return {
+    usage,
+    latencyMs,
+    costUsd:attempts.length ? sumKnownCosts(costs) : 0
+  };
+}
+
 function failureResult(plan, code, message, attempts = [], extra = {}) {
   return {
     ok: false,
@@ -179,7 +211,10 @@ export class AIArchitect {
             actualModel: response.actualModel,
             attempt: attempt + 1,
             latencyMs,
+            usage:response.usage || {inputTokens:0,outputTokens:0,totalTokens:0},
+            costUsd:response.costUsd ?? null,
             validation,
+            verification:null,
             error: null
           };
           attempts.push(attemptRecord);
@@ -190,7 +225,7 @@ export class AIArchitect {
             continue;
           }
           if (response.costUsd != null && response.costUsd > plan.budgets.maxCostUsd) {
-            attemptRecord.error = `Cost ${response.costUsd} exceeded maxCostUsd ${plan.budgets.maxCostUsd}`;
+            attemptRecord.error = "COST_BUDGET_EXCEEDED";
             finalFailure = "COST_BUDGET_EXCEEDED";
             continue;
           }
@@ -206,10 +241,20 @@ export class AIArchitect {
               candidates,
               registry
             });
+            attemptRecord.verification = verification;
+            attemptRecord.usage = addUsage(attemptRecord.usage, verification.usage || {});
+            attemptRecord.costUsd = sumKnownCosts([attemptRecord.costUsd, verification.costUsd ?? 0]);
+            attemptRecord.latencyMs += Number(verification.latencyMs) || 0;
+
             if (!verification.passed) {
               finalFailure = verification.status === "unavailable"
                 ? "VERIFICATION_UNAVAILABLE"
                 : "VERIFICATION_FAILED";
+              attemptRecord.error = finalFailure;
+              continue;
+            }
+            if (attemptRecord.costUsd != null && attemptRecord.costUsd > plan.budgets.maxCostUsd) {
+              finalFailure = "COST_BUDGET_EXCEEDED";
               attemptRecord.error = finalFailure;
               continue;
             }
@@ -223,9 +268,9 @@ export class AIArchitect {
             requestedModel: response.requestedModel,
             actualModel: response.actualModel,
             output: response.output,
-            usage: response.usage,
-            costUsd: response.costUsd,
-            latencyMs,
+            usage: attemptRecord.usage,
+            costUsd: attemptRecord.costUsd,
+            latencyMs:attemptRecord.latencyMs,
             validation,
             verification,
             retries: attempt,
@@ -247,9 +292,9 @@ export class AIArchitect {
             actualModel: response.actualModel,
             reasoningLevel: plan.reasoning,
             tools: plan.tools,
-            usage: response.usage,
-            costUsd: response.costUsd,
-            latencyMs,
+            usage: attemptRecord.usage,
+            costUsd: attemptRecord.costUsd,
+            latencyMs:attemptRecord.latencyMs,
             retries: attempt,
             fallbacks: result.fallbacks,
             validation,
@@ -270,7 +315,10 @@ export class AIArchitect {
             actualModel: null,
             attempt: attempt + 1,
             latencyMs: Date.now() - started,
+            usage:{inputTokens:0,outputTokens:0,totalTokens:0},
+            costUsd:null,
             validation: null,
+            verification:null,
             error: finalFailure,
             status
           });
@@ -299,6 +347,7 @@ export class AIArchitect {
       };
     }
 
+    const failedTotals = aggregateAttempts(attempts);
     await this.recordOutcome({
       project: plan.project?.name,
       feature: plan.feature,
@@ -311,8 +360,9 @@ export class AIArchitect {
       actualModel: attempts.at(-1)?.actualModel || null,
       reasoningLevel: plan.reasoning,
       tools: plan.tools,
-      usage: { inputTokens:0, outputTokens:0, totalTokens:0 },
-      latencyMs: attempts.reduce((sum, a) => sum + (a.latencyMs || 0), 0),
+      usage: failedTotals.usage,
+      costUsd:failedTotals.costUsd,
+      latencyMs: failedTotals.latencyMs,
       retries: attempts.length,
       fallbacks: attempts.map((a) => ({ provider:a.provider, model:a.requestedModel, error:a.error || null })),
       validation: null,
@@ -331,6 +381,7 @@ export class AIArchitect {
   }
 
   async #recordFailure(plan, taskText, context, failureReason, attempts = [], latencyMs = 0) {
+    const totals=aggregateAttempts(attempts);
     await this.recordOutcome({
       project:plan.project?.name,
       feature:plan.feature,
@@ -343,8 +394,9 @@ export class AIArchitect {
       actualModel:attempts.at(-1)?.actualModel || null,
       reasoningLevel:plan.reasoning,
       tools:plan.tools,
-      usage:{inputTokens:0,outputTokens:0,totalTokens:0},
-      latencyMs,
+      usage:totals.usage,
+      costUsd:totals.costUsd,
+      latencyMs:latencyMs || totals.latencyMs,
       retries:attempts.length,
       fallbacks:attempts.map((a) => ({
         provider:a.provider,
@@ -368,7 +420,11 @@ export class AIArchitect {
         required: true,
         status: "unavailable",
         passed: false,
-        reason: "Independent verification requires a distinct available model candidate."
+        reason: "Independent verification requires a distinct available model candidate.",
+        usage:{inputTokens:0,outputTokens:0,totalTokens:0},
+        costUsd:0,
+        latencyMs:0,
+        attempts:[]
       };
     }
 
@@ -389,6 +445,7 @@ export class AIArchitect {
     for (const verifierCandidate of alternatives) {
       if (!registry.isAvailable(verifierCandidate, safeContext)) continue;
       const verifier = registry.get(verifierCandidate.provider);
+      const verifierStarted=Date.now();
       try {
         const checked = await verifier.execute({
           model: verifierCandidate.model,
@@ -397,6 +454,7 @@ export class AIArchitect {
           plan,
           context: safeContext
         });
+        const verifierLatencyMs=Date.now()-verifierStarted;
         const sameActualModel = Boolean(
           primary.actualModel &&
           checked.actualModel &&
@@ -406,11 +464,15 @@ export class AIArchitect {
           provider: checked.provider,
           requestedModel: checked.requestedModel,
           actualModel: checked.actualModel,
-          sameActualModel
+          sameActualModel,
+          usage:checked.usage || {inputTokens:0,outputTokens:0,totalTokens:0},
+          costUsd:checked.costUsd ?? null,
+          latencyMs:verifierLatencyMs
         });
         if (sameActualModel) continue;
 
         const verdict = parseVerifierVerdict(checked.output);
+        const totals=aggregateAttempts(verificationAttempts);
         return {
           required: true,
           status: verdict.passed ? "passed" : "failed",
@@ -419,6 +481,9 @@ export class AIArchitect {
           requestedModel: checked.requestedModel,
           actualModel: checked.actualModel,
           malformed: Boolean(verdict.malformed),
+          usage:totals.usage,
+          costUsd:totals.costUsd,
+          latencyMs:totals.latencyMs,
           attempts: verificationAttempts
         };
       } catch (error) {
@@ -426,17 +491,24 @@ export class AIArchitect {
           provider: verifierCandidate.provider,
           requestedModel: verifierCandidate.model,
           actualModel: null,
+          usage:{inputTokens:0,outputTokens:0,totalTokens:0},
+          costUsd:null,
+          latencyMs:Date.now()-verifierStarted,
           error: error?.name === "AbortError" ? "PROVIDER_TIMEOUT" : "PROVIDER_ERROR",
           status: Number(error?.status) || null
         });
       }
     }
 
+    const totals=aggregateAttempts(verificationAttempts);
     return {
       required: true,
       status: "unavailable",
       passed: false,
       reason: "No distinct actual model completed independent verification.",
+      usage:totals.usage,
+      costUsd:totals.costUsd,
+      latencyMs:totals.latencyMs,
       attempts: verificationAttempts
     };
   }
