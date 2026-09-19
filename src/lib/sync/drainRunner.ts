@@ -49,7 +49,7 @@ import {
 } from "@/domain/sync/drain";
 import { buildConflictRecord } from "@/domain/sync/conflict";
 import type { SyncEvent } from "@/domain/sync/states";
-import type { DocumentTransaction } from "@/domain/document";
+import type { CanonicalDocument, DocumentTransaction } from "@/domain/document";
 
 import type { JournalDb } from "@/lib/journal/db";
 import {
@@ -89,6 +89,27 @@ export type DelayFn = (ms: number, fn: () => void) => CancelFn;
  */
 export type CommitFn = (tx: DocumentTransaction) => Promise<DrainOutcome>;
 
+/**
+ * What the runner knows about a conflict the moment it raises one.
+ *
+ * Reported even when nothing could be written down: a conflict the UI cannot
+ * read back is precisely the case where these few numbers are the difference
+ * between an explicit choice and a dead end.
+ */
+export type ConflictDetail = {
+  documentId: string;
+  /** The document the server refused. */
+  localDocument: CanonicalDocument;
+  /** The base revision that turned out to be stale. */
+  localBaseRevision: number;
+  /** The server's current revision, from the refusal (or a fresher read). */
+  serverRevision: number;
+  /** False when the conflict row could not be written to the journal. */
+  recorded: boolean;
+  /** Whether the server's own document could be read. */
+  serverDocumentFetched: boolean;
+};
+
 export type DrainRunnerOptions = {
   db: JournalDb;
   /** Journal key. The same id `saveLocal` writes under. */
@@ -106,6 +127,17 @@ export type DrainRunnerOptions = {
    * author is never told about would be the worse failure by far.
    */
   fetchServer?: FetchServerFn;
+  /**
+   * Told about every conflict the drain detects, after the record attempt and
+   * before the state machine is told (F1-5a).
+   *
+   * It carries `recorded`, so the UI knows whether there is a row to read
+   * back, and `serverRevision`, so a document whose record could NOT be
+   * written still has an exit: the author can keep their version at the
+   * revision the server actually named instead of being stuck in a state with
+   * no evidence and no way out.
+   */
+  onConflict?: (detail: ConflictDetail) => void;
   delayFn?: DelayFn;
   /** Jitter source for the backoff, in [0, 1). */
   jitterFn?: () => number;
@@ -172,6 +204,7 @@ export function createDrainRunner({
   dispatch,
   onServerRevision,
   fetchServer,
+  onConflict,
   delayFn = defaultDelay,
   jitterFn = Math.random,
   debounceMs = DRAIN_DEBOUNCE_MS,
@@ -283,16 +316,28 @@ export function createDrainRunner({
     currentRevision: number,
   ): Promise<void> {
     const server = await fetchServerSafely();
-    await recordConflict(
+    const serverRevision = server?.revision ?? currentRevision;
+    const written = await recordConflict(
       db,
       buildConflictRecord({
         documentId,
         localDocument: tx.document,
         localBaseRevision: tx.baseRevision,
         serverDocument: server?.document ?? null,
-        serverRevision: server?.revision ?? currentRevision,
+        serverRevision,
       }),
     );
+
+    if (!stopped) {
+      onConflict?.({
+        documentId,
+        localDocument: tx.document,
+        localBaseRevision: tx.baseRevision,
+        serverRevision,
+        recorded: written.ok && written.conflict !== null,
+        serverDocumentFetched: server !== null,
+      });
+    }
   }
 
   async function recordAck(upToSeq: number, revision: number): Promise<void> {

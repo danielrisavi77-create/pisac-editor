@@ -21,6 +21,8 @@ import {
 import {
   PENDING_LIMIT,
   adoptServerDocument,
+  rebaseLocal,
+  recoverConflict,
   clearPending,
   loadJournal,
   loadUnresolvedConflict,
@@ -696,6 +698,7 @@ function failingConflicts(db: JournalDatabase, error: unknown): JournalDb {
       where: () => {
         throw error;
       },
+      get: () => Promise.reject(error),
       put: () => Promise.reject(error),
     } as unknown as JournalDatabase["conflicts"],
     transaction: ((
@@ -829,6 +832,7 @@ describe("markConflictResolved", () => {
       db,
       DOC_A,
       "discard",
+      null,
       () => "2026-09-19T12:10:00.000Z",
     );
 
@@ -995,5 +999,219 @@ describe("adoptServerDocument", () => {
     expect(
       await adoptServerDocument(failingDb(db, error), DOC_A, docWithText("s", uuidSeq("b")), 1),
     ).toEqual({ ok: false, reason: "quota" });
+  });
+});
+
+describe("the journal is frozen by a sticky state", () => {
+  it("refuses an ordinary candidate while meta records CONFLICT", async () => {
+    await saveLocal(db, DOC_A, docWithText("prije sukoba", uuidSeq("d")), 2, uuidSeq("c"));
+    await markState(db, DOC_A, "CONFLICT");
+
+    // A debounced projection that was already in flight when the conflict was
+    // raised: it must not be journalled.
+    const late = await saveLocal(db, DOC_A, docWithText("prekasno", uuidSeq("e")), 2, uuidSeq("f"));
+
+    expect(late).toEqual({ ok: false, reason: "state-locked" });
+  });
+
+  it("writes nothing at all when it refuses", async () => {
+    await saveLocal(db, DOC_A, docWithText("prije sukoba", uuidSeq("d")), 2, uuidSeq("c"));
+    await markState(db, DOC_A, "CONFLICT");
+
+    await saveLocal(db, DOC_A, docWithText("prekasno", uuidSeq("e")), 2, uuidSeq("f"));
+
+    const loaded = await loadJournal(db, DOC_A);
+    if (!loaded.ok) {
+      throw new Error("expected a successful load");
+    }
+    // The sticky state survives, the queue is untouched, the snapshot is the
+    // one the conflict was raised about.
+    expect(loaded.contents.meta?.state).toBe("CONFLICT");
+    expect(loaded.contents.meta?.localSeq).toBe(1);
+    expect(loaded.contents.pending).toHaveLength(1);
+    expect(restoreSyncState(loaded.contents)).toBe("CONFLICT");
+  });
+
+  it("refuses while meta records RECOVERY_REQUIRED too", async () => {
+    await markState(db, DOC_A, "RECOVERY_REQUIRED", "corrupt");
+
+    const late = await saveLocal(db, DOC_A, docWithText("svejedno", uuidSeq("e")), 0, uuidSeq("f"));
+
+    expect(late).toEqual({ ok: false, reason: "state-locked" });
+  });
+
+  it("allows ordinary candidates in every other state", async () => {
+    await markState(db, DOC_A, "ERROR", "quota");
+
+    const saved = await saveLocal(db, DOC_A, docWithText("opet", uuidSeq("e")), 0, uuidSeq("f"));
+
+    expect(saved.ok).toBe(true);
+  });
+
+  it("lets rebaseLocal through: the rebase IS the decision", async () => {
+    await saveLocal(db, DOC_A, docWithText("moja", uuidSeq("d")), 2, uuidSeq("c"));
+    await markState(db, DOC_A, "CONFLICT");
+
+    const rebased = await rebaseLocal(db, DOC_A, docWithText("moja", uuidSeq("d")), 9);
+
+    expect(rebased.ok).toBe(true);
+    const loaded = await loadJournal(db, DOC_A);
+    if (!loaded.ok) {
+      throw new Error("expected a successful load");
+    }
+    // Queued against the revision the SERVER named, and the freeze is lifted.
+    expect(loaded.contents.pending.at(-1)?.tx.baseRevision).toBe(9);
+    expect(loaded.contents.snapshot?.revision).toBe(9);
+    expect(loaded.contents.meta?.state).toBe("LOCAL_DURABLE");
+  });
+
+  it("maps a genuinely failing store to a reason, not to 'state-locked'", async () => {
+    const error = Object.assign(new Error("full"), { name: "QuotaExceededError" });
+    expect(
+      await saveLocal(failingDb(db, error), DOC_A, docWithText("x", uuidSeq("e")), 0, uuidSeq("f")),
+    ).toEqual({ ok: false, reason: "quota" });
+  });
+});
+
+describe("recordConflict does not overwrite", () => {
+  it("gives a second conflict in the same millisecond its own row", async () => {
+    const first = conflictAt("2026-09-19T12:00:00.000Z", { localText: "prva" });
+    const second = conflictAt("2026-09-19T12:00:00.000Z", { localText: "druga" });
+
+    const a = await recordConflict(db, first);
+    const b = await recordConflict(db, second);
+
+    expect(await db.conflicts.count()).toBe(2);
+    expect(a.ok && a.conflict?.detectedAt).toBe("2026-09-19T12:00:00.000Z");
+    expect(b.ok && b.conflict?.detectedAt).toBe("2026-09-19T12:00:00.000Z+1");
+    // The nudged key still sorts after its neighbour, so "newest" stays newest.
+    const waiting = await loadUnresolvedConflict(db, DOC_A);
+    expect(waiting.ok && waiting.conflict?.detectedAt).toBe("2026-09-19T12:00:00.000Z+1");
+  });
+
+  it("never replaces a row that already carries a decision", async () => {
+    await recordConflict(db, conflictAt("2026-09-19T12:00:00.000Z", { localText: "prva" }));
+    await markConflictResolved(db, DOC_A, "discard");
+
+    await recordConflict(db, conflictAt("2026-09-19T12:00:00.000Z", { localText: "druga" }));
+
+    const original = await db.conflicts.get([DOC_A, "2026-09-19T12:00:00.000Z"]);
+    expect(original?.resolvedVia).toBe("discard");
+    expect(await db.conflicts.count()).toBe(2);
+  });
+
+  it("stays idempotent for a byte-identical re-record", async () => {
+    const record = conflictAt("2026-09-19T12:00:00.000Z");
+    await recordConflict(db, record);
+    await recordConflict(db, { ...record });
+
+    expect(await db.conflicts.count()).toBe(1);
+  });
+});
+
+describe("conflict operations target a named record", () => {
+  const OLDER = "2026-09-19T12:00:00.000Z";
+  const NEWER = "2026-09-19T12:30:00.000Z";
+
+  beforeEach(async () => {
+    await recordConflict(db, conflictAt(OLDER, { localText: "prva" }));
+    await recordConflict(db, conflictAt(NEWER, { localText: "druga", server: null }));
+  });
+
+  it("resolves exactly the record the panel decided about", async () => {
+    await markConflictResolved(db, DOC_A, "rebase", OLDER);
+
+    expect((await db.conflicts.get([DOC_A, OLDER]))?.resolvedVia).toBe("rebase");
+    expect((await db.conflicts.get([DOC_A, NEWER]))?.resolvedVia).toBeUndefined();
+  });
+
+  it("falls back to the newest unresolved record when none is named", async () => {
+    await markConflictResolved(db, DOC_A, "rebase");
+
+    expect((await db.conflicts.get([DOC_A, NEWER]))?.resolvedVia).toBe("rebase");
+    expect((await db.conflicts.get([DOC_A, OLDER]))?.resolvedVia).toBeUndefined();
+  });
+
+  it("does nothing when the named record is already resolved", async () => {
+    await markConflictResolved(db, DOC_A, "rebase", OLDER);
+    const second = await markConflictResolved(db, DOC_A, "discard", OLDER);
+
+    expect(second).toEqual({ ok: true, conflict: null });
+    expect((await db.conflicts.get([DOC_A, OLDER]))?.resolvedVia).toBe("rebase");
+  });
+
+  it("refreshes the server side of the named record only", async () => {
+    const server = docWithText("svjež", uuidSeq("c"));
+    await refreshConflictServerSide(db, DOC_A, async () => ({ document: server, revision: 12 }), NEWER);
+
+    expect((await db.conflicts.get([DOC_A, NEWER]))?.serverRevision).toBe(12);
+    expect((await db.conflicts.get([DOC_A, OLDER]))?.serverRevision).toBe(7);
+  });
+});
+
+describe("recoverConflict", () => {
+  it("rebuilds a record from the frozen queue and a fresh server read", async () => {
+    await saveLocal(db, DOC_A, docWithText("moja verzija", uuidSeq("d")), 4, uuidSeq("c"));
+    await markState(db, DOC_A, "CONFLICT");
+    const server = docWithText("njihova verzija", uuidSeq("b"));
+
+    const recovered = await recoverConflict(
+      db,
+      DOC_A,
+      async () => ({ document: server, revision: 9 }),
+      () => "2026-09-19T13:00:00.000Z",
+    );
+
+    if (!recovered.ok || !recovered.conflict) {
+      throw new Error("expected a rebuilt conflict");
+    }
+    // The refused transaction is still in the queue: that is the local side.
+    expect(recovered.conflict.localBaseRevision).toBe(4);
+    expect(recovered.conflict.serverDocument).toEqual(server);
+    expect(recovered.conflict.serverRevision).toBe(9);
+    expect(await loadUnresolvedConflict(db, DOC_A)).toEqual({
+      ok: true,
+      conflict: recovered.conflict,
+    });
+  });
+
+  it("falls back to the snapshot when the queue is empty", async () => {
+    await saveLocal(db, DOC_A, docWithText("moja", uuidSeq("d")), 3, uuidSeq("c"));
+    await clearPending(db, DOC_A, Number.MAX_SAFE_INTEGER);
+
+    const recovered = await recoverConflict(db, DOC_A, async () => ({
+      document: docWithText("njihova", uuidSeq("b")),
+      revision: 8,
+    }));
+
+    expect(recovered.ok && recovered.conflict?.localBaseRevision).toBe(3);
+  });
+
+  it("describes nothing when the server cannot be read", async () => {
+    await saveLocal(db, DOC_A, docWithText("moja", uuidSeq("d")), 4, uuidSeq("c"));
+
+    // Without the server's revision there is no conflict to describe, only a
+    // suspicion — and the UI keeps offering its retry.
+    expect(await recoverConflict(db, DOC_A, async () => null)).toEqual({
+      ok: true,
+      conflict: null,
+    });
+    expect(await db.conflicts.count()).toBe(0);
+  });
+
+  it("describes nothing when the journal holds nothing for the document", async () => {
+    expect(
+      await recoverConflict(db, DOC_B, async () => ({
+        document: docWithText("njihova", uuidSeq("b")),
+        revision: 2,
+      })),
+    ).toEqual({ ok: true, conflict: null });
+  });
+
+  it("maps a failing store to a reason instead of throwing", async () => {
+    const error = Object.assign(new Error("gone"), { name: "DatabaseClosedError" });
+    expect(
+      await recoverConflict(failingDb(db, error), DOC_A, async () => null),
+    ).toEqual({ ok: false, reason: "unavailable" });
   });
 });

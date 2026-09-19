@@ -22,7 +22,12 @@ import {
   type FetchServerFn,
 } from "@/lib/journal/journal";
 
-import { createDrainRunner, type DelayFn, type DrainRunner } from "./drainRunner";
+import {
+  createDrainRunner,
+  type ConflictDetail,
+  type DelayFn,
+  type DrainRunner,
+} from "./drainRunner";
 
 const DOC = "11111111-1111-4111-8111-111111111111";
 
@@ -888,5 +893,108 @@ describe("createDrainRunner — leaving a conflict", () => {
     h.runner.stop();
     h.runner.resumeAfterConflict();
     expect(h.clock.pending()).toBe(0);
+  });
+});
+
+describe("createDrainRunner — reporting the conflict to the UI", () => {
+  function conflictHarness(
+    fetchServer: FetchServerFn | undefined,
+    db2: JournalDatabase = db,
+  ) {
+    const clock = scheduler();
+    const seen: ConflictDetail[] = [];
+    const runner = createDrainRunner({
+      db: db2,
+      documentId: DOC,
+      commit: async () => ({ status: "stale_base", currentRevision: 9 }),
+      dispatch: () => {},
+      onServerRevision: () => {},
+      fetchServer,
+      onConflict: (detail) => seen.push(detail),
+      delayFn: clock.delayFn,
+      jitterFn: () => 0.5,
+    });
+    runners.push(runner);
+    return { clock, seen, runner };
+  }
+
+  it("reports both versions' coordinates when the conflict was recorded", async () => {
+    await save("moja verzija", 4);
+
+    const h = conflictHarness(async () => ({
+      document: docWithText("njihova"),
+      revision: 9,
+    }));
+    h.clock.fire();
+    await until(() => h.seen.length === 1);
+
+    expect(h.seen[0]).toMatchObject({
+      documentId: DOC,
+      localBaseRevision: 4,
+      serverRevision: 9,
+      recorded: true,
+      serverDocumentFetched: true,
+    });
+    expect(firstTextOf(h.seen[0].localDocument)).toBe("moja verzija");
+  });
+
+  it("still reports the server revision when the record could not be written", async () => {
+    await save("moja verzija", 4);
+
+    // A journal whose conflicts table refuses every write: the state machine
+    // must still reach CONFLICT, and the UI must still get a way out.
+    const broken = {
+      snapshots: db.snapshots,
+      pending: db.pending,
+      meta: db.meta,
+      conflicts: db.conflicts,
+      transaction: ((mode: string, ...rest: unknown[]) => {
+        const table = rest[0];
+        if (table === db.conflicts) {
+          return Promise.reject(Object.assign(new Error("full"), {
+            name: "QuotaExceededError",
+          }));
+        }
+        return (db.transaction as unknown as (...args: unknown[]) => Promise<unknown>)(
+          mode,
+          ...rest,
+        );
+      }) as unknown as JournalDatabase["transaction"],
+    } as unknown as JournalDatabase;
+
+    const h = conflictHarness(async () => null, broken);
+    h.clock.fire();
+    await until(() => h.seen.length === 1);
+
+    expect(h.seen[0].recorded).toBe(false);
+    expect(h.seen[0].serverDocumentFetched).toBe(false);
+    // The revision the refusal itself carried: enough for an explicit rebase.
+    expect(h.seen[0].serverRevision).toBe(9);
+  });
+
+  it("reports the fetched revision when it is ahead of the refusal's", async () => {
+    await save("moja verzija", 4);
+
+    const h = conflictHarness(async () => ({
+      document: docWithText("njihova"),
+      revision: 11,
+    }));
+    h.clock.fire();
+    await until(() => h.seen.length === 1);
+
+    expect(h.seen[0].serverRevision).toBe(11);
+  });
+
+  it("says nothing to a runner that has been stopped", async () => {
+    await save("moja verzija", 4);
+
+    const h = conflictHarness(async () => {
+      h.runner.stop();
+      return null;
+    });
+    h.clock.fire();
+    await settle();
+
+    expect(h.seen).toEqual([]);
   });
 });

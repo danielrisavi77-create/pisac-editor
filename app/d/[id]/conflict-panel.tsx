@@ -23,6 +23,10 @@
  * The component owns the decision (`resolveConflict`, pure domain) and nothing
  * else: applying it — journal writes, the state machine, the editor content —
  * is the caller's, through `onResolved`.
+ *
+ * `DegradedConflictPanel` below is the same question asked with less to go on,
+ * for the case where the conflict is real but its record could not be read or
+ * written. It exists so that CONFLICT is never a state without an exit.
  */
 
 import { useState } from "react";
@@ -112,6 +116,85 @@ function words(n: number): string {
   return plural(n, "riječ", "riječi", "riječi");
 }
 
+type Busy = "rebase" | "discard" | "refresh" | null;
+
+/**
+ * The panel for a conflict whose record could not be read or written.
+ *
+ * The document is in CONFLICT — the server refused a commit and nothing may be
+ * pushed over it — but the evidence is missing: `recordConflict` hit a full or
+ * unavailable store, or the tab died between the write and the state. The one
+ * thing this must never do is leave the author in a state with no exit, so it
+ * offers the choice that needs no evidence: keeping their own text. Taking the
+ * server's version genuinely cannot be offered here — there is no document to
+ * take — so the retry, which re-reads the server, is what leads back to the
+ * full panel.
+ */
+export function DegradedConflictPanel({
+  onKeepMine,
+  onRetry,
+}: {
+  onKeepMine: () => Promise<string | null>;
+  onRetry: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState<Busy>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  async function run(kind: Busy, action: () => Promise<string | null>): Promise<void> {
+    if (busy !== null) {
+      return;
+    }
+    setProblem(null);
+    setBusy(kind);
+    try {
+      const failure = await action();
+      if (failure) {
+        setProblem(failure);
+      }
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <section style={panel} aria-label="Sukob verzija" data-conflict-panel="degraded">
+      <h2 style={heading}>Netko je spremio noviju verziju.</h2>
+
+      <p style={paragraph}>
+        Pojedinosti nisu dostupne. Tvoj tekst je i dalje ovdje i ništa nije
+        poslano na poslužitelj.
+      </p>
+
+      {problem === null ? null : <p style={paragraph}>{problem}</p>}
+
+      <div style={choices}>
+        <button
+          type="button"
+          style={busy === null ? choiceButton : disabledButton}
+          disabled={busy !== null}
+          onClick={() => void run("rebase", onKeepMine)}
+        >
+          Zadrži moju verziju
+        </button>
+
+        <button
+          type="button"
+          style={busy === null ? choiceButton : disabledButton}
+          disabled={busy !== null}
+          onClick={() =>
+            void run("refresh", async () => {
+              await onRetry();
+              return null;
+            })
+          }
+        >
+          Pokušaj ponovno
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export type ConflictPanelProps = {
   /** The unresolved conflict, as the journal recorded it. */
   record: ConflictRecord;
@@ -125,8 +208,6 @@ export type ConflictPanelProps = {
   /** Re-fetches the server's version for a conflict that is missing it. */
   onRefresh: () => Promise<void>;
 };
-
-type Busy = "rebase" | "discard" | "refresh" | null;
 
 export default function ConflictPanel({
   record,

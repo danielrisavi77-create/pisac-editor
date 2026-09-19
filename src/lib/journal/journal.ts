@@ -30,7 +30,12 @@
 
 import type { CanonicalDocument } from "@/domain/document";
 import type { DocumentTransaction } from "@/domain/document";
-import { isResolvedConflict, type ConflictRecord } from "@/domain/sync/conflict";
+import { documentsEqual } from "@/domain/document";
+import {
+  buildConflictRecord,
+  isResolvedConflict,
+  type ConflictRecord,
+} from "@/domain/sync/conflict";
 import type {
   JournalContents,
   PendingTransaction,
@@ -44,9 +49,24 @@ import type {
 
 import { classifyJournalError, type JournalDb } from "./db";
 
+/**
+ * Why a local write was refused rather than attempted.
+ *
+ * 'state-locked' is not a storage failure: the journal is FROZEN because the
+ * document is in one of the two sticky states (CONFLICT, RECOVERY_REQUIRED),
+ * each of which may only be left by an explicit decision. A candidate landing
+ * there would overwrite `meta.state` with LOCAL_DURABLE — quietly cancelling
+ * the conflict, resuming the drain and committing over the very revision the
+ * author was being asked about. It is kept out of `LocalSaveFailureReason` on
+ * purpose: it must never reach `LOCAL_SAVE_FAILED`, because nothing failed.
+ */
+export const JOURNAL_FROZEN = "state-locked";
+
+export type LocalWriteFailure = LocalSaveFailureReason | typeof JOURNAL_FROZEN;
+
 export type SaveLocalResult =
   | { ok: true; localSeq: number }
-  | { ok: false; reason: LocalSaveFailureReason };
+  | { ok: false; reason: LocalWriteFailure };
 
 export type LoadJournalResult =
   | { ok: true; contents: JournalContents }
@@ -110,24 +130,74 @@ function defaultNow(): string {
 }
 
 /**
+ * The two states that FREEZE the journal.
+ *
+ * Both may only be left by an explicit decision (`CONFLICT_RESOLVED`,
+ * `RECOVERED`), so an ordinary candidate must not be written while either is
+ * recorded: the write would replace `meta.state` with LOCAL_DURABLE and the
+ * decision the author still owes would simply evaporate.
+ */
+const FROZEN_STATES: readonly SyncState[] = ["CONFLICT", "RECOVERY_REQUIRED"];
+
+/** Thrown inside the write transaction to abort it; never escapes this file. */
+class JournalFrozenError extends Error {
+  constructor() {
+    super("journal is frozen by a sticky sync state");
+    this.name = "JournalFrozenError";
+  }
+}
+
+/**
+ * True when a rejection is our own freeze marker, however Dexie wrapped it.
+ * The chain is walked with a hard bound, like `classifyJournalError`, because
+ * a cyclic `cause` must not hang the save path.
+ */
+function isFrozenError(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 8 && current !== null && current !== undefined; depth += 1) {
+    if (current instanceof JournalFrozenError) {
+      return true;
+    }
+    const link = current as { name?: unknown; inner?: unknown; cause?: unknown };
+    if (link.name === "JournalFrozenError") {
+      return true;
+    }
+    current = link.inner ?? link.cause ?? null;
+  }
+  return false;
+}
+
+/**
  * Writes one canonical candidate to the journal, atomically.
  *
  * Builds the F1 transaction (`REPLACE_DOCUMENT`, a fresh client transaction id
  * for the `(document, actor, clientTransactionId)` idempotency key) and then,
  * inside a single `rw` transaction:
- *   1. replaces the snapshot,
- *   2. appends a pending row at `meta.localSeq + 1`,
- *   3. updates meta (local sequence + sync state).
+ *   1. checks the journal is not frozen (see `FROZEN_STATES`),
+ *   2. replaces the snapshot,
+ *   3. appends a pending row at `meta.localSeq + 1`,
+ *   4. updates meta (local sequence + sync state).
  *
  * The recorded state is LOCAL_DURABLE, never SYNCED: this function has not
  * spoken to a server and must not imply that it has.
+ *
+ * Step 1 is the backstop for the UI's own guards. A candidate can be in flight
+ * when a conflict is raised — the editor goes read-only a beat later, and a
+ * debounced projection may already be on its way — and letting it land would
+ * be a silent last-write-wins spread over two events: the conflict would be
+ * gone from `meta`, the panel would not come back on reload, and the drain
+ * would resume against the revision the author never chose. The check lives
+ * INSIDE the transaction so it cannot be raced by a concurrent resolution.
+ * `rebaseLocal` is the one write that may cross this line, because it IS the
+ * decision.
  *
  * `uuidFn` and `nowFn` are injectable so tests and replay tooling stay
  * deterministic; `nowFn` is the small deviation from a pure domain call — the
  * journal is the layer that is allowed to read a clock.
  *
  * Failures are mapped to the reducer's `LOCAL_SAVE_FAILED` reasons rather than
- * thrown, so the caller's next dispatch is a plain state transition.
+ * thrown, so the caller's next dispatch is a plain state transition. A refusal
+ * ('state-locked') is deliberately NOT one of them: nothing failed.
  */
 export async function saveLocal(
   db: JournalDb,
@@ -136,6 +206,39 @@ export async function saveLocal(
   baseRevision: number,
   uuidFn: () => string = defaultUuid,
   nowFn: () => string = defaultNow,
+): Promise<SaveLocalResult> {
+  return writeCandidate(db, documentId, candidate, baseRevision, uuidFn, nowFn, false);
+}
+
+/**
+ * The journal write of an explicit REBASE (F1-5a): my document, re-based onto
+ * the revision the server named, queued for the drain.
+ *
+ * Identical to `saveLocal` in every respect but one: it is allowed to write
+ * while the journal is frozen in CONFLICT, because it is the author's decision
+ * to leave that state rather than something that would quietly cancel it. That
+ * is also why it is a separate, loudly named function instead of a boolean on
+ * `saveLocal` — the exception should be impossible to take by accident.
+ */
+export async function rebaseLocal(
+  db: JournalDb,
+  documentId: string,
+  document: CanonicalDocument,
+  serverRevision: number,
+  uuidFn: () => string = defaultUuid,
+  nowFn: () => string = defaultNow,
+): Promise<SaveLocalResult> {
+  return writeCandidate(db, documentId, document, serverRevision, uuidFn, nowFn, true);
+}
+
+async function writeCandidate(
+  db: JournalDb,
+  documentId: string,
+  candidate: CanonicalDocument,
+  baseRevision: number,
+  uuidFn: () => string,
+  nowFn: () => string,
+  resolvesConflict: boolean,
 ): Promise<SaveLocalResult> {
   let tx: DocumentTransaction;
   try {
@@ -160,6 +263,14 @@ export async function saveLocal(
       db.meta,
       async () => {
         const current = await db.meta.get(documentId);
+        if (
+          !resolvesConflict &&
+          current &&
+          FROZEN_STATES.includes(current.state)
+        ) {
+          // Aborts the whole transaction: nothing at all is written.
+          throw new JournalFrozenError();
+        }
         const nextSeq = (current?.localSeq ?? 0) + 1;
 
         await db.snapshots.put({
@@ -205,6 +316,9 @@ export async function saveLocal(
 
     return { ok: true, localSeq };
   } catch (error) {
+    if (isFrozenError(error)) {
+      return { ok: false, reason: JOURNAL_FROZEN };
+    }
     return { ok: false, reason: classifyJournalError(error) };
   }
 }
@@ -413,22 +527,94 @@ async function unresolvedFor(
 }
 
 /**
- * Stores a detected conflict.
+ * The row an operation should act on: the one the panel actually decided about
+ * when `detectedAt` names it, and otherwise the newest unresolved one.
  *
- * A plain `put`: re-recording the same detection (same document, same instant)
- * is idempotent, and a later detection is a new row. Called BEFORE the state
- * machine is told about the conflict, so a session that dies between the two
- * still has the evidence.
+ * Naming the row matters once a document can hold several conflicts: the panel
+ * shows one record, and the decision it produces must land on that record and
+ * not on whichever was newest by the time the author clicked. A named row that
+ * is already resolved is `null` — a decision is recorded once.
+ */
+async function targetConflict(
+  db: JournalDb,
+  documentId: string,
+  detectedAt: string | null,
+): Promise<ConflictRecord | null> {
+  if (detectedAt !== null) {
+    const row = await db.conflicts.get([documentId, detectedAt]);
+    return row && !isResolvedConflict(row) ? row : null;
+  }
+  const rows = await unresolvedFor(db, documentId);
+  return rows.length === 0 ? null : rows[rows.length - 1];
+}
+
+/** True when two rows describe the same detection, resolution aside. */
+function sameDetection(a: ConflictRecord, b: ConflictRecord): boolean {
+  if (
+    a.documentId !== b.documentId ||
+    a.localBaseRevision !== b.localBaseRevision ||
+    a.serverRevision !== b.serverRevision
+  ) {
+    return false;
+  }
+  if (!documentsEqual(a.localDocument, b.localDocument)) {
+    return false;
+  }
+  if (a.serverDocument === null || b.serverDocument === null) {
+    return a.serverDocument === b.serverDocument;
+  }
+  return documentsEqual(a.serverDocument, b.serverDocument);
+}
+
+/**
+ * How many times a detection may be nudged off an occupied key before giving
+ * up. Sixty-four conflicts inside one millisecond is not a scenario; it is a
+ * bug, and the bound is here so that a bug cannot become an endless loop.
+ */
+const MAX_DETECTION_NUDGES = 64;
+
+/**
+ * Stores a detected conflict, without ever overwriting one already there.
+ *
+ * Rows are keyed by `[documentId+detectedAt]`, and two conflicts CAN land in
+ * the same millisecond (a fast retry, a fake clock, a machine that coalesces
+ * timer resolution). A plain `put` would then silently replace the earlier row
+ * — losing exactly the original conflict the constitution requires to be kept,
+ * and possibly a resolution already recorded on it. So an occupied key is
+ * nudged with a `+n` suffix instead: still sorted after its neighbour (the
+ * suffix only extends the string), still readable, and it collides with
+ * nothing. Re-recording a byte-identical detection stays idempotent, because
+ * that is a retry of the same fact rather than a second one.
+ *
+ * Called BEFORE the state machine is told about the conflict, so a session
+ * that dies between the two still has the evidence.
  */
 export async function recordConflict(
   db: JournalDb,
   record: ConflictRecord,
 ): Promise<ConflictResult> {
   try {
-    await db.transaction("rw", db.conflicts, async () => {
-      await db.conflicts.put(record);
+    const stored = await db.transaction("rw", db.conflicts, async () => {
+      let detectedAt = record.detectedAt;
+      for (let n = 1; n <= MAX_DETECTION_NUDGES; n += 1) {
+        const existing = await db.conflicts.get([record.documentId, detectedAt]);
+        if (!existing) {
+          break;
+        }
+        if (sameDetection(existing, record)) {
+          // The same fact, recorded twice. Keep what is stored — including any
+          // resolution already written on it.
+          return existing;
+        }
+        detectedAt = `${record.detectedAt}+${n}`;
+      }
+
+      const next: ConflictRecord = { ...record, detectedAt };
+      await db.conflicts.put(next);
+      return next;
     });
-    return { ok: true, conflict: record };
+
+    return { ok: true, conflict: stored };
   } catch (error) {
     return { ok: false, reason: classifyJournalError(error) };
   }
@@ -454,24 +640,25 @@ export async function loadUnresolvedConflict(
 }
 
 /**
- * Records the author's decision on the newest unresolved conflict.
+ * Records the author's decision on a conflict — the one `detectedAt` names, or
+ * the newest unresolved one when it is omitted.
  *
  * The row is UPDATED, never removed: `resolvedVia` and `resolvedAt` are added
  * and everything else — both documents, both revisions — stays exactly as it
- * was. Returns `{ conflict: null }` when there was nothing unresolved, which
- * is not an error: a double click, or a resolution recorded by another path,
- * must not fail the author's action.
+ * was. Returns `{ conflict: null }` when there was nothing unresolved to act
+ * on, which is not an error: a double click, or a resolution recorded by
+ * another path, must not fail the author's action.
  */
 export async function markConflictResolved(
   db: JournalDb,
   documentId: string,
   via: ConflictResolution,
+  detectedAt: string | null = null,
   nowFn: () => string = defaultNow,
 ): Promise<ConflictResult> {
   try {
     const resolved = await db.transaction("rw", db.conflicts, async () => {
-      const rows = await unresolvedFor(db, documentId);
-      const target = rows.length === 0 ? null : rows[rows.length - 1];
+      const target = await targetConflict(db, documentId, detectedAt);
       if (!target) {
         return null;
       }
@@ -483,6 +670,17 @@ export async function markConflictResolved(
     return { ok: true, conflict: resolved };
   } catch (error) {
     return { ok: false, reason: classifyJournalError(error) };
+  }
+}
+
+/** Reads the server's version, turning every unhappy answer into `null`. */
+async function fetchServerSafely(fetchServer: FetchServerFn): Promise<ServerSide | null> {
+  try {
+    return await fetchServer();
+  } catch {
+    // A throwing fetch tells us nothing about the server; it is the same
+    // situation as one that answered "no".
+    return null;
   }
 }
 
@@ -502,20 +700,13 @@ export async function refreshConflictServerSide(
   db: JournalDb,
   documentId: string,
   fetchServer: FetchServerFn,
+  detectedAt: string | null = null,
 ): Promise<ConflictResult> {
-  let server: ServerSide | null = null;
-  try {
-    server = await fetchServer();
-  } catch {
-    // A throwing fetch tells us nothing about the server; it is the same
-    // situation as one that answered "no".
-    server = null;
-  }
+  const server = await fetchServerSafely(fetchServer);
 
   try {
     const updated = await db.transaction("rw", db.conflicts, async () => {
-      const rows = await unresolvedFor(db, documentId);
-      const target = rows.length === 0 ? null : rows[rows.length - 1];
+      const target = await targetConflict(db, documentId, detectedAt);
       if (!target || !server) {
         return target;
       }
@@ -532,6 +723,66 @@ export async function refreshConflictServerSide(
   } catch (error) {
     return { ok: false, reason: classifyJournalError(error) };
   }
+}
+
+/**
+ * Rebuilds a conflict record for a document that is in CONFLICT with nothing
+ * recorded — the recovery path for the one moment the F1-5a flow can lose its
+ * evidence: `recordConflict` failed (a full or unavailable store) while the
+ * state machine went to CONFLICT anyway, or the tab died between the two.
+ *
+ * Everything needed is still in the journal, because a conflict halts the
+ * drain and freezes the journal: the newest pending row is exactly the
+ * transaction the server refused, with the base that turned out to be stale.
+ * (A journal with no queue left falls back to the snapshot — the author would
+ * then be choosing between their current text and the server's, which is still
+ * the honest question.) The server's side comes from a fresh read.
+ *
+ * Returns `{ conflict: null }` rather than a half-record when the server
+ * cannot be read: without the server's revision there is no conflict to
+ * describe, only a suspicion, and the UI keeps offering the retry.
+ */
+export async function recoverConflict(
+  db: JournalDb,
+  documentId: string,
+  fetchServer: FetchServerFn,
+  nowFn: () => string = defaultNow,
+): Promise<ConflictResult> {
+  const loaded = await loadJournal(db, documentId);
+  if (!loaded.ok) {
+    return { ok: false, reason: loaded.reason };
+  }
+
+  const newest = loaded.contents.pending.reduce<PendingTransaction | null>(
+    (best, row) => (best === null || row.localSeq > best.localSeq ? row : best),
+    null,
+  );
+
+  const localDocument = newest?.tx.document ?? loaded.contents.snapshot?.document ?? null;
+  const localBaseRevision =
+    newest?.tx.baseRevision ?? loaded.contents.snapshot?.revision ?? null;
+  if (!localDocument || localBaseRevision === null) {
+    return { ok: true, conflict: null };
+  }
+
+  const server = await fetchServerSafely(fetchServer);
+  if (!server) {
+    return { ok: true, conflict: null };
+  }
+
+  return recordConflict(
+    db,
+    buildConflictRecord(
+      {
+        documentId,
+        localDocument,
+        localBaseRevision,
+        serverDocument: server.document,
+        serverRevision: server.revision,
+      },
+      nowFn,
+    ),
+  );
 }
 
 /**

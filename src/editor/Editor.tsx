@@ -196,6 +196,16 @@ export default function DocumentEditor({
   // The initial content is read once: re-projecting it on every render would
   // fight the author's cursor. Later document changes arrive through F1-3a.
   const [initialContent] = useState(() => canonicalToTiptap(initialDocument));
+  /*
+   * The editable flag the editor is CREATED with.
+   *
+   * A session that opens on a persisted CONFLICT must mount read-only, not
+   * mount editable and be corrected a tick later by an effect: that tick is
+   * long enough for the author to type into a document whose fate they have
+   * not decided yet. Read once, like the content; later changes go through the
+   * effect below.
+   */
+  const [initialEditable] = useState(editable);
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The editor whose change is still waiting out the debounce, so `flush` can
@@ -242,6 +252,7 @@ export default function DocumentEditor({
     immediatelyRender: false, // The page is server-rendered; hydrate first.
     extensions: createEditorExtensions(placeholder),
     content: initialContent,
+    editable: initialEditable,
     editorProps: {
       attributes: {
         role: "textbox",
@@ -325,11 +336,27 @@ export default function DocumentEditor({
     // A handle nulled here would silently drop the author's last candidate.
   }, [flush, setDocument, flushRef]);
 
-  // Read-only is a state of the surface, not of its content: the document is
-  // still shown in full while the author decides how to resolve a conflict.
+  /*
+   * Read-only is a state of the surface, not of its content: the document is
+   * still shown in full while the author decides how to resolve a conflict.
+   *
+   * Going read-only also DROPS the candidate still inside the debounce window.
+   * `setEditable(false)` stops new typing but says nothing about typing that
+   * already happened: a projection booked half a second ago would otherwise
+   * land after the freeze and be journalled as if the author were still
+   * editing — which is the write the conflict exists to prevent.
+   */
   useEffect(() => {
-    if (editor && !editor.isDestroyed && editor.isEditable !== editable) {
+    if (!editor || editor.isDestroyed) {
+      return;
+    }
+    if (editor.isEditable !== editable) {
       editor.setEditable(editable);
+    }
+    if (!editable && timer.current !== null) {
+      clearTimeout(timer.current);
+      timer.current = null;
+      pendingEditor.current = null;
     }
   }, [editor, editable]);
 

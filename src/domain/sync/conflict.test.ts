@@ -14,6 +14,7 @@ import {
   conflictSummary,
   isResolvedConflict,
   resolveConflict,
+  withLatestLocalDocument,
   type ConflictRecord,
 } from "./conflict";
 
@@ -404,5 +405,58 @@ describe("conflictSummary", () => {
 
     expect(conflictSummary(identical).contentEqual).toBe(true);
     expect(isResolvedConflict(identical)).toBe(false);
+  });
+});
+
+describe("withLatestLocalDocument", () => {
+  it("advances 'my version' to the newest durable local text", () => {
+    // The author kept typing between the refused commit and the editor going
+    // read-only; that text is journalled and is what a rebase must keep.
+    const newer = docWithText("moja verzija, dopunjena", "c");
+    const effective = withLatestLocalDocument(record(), newer);
+
+    expect(effective.localDocument).toBe(newer);
+    const resolution = resolveConflict(effective, "rebase");
+    expect(resolution.ok && resolution.nextDocument).toBe(newer);
+  });
+
+  it("leaves the stored record untouched — it stays the evidence", () => {
+    const original = record();
+    const before = original.localDocument;
+    withLatestLocalDocument(original, docWithText("nešto novije", "c"));
+
+    expect(original.localDocument).toBe(before);
+  });
+
+  it("returns the record itself when there is nothing newer", () => {
+    const original = record();
+
+    expect(withLatestLocalDocument(original, null)).toBe(original);
+    expect(withLatestLocalDocument(original, undefined)).toBe(original);
+    expect(withLatestLocalDocument(original, original.localDocument)).toBe(original);
+  });
+
+  it("treats a structurally identical document as nothing newer", () => {
+    const original = record();
+    const copy: CanonicalDocument = JSON.parse(JSON.stringify(original.localDocument));
+
+    expect(withLatestLocalDocument(original, copy)).toBe(original);
+  });
+
+  it("makes the panel count the text the author actually has", () => {
+    const newer = docWithText("jedan dva tri četiri", "c");
+    const summary = conflictSummary(withLatestLocalDocument(record(), newer));
+
+    expect(summary.local).toEqual({ nodes: 1, words: 4 });
+  });
+
+  it("keeps the server side and both revisions exactly as recorded", () => {
+    const original = record();
+    const effective = withLatestLocalDocument(original, docWithText("novije", "c"));
+
+    expect(effective.serverDocument).toBe(original.serverDocument);
+    expect(effective.serverRevision).toBe(original.serverRevision);
+    expect(effective.localBaseRevision).toBe(original.localBaseRevision);
+    expect(effective.detectedAt).toBe(original.detectedAt);
   });
 });

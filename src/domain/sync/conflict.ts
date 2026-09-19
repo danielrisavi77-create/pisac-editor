@@ -36,7 +36,7 @@
  * already watched being resolved.
  */
 
-import { contentEqual, type CanonicalDocument } from "../document";
+import { contentEqual, documentsEqual, type CanonicalDocument } from "../document";
 import { CONFLICT_RESOLUTIONS, type ConflictResolution } from "./states";
 
 /**
@@ -180,6 +180,35 @@ export function buildConflictRecord(
     serverDocument: detection.serverDocument,
     serverRevision: detection.serverRevision,
   };
+}
+
+/**
+ * The record as the AUTHOR should be asked about it: same conflict, but with
+ * "my version" being the newest local text rather than the one the refused
+ * commit happened to carry.
+ *
+ * Why this exists. The conflict is detected when the server refuses a commit,
+ * and the document keeps moving for a moment afterwards — the refusal has to
+ * travel back, the server's version has to be fetched, and only then does the
+ * editor go read-only. Anything the author typed in that window is journalled
+ * and is genuinely theirs; rebasing onto the transaction that was refused
+ * would throw it away, silently, as part of an action labelled "keep my
+ * version". So resolution reads the newest durable document and the panel
+ * counts THAT.
+ *
+ * The stored row is not touched: `record.localDocument` remains the evidence
+ * of what was actually refused, and only the copy handed to the panel and to
+ * `resolveConflict` carries the newer text. Returns the record unchanged when
+ * there is nothing newer, so an unchanged document never looks like a change.
+ */
+export function withLatestLocalDocument(
+  record: ConflictRecord,
+  latest: CanonicalDocument | null | undefined,
+): ConflictRecord {
+  if (!latest || documentsEqual(record.localDocument, latest)) {
+    return record;
+  }
+  return { ...record, localDocument: latest };
 }
 
 function stamped(
