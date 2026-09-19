@@ -113,6 +113,9 @@ test("independent verifier skips a different route that resolves to the same act
   assert.equal(result.ok,true);
   assert.equal(result.verification.actualModel,"google/gemini-3.8-flash");
   assert.ok(result.verification.attempts.some(x=>x.sameActualModel===true));
+  assert.deepEqual(result.usage,{inputTokens:30,outputTokens:15,totalTokens:45});
+  assert.equal(result.costUsd,0.003);
+  assert.ok(result.latencyMs >= result.verification.latencyMs);
 });
 
 test("explicit verifier FAIL cannot produce success", async () => {
