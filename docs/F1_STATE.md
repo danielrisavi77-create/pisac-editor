@@ -18,9 +18,10 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 
 - DONE 38cf712 F1-3a Dexie journal + sync reducer (atomic tx, sticky states persisted across reload, honest durability via onDirty/flush, Web Locks multi-tab guard, pending trim 50; review round applied). Obligations: F1-4b clearPending on ACK, F1-5a clearPending on discard.
 
+- DONE c0f606a F1-3b sync status chip (8 HR labels per F1_PLAN, blocked precedence, a11y aria-live, dark mode, no generic Saved; LOCAL_DURABLE neutral tone vs SYNCED ok).
+
 ## Queue (top = next). Tags: [review] = reviewer pass required.
 
-- IN_PROGRESS F1-3b Sync status UI: status chip bound to the reducer; never shows generic "Saved"; Croatian labels.
 - TODO F1-4a [review] Server sync: `documents`, `document_revisions` tables + RLS; CAS on base revision; idempotency (document_id, actor_id, client_transaction_id); server action commit.
 - TODO F1-4b Pending queue drain + ACK → SYNCED; retry with backoff; lost-response replay is idempotent.
 - TODO F1-5a [review] Conflict: stale base → CONFLICT; explicit rebase / explicit discard; original conflict recorded; no LWW.
