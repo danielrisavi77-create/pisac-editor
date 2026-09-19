@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "citation-01",
+      "input": "Provjeri sve DOI-jeve i citate u ovom akademskom radu.",
+      "expectedTask": "citation_verification",
+      "expectedWorkflow": "retrieve-verify-judge",
+      "minQualityGate": 0.97
+    },
+    {
+      "id": "code-01",
+      "input": "Implementiraj API, napiši testove i provjeri regresije.",
+      "expectedTask": "coding",
+      "expectedWorkflow": "plan-execute-test-review",
+      "minQualityGate": 0.92
+    },
+    {
+      "id": "docx-01",
+      "input": "Popravi Word dokument bez gubitka fieldova, bookmarka i fusnota.",
+      "expectedTask": "document_repair",
+      "expectedWorkflow": "inspect-plan-repair-verify",
+      "minQualityGate": 0.98
+    },
+    {
+      "id": "research-01",
+      "input": "Istraži literaturu i napravi sintezu relevantnih izvora.",
+      "expectedTask": "research",
+      "expectedWorkflow": "retrieve-synthesize-verify",
+      "minQualityGate": 0.93
+    },
+    {
+      "id": "architecture-01",
+      "input": "Predloži produkcijsku arhitekturu i workflow za cijeli repo.",
+      "expectedTask": "architecture",
+      "expectedWorkflow": "analyze-options-decide-review",
+      "minQualityGate": 0.94
+    }
+  ]
+}
