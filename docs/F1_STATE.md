@@ -6,9 +6,9 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 - R1 PRs #1–#5 closed with rationale; PR #6 superseded by PR #7 (this branch). Loop routine active: hourly.
 
 - DONE 5f51deb F1-0a Next.js 15 App Router + TS + Vitest + ESLint flat + CI; prototype served at /legacy/ (redirect in next.config.ts); Netlify targets Next.
+- DONE 2f42736 F1-0b docs/F1_PLAN.md: PR→step map, sync state machine (HR labels), 15-fixture register (NOT PASS).
 
 ## Queue (top = next). Tags: [review] = reviewer pass required.
-- IN_PROGRESS F1-0b Governance: `docs/F1_PLAN.md` mapping the 7 F1 PRs to concrete steps in this file; fixture ID list FX-FR-001-001…FX-X-SEC-001 with owner test file names (definition only, marked NOT PASS).
 - TODO F1-1a [review] Supabase auth: magic-link sign-in, session refresh, protected `/workspace` route, `src/lib/supabase/{client,server}.ts`, env template. No service role in client bundle.
 - TODO F1-1b [review] Personal workspace + academic project: migration `supabase/migrations/<next>_f1_workspace.sql` (workspaces, academic_projects, RLS owner-only), server actions create/list. Migration prepared, not applied.
 - TODO F1-2a Canonical document model: `src/domain/document/*` — DocumentNode with opaque UUID ids, schema (paragraph, heading 1–3, text, bold, italic), REPLACE_DOCUMENT transaction type, pure validators + unit tests.
