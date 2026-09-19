@@ -12,7 +12,7 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 
 ## Queue (top = next). Tags: [review] = reviewer pass required.
 
-- TODO F1-1b [review] Personal workspace + academic project: migration `supabase/migrations/<next>_f1_workspace.sql` (workspaces, academic_projects, RLS owner-only), server actions create/list. Migration prepared, not applied.
+- IN_PROGRESS F1-1b [review] Personal workspace + academic project: migration `supabase/migrations/<next>_f1_workspace.sql` (workspaces, academic_projects, RLS owner-only), server actions create/list. Migration prepared, not applied.
 - TODO F1-2a Canonical document model: `src/domain/document/*` — DocumentNode with opaque UUID ids, schema (paragraph, heading 1–3, text, bold, italic), REPLACE_DOCUMENT transaction type, pure validators + unit tests.
 - TODO F1-2b Tiptap editor bound to the canonical model: `app/(workspace)/d/[id]/page.tsx`, editor extension set limited to F1 schema, projection editor→canonical candidate, no execCommand.
 - TODO F1-3a [review] Local durable journal (Dexie): atomic tx storing snapshot + pending transaction + local sequence + sync state; state machine EDITING/SAVING_LOCAL/LOCAL_DURABLE/SYNCING/SYNCED/CONFLICT/ERROR/RECOVERY_REQUIRED as a pure reducer + tests.
