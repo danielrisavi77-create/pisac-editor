@@ -10,7 +10,7 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 
 ## Queue (top = next). Tags: [review] = reviewer pass required.
 - IN_PROGRESS F1-1a [review] Supabase auth (code only, no migration, env-driven): `@supabase/ssr` client/server helpers `src/lib/supabase/{client,server,middleware}.ts`, magic-link sign-in page `/prijava`, session refresh in `middleware.ts`, protected `/workspace` route with sign-out, `.env.example` (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY only). No service role in client bundle. Unit-test the auth guard logic with a mocked client.
-- BLOCKED(owner Q2) F1-1b [review] Personal workspace + academic project: migration `supabase/migrations/<next>_f1_workspace.sql` (workspaces, academic_projects, RLS owner-only), server actions create/list. Migration prepared, not applied.
+- TODO F1-1b [review] Personal workspace + academic project: migration `supabase/migrations/<next>_f1_workspace.sql` (workspaces, academic_projects, RLS owner-only), server actions create/list. Migration prepared, not applied.
 - TODO F1-2a Canonical document model: `src/domain/document/*` — DocumentNode with opaque UUID ids, schema (paragraph, heading 1–3, text, bold, italic), REPLACE_DOCUMENT transaction type, pure validators + unit tests.
 - TODO F1-2b Tiptap editor bound to the canonical model: `app/(workspace)/d/[id]/page.tsx`, editor extension set limited to F1 schema, projection editor→canonical candidate, no execCommand.
 - TODO F1-3a [review] Local durable journal (Dexie): atomic tx storing snapshot + pending transaction + local sequence + sync state; state machine EDITING/SAVING_LOCAL/LOCAL_DURABLE/SYNCING/SYNCED/CONFLICT/ERROR/RECOVERY_REQUIRED as a pure reducer + tests.
@@ -24,7 +24,7 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 
 ## Blocked / questions for owner
 - Q1 ANSWERED by owner 19.9.: pisac-editor gets its OWN Supabase project (option b). Migration numbering stays 2026MMDDNN.
-- Q2 (blocks F1-1b, F1-4a, F1-5b): creating project "Pisac" in org fxxjqlesftjvszgadjvp failed: free-plan limit of 2 active projects (Lekta, Lekta staging are active). Owner must pause/delete one, upgrade, or point to another org. Orchestrator will not pause Lekta projects on its own.
+- Q2 RESOLVED 19.9. per owner: Supabase project "Pisac" created (ref cxwxxcwrgushfkisfpxz, eu-central-1) and immediately PAUSED (free-plan slot juggling: Lekta staging briefly paused, then restored). Before F1-1b/F1-4a can apply migrations or fetch keys, the Pisac project must be RESTORED (and something else paused, or plan upgraded). Keys not yet fetched.
 - Local Node is v22 while .nvmrc/engines say 24 (EBADENGINE warnings only; CI uses .nvmrc). Consider a SessionStart hook or environment Node 24.
 
 ## Notes
