@@ -16,7 +16,11 @@ export function normalizedUtility(record = {}, baselines = DEFAULT_BASELINES, we
   const hasQuality = record.qualityScore !== null && record.qualityScore !== undefined && record.qualityScore !== "";
   const quality = hasQuality && Number.isFinite(Number(record.qualityScore)) ? clamp01(record.qualityScore) : null;
   if (quality == null) return null;
-  const cost = clamp01((Number(record.costUsd) || 0) / baselines.costUsd);
+  const hasCost = record.costUsd !== null && record.costUsd !== undefined && record.costUsd !== "";
+  const cost = hasCost && Number.isFinite(Number(record.costUsd))
+    ? clamp01(Number(record.costUsd) / baselines.costUsd)
+    : null;
+  if (cost == null) return null;
   const latency = clamp01((Number(record.latencyMs) || 0) / baselines.latencyMs);
   const tokens = clamp01((Number(record.usage?.totalTokens) || 0) / baselines.tokens);
   const failure = record.success === false ? 1 : 0;
@@ -54,7 +58,9 @@ export function sanitizeOutcome(record = {}) {
       outputTokens: Number(record.usage?.outputTokens) || 0,
       totalTokens: Number(record.usage?.totalTokens) || 0
     },
-    costUsd: Number.isFinite(Number(record.costUsd)) ? Number(record.costUsd) : null,
+    costUsd: record.costUsd !== null && record.costUsd !== undefined && record.costUsd !== "" && Number.isFinite(Number(record.costUsd))
+      ? Number(record.costUsd)
+      : null,
     latencyMs: Number(record.latencyMs) || 0,
     retries: Number(record.retries) || 0,
     fallbacks: Array.isArray(record.fallbacks) ? record.fallbacks : [],
@@ -70,7 +76,7 @@ export function sanitizeOutcome(record = {}) {
   };
   clean.utility = normalizedUtility(clean);
   clean.key = outcomeKey(clean);
-  clean.eligibleForLearning = clean.qualityScore != null;
+  clean.eligibleForLearning = clean.qualityScore != null && clean.utility != null;
   return clean;
 }
 
