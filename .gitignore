@@ -9,3 +9,8 @@ node_modules/
 
 # AI Architect local telemetry
 .ai/runtime/*.jsonl
+
+# Next.js
+.next/
+*.tsbuildinfo
+next-env.d.ts

@@ -6,6 +6,29 @@
     "node": ">=24"
   },
   "scripts": {
-    "test": "npm --prefix tools/ai-architect test"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run",
+    "test:ai": "npm --prefix tools/ai-architect test",
+    "test": "npm run test:unit && npm run test:ai"
+  },
+  "dependencies": {
+    "next": "15.5.25",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
+    "@netlify/plugin-nextjs": "^5.16.0",
+    "@types/node": "^24.10.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "15.5.25",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.1"
   }
 }
