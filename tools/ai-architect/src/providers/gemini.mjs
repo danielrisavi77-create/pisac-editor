@@ -6,7 +6,7 @@ export function createGeminiProvider(config = {}, runtime = {}) {
   return {
     id: "gemini",
     available() {
-      return Boolean(env[config.keyEnv || "GEMINI_API_KEY"]);
+      return config.enabled !== false && Boolean(env[config.keyEnv || "GEMINI_API_KEY"]);
     },
     async execute({ model, system, user, plan }) {
       const apiKey = env[config.keyEnv || "GEMINI_API_KEY"];
