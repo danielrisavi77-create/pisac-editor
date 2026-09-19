@@ -6,7 +6,7 @@ export function createOpenRouterProvider(config = {}, runtime = {}) {
   return {
     id: "openrouter",
     available() {
-      return Boolean(env[config.keyEnv || "OPENROUTER_API_KEY"]);
+      return config.enabled !== false && Boolean(env[config.keyEnv || "OPENROUTER_API_KEY"]);
     },
     async execute({ model, system, user, plan }) {
       const apiKey = env[config.keyEnv || "OPENROUTER_API_KEY"];
@@ -27,7 +27,15 @@ export function createOpenRouterProvider(config = {}, runtime = {}) {
               { role: "system", content: system },
               { role: "user", content: user }
             ],
-            ...(Number.isFinite(Number(plan?.temperature)) ? { temperature:Number(plan.temperature) } : {}),
+            ...(model === "openrouter/auto" ? {
+              plugins:[{
+                id:"auto-router",
+                cost_tier:({low:"low",medium:"medium",high:"high",critical:"max"})[plan?.capabilityTier] || "medium"
+              }]
+            } : {}),
+            ...((model.startsWith("google/") || model.startsWith("deepseek/")) && Number.isFinite(Number(plan?.temperature))
+              ? { temperature:Number(plan.temperature) }
+              : {}),
             ...(plan?.outputBudgetTokens ? { max_tokens:plan.outputBudgetTokens } : {})
           })
         },
