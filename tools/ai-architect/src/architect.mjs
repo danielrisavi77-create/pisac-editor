@@ -5,7 +5,7 @@ import { createProviderRegistry } from "./providers/registry.mjs";
 import { validateOutput, parseVerifierVerdict } from "./validate-output.mjs";
 import { verifyContract } from "./contract-verifier.mjs";
 import {
-  newBudgetLedger,assertNextAttemptFits,applyAttemptUsage,noteAttemptKind,canUseAttemptKind,remainingBudget
+  newBudgetLedger,assertNextAttemptFits,assertLedgerWithinBudget,applyAttemptUsage,noteAttemptKind,canUseAttemptKind,remainingBudget
 } from "./budget.mjs";
 import { predictTokenBudget } from "./predictor.mjs";
 import { estimateCostEnvelope, calculateActualCost } from "./pricing.mjs";
@@ -140,6 +140,7 @@ export class AIArchitect{
       if(!provider){used.add(candidateKey(current));current=this.#pickFallback(current,candidates,used,ledger,providers,context);nextKind="fallback";continue;}
       let operationalFailure=null;
       let qualityFailure=null;
+      let terminalPolicyFailure=null;
       let localTry=0;
 
       while(true){
@@ -193,6 +194,14 @@ export class AIArchitect{
             actualCostStatus:actualCost.status,latencyMs,contractPassed:structural.passed&&contract.passed,success:false
           });
           lastOutput=response.output;
+          try{
+            assertLedgerWithinBudget(ledger);
+          }catch(error){
+            attemptRecord.errorType=error.code||"ACTUAL_BUDGET_EXCEEDED";
+            finalFailure=attemptRecord.errorType;
+            terminalPolicyFailure=error;
+            break;
+          }
 
           if(!structural.passed||!contract.passed){
             const structuralFailures=structural.checks.filter(x=>!x.passed).map(x=>({code:x.id,message:x.reason}));
@@ -249,6 +258,8 @@ export class AIArchitect{
       }
 
       used.add(candidateKey(current));
+
+      if(terminalPolicyFailure)break;
 
       if(operationalFailure){
         const fallback=this.#pickFallback(current,candidates,used,ledger,providers,context);
@@ -344,6 +355,15 @@ export class AIArchitect{
           ?{status:checked.costStatus||"verified-actual",totalUsd:Number(checked.costUsd)}
           :calculateActualCost(getModel(prepared.id),checked.usage,{cacheTtl:context.cacheTtl||"5m"});
         applyAttemptUsage(ledger,{usage:checked.usage,costUsd:cost.totalUsd,latencyMs:checked.latencyMs??(Date.now()-started)});
+        try{assertLedgerWithinBudget(ledger);}catch(error){
+          const record=addVerification(trace,{
+            parentAttemptNumber,provider:checked.provider,requestedModel:checked.requestedModel,actualModel:checked.actualModel,
+            passed:false,verdict:null,inputTokens:checked.usage?.inputTokens,outputTokens:checked.usage?.outputTokens,totalTokens:checked.usage?.totalTokens,
+            actualCostUsd:cost.totalUsd,actualCostStatus:cost.status,latencyMs:checked.latencyMs??(Date.now()-started),errorType:error.code||"ACTUAL_BUDGET_EXCEEDED"
+          });
+          attempts.push(record);
+          return{passed:false,status:"budget-blocked",reason:error.code||"ACTUAL_BUDGET_EXCEEDED",failures:[{code:error.code||"ACTUAL_BUDGET_EXCEEDED",message:"Verifier pushed aggregate execution over the hard budget."}],attempts};
+        }
         const same=Boolean(primary.actualModel&&checked.actualModel&&canonicalModelId(primary.actualModel)===canonicalModelId(checked.actualModel));
         const verdict=parseVerifierVerdict(checked.output);
         const record=addVerification(trace,{
