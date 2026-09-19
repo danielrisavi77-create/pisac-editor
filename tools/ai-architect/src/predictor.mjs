@@ -34,12 +34,15 @@ export function predictTokenBudget({
 
 function buildBudget({visibleP50,visibleP90,visibleP95,reasoningP50,reasoningP90,reasoningP95,source,sampleCount,model,maxBilledOutputTokens=null}){
   const includes=model?.pricing?.outputIncludesReasoning!==false;
-  const p50=capPair(visibleP50,reasoningP50,includes,maxBilledOutputTokens);
-  const p90=capPair(visibleP90,reasoningP90,includes,maxBilledOutputTokens);
-  const p95=capPair(visibleP95,reasoningP95,includes,maxBilledOutputTokens);
-  // Preserve percentile monotonicity after capping.
-  p90.visible=Math.max(p50.visible,p90.visible);p90.reasoning=Math.max(p50.reasoning,p90.reasoning);
-  p95.visible=Math.max(p90.visible,p95.visible);p95.reasoning=Math.max(p90.reasoning,p95.reasoning);
+  const cap=maxBilledOutputTokens;
+  // Cap every percentile first, then repair percentile monotonicity *inside* the cap.
+  // Lifting a percentile to its predecessor may only ever spend budget that is freed
+  // elsewhere in the same percentile, so the hard cap can never be re-broken.
+  const pairs=[capPair(visibleP50,reasoningP50,includes,cap),
+    capPair(visibleP90,reasoningP90,includes,cap),
+    capPair(visibleP95,reasoningP95,includes,cap)];
+  for(let i=1;i<pairs.length;i++)liftToFloor(pairs[i],pairs[i-1],includes,cap);
+  const [p50,p90,p95]=pairs;
   const billed=(p)=>includes?p.visible+p.reasoning:p.visible;
   return{
     visibleOutput:{p50:p50.visible,p90:p90.visible,p95:p95.visible},
@@ -47,6 +50,23 @@ function buildBudget({visibleP50,visibleP90,visibleP95,reasoningP50,reasoningP90
     billedOutput:{p50:billed(p50),p90:billed(p90),p95:billed(p95)},
     source,sampleCount,maxBilledOutputTokens
   };
+}
+// Raise `pair` to at least `floor` component-wise without exceeding the billed cap.
+// `floor` is itself cap-compliant, so shedding the surplus above it always terminates.
+function liftToFloor(pair,floor,includes,cap){
+  pair.visible=Math.max(pair.visible,floor.visible);
+  pair.reasoning=Math.max(pair.reasoning,floor.reasoning);
+  if(!cap)return pair;
+  if(!includes){pair.visible=Math.min(pair.visible,cap);return pair;}
+  let excess=pair.visible+pair.reasoning-cap;
+  if(excess<=0)return pair;
+  const shedReasoning=Math.min(excess,pair.reasoning-floor.reasoning);
+  pair.reasoning-=shedReasoning;excess-=shedReasoning;
+  if(excess>0){
+    const shedVisible=Math.min(excess,pair.visible-floor.visible);
+    pair.visible-=shedVisible;excess-=shedVisible;
+  }
+  return pair;
 }
 function capPair(visible,reasoning,includes,cap){
   visible=Math.max(0,Math.round(visible));reasoning=Math.max(0,Math.round(reasoning));

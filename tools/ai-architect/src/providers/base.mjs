@@ -59,7 +59,9 @@ export function normalizeUsage({
     reasoningTokens:reasoningTokens==null?null:integer(reasoningTokens),
     toolTokens:integer(toolTokens),
     totalTokens:totalTokens==null?input+output:integer(totalTokens),
-    providerCostUsd:Number.isFinite(Number(providerCostUsd))?Number(providerCostUsd):null
+    // `Number(null)` is 0: a provider that reports no billed cost must stay
+    // unknown instead of being normalized into a verified zero.
+    providerCostUsd:providerCostUsd!=null&&providerCostUsd!==""&&Number.isFinite(Number(providerCostUsd))?Number(providerCostUsd):null
   };
 }
 

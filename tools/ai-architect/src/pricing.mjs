@@ -48,7 +48,9 @@ export function estimateCostEnvelope(args={}){
 }
 
 export function calculateActualCost(model,usage={},options={}){
-  if(Number.isFinite(Number(usage.providerCostUsd))){
+  // `Number(null)` is 0, so an absent provider-reported cost must be rejected
+  // explicitly: unknown actual cost is never a verified zero.
+  if(usage.providerCostUsd!=null&&usage.providerCostUsd!==""&&Number.isFinite(Number(usage.providerCostUsd))){
     return {status:"verified-actual",totalUsd:round6(Number(usage.providerCostUsd)),source:"provider-reported-billed"};
   }
   const rates=resolvePricing(model,usage.inputTokens||0,options.cacheTtl||"5m");
