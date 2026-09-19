@@ -160,7 +160,7 @@ export async function recommend(taskText,repoRoot=process.cwd(),context={}){
     if(tokenBudget.billedOutput.p95>maxProviderOutput){rejected.push({id:model.id,reasons:["model_output_limit_exceeded"]});continue;}
     const predictedCost=estimateCostEnvelope({model,inputTokens,tokenBudget,percentile:"p90",cacheTtl:context.cacheTtl||"5m"});
     const quality=estimateQuality({model,calibration:stats,minSamples:cfg.models.learning?.minVerifiedSamples||30});
-    const candidate={...model,effort,inputTokens,tokenBudget,predictedCost,quality};
+    const candidate={...model,effort,inputTokens,tokenBudget,predictedCost,quality,calibration:stats};
     const reasons=checkCandidateBudget(candidate,budget);
     if(quality.source==="production-empirical"&&route.qualityGate!=null&&quality.successProbability<route.qualityGate)reasons.push("quality_gate_not_met");
     if(reasons.length){rejected.push({id:model.id,reasons});continue;}
