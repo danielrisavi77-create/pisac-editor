@@ -53,6 +53,7 @@
  * the machine's vocabulary, authors read Croatian.
  */
 
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import SyncStatusChip from "@/components/SyncStatusChip";
@@ -112,8 +113,26 @@ import { createDrainRunner, type DrainRunner } from "@/lib/sync/drainRunner";
 import { commitDocument, createCheckpoint, listCheckpoints, loadDocument } from "./actions";
 import CheckpointBar, { type CheckpointCreation } from "./checkpoint-bar";
 import DocxExportBar from "./docx-export-bar";
-import ConflictPanel, { DegradedConflictPanel } from "./conflict-panel";
-import RecoveryPanel from "./recovery-panel";
+/*
+ * F1-11: the three panels below are questions the author is asked only in
+ * CONFLICT or RECOVERY_REQUIRED — states most sessions never reach. Statically
+ * importing them put their code in the route's first load for every author who
+ * only ever writes. `next/dynamic` moves them into their own chunk, fetched the
+ * first time a panel actually renders.
+ *
+ * `ssr: false` is deliberate and costs nothing here: this whole file is a
+ * client component, and the sticky state that decides whether a panel shows is
+ * read from the journal (IndexedDB) after mount, so the server never had a
+ * reason to render one. The loading fallback is `null` for the same reason it
+ * is not a spinner — the panel is the question, and half a question rendered
+ * for one frame is worse than the frame of nothing that precedes it.
+ */
+const ConflictPanel = dynamic(() => import("./conflict-panel"), { ssr: false });
+const DegradedConflictPanel = dynamic(
+  () => import("./conflict-panel").then((m) => m.DegradedConflictPanel),
+  { ssr: false },
+);
+const RecoveryPanel = dynamic(() => import("./recovery-panel"), { ssr: false });
 
 const statusRow = {
   display: "flex",

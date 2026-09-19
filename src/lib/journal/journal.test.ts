@@ -9,6 +9,7 @@ import {
   paragraphNode,
   textNode,
   type CanonicalDocument,
+  type NodeId,
 } from "@/domain/document";
 
 import {
@@ -62,6 +63,23 @@ function docWithText(text: string, uuidFn: () => string): CanonicalDocument {
     ...empty,
     nodes: [paragraphNode(empty.nodes[0].id, [textNode(text)])],
   };
+}
+
+/**
+ * A chapter-sized document (F1-11): 200 paragraphs of real prose length, so a
+ * throughput guard measures something an author could actually be holding.
+ */
+function longDocument(uuidFn: () => string, blocks = 200): CanonicalDocument {
+  const empty = emptyDocument(uuidFn);
+  const nodes = Array.from({ length: blocks }, (_, i) =>
+    paragraphNode(uuidFn() as NodeId, [
+      textNode(
+        `Odlomak ${i}. U ovom se dijelu razmatra odnos izvora i tvrdnje koja ` +
+          `se iz njega izvodi, uz osvrt na metodološka ograničenja pristupa.`,
+      ),
+    ]),
+  );
+  return { ...empty, nodes };
 }
 
 /** A db whose every transaction rejects — for the error-mapping paths. */
@@ -330,6 +348,33 @@ describe("saveLocal", () => {
       await saveLocal(db, DOC_A, doc, 0, uuid);
     }
     expect(await db.pending.where("documentId").equals(DOC_A).count()).toBe(4);
+  });
+
+  /**
+   * F1-11 throughput tripwire. Ten debounced windows on a 200-paragraph
+   * chapter is an ordinary minute of writing; each one replaces the snapshot,
+   * appends a pending row and runs the trim scan. A coarse ceiling catches an
+   * accidental O(n²) — a trim that rewrites the whole queue per write, say —
+   * long before an author would feel it.
+   *
+   * Honest about what it does NOT cover: ten writes stay under PENDING_LIMIT,
+   * so no row is actually evicted here. This guards the per-write cost and the
+   * cost of the trim *scan*; the eviction path itself is covered for
+   * correctness by the cap tests above.
+   */
+  it("saves a 200-paragraph document ten times well inside a coarse ceiling", async () => {
+    const uuid = uuidSeq("b");
+    const doc = longDocument(uuidSeq());
+
+    const start = performance.now();
+    for (let i = 0; i < 10; i += 1) {
+      const result = await saveLocal(db, DOC_A, doc, 0, uuid);
+      expect(result.ok).toBe(true);
+    }
+    const elapsed = performance.now() - start;
+
+    expect(await db.pending.where("documentId").equals(DOC_A).count()).toBe(10);
+    expect(elapsed).toBeLessThan(2000);
   });
 
   it("leaves the previous durable state intact when a later write aborts", async () => {

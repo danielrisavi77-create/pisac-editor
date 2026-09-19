@@ -69,6 +69,11 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Reads the build above — `.next/app-build-manifest.json` — so it has to
+      # sit between the build and anything that could replace it.
+      - name: Bundle budget
+        run: npm run check:bundle
+
       - name: E2E tests
         # The build above is the one under test; the web server only starts it.
         env:

@@ -10,6 +10,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "check:bundle": "node scripts/check-bundle-budget.mjs",
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run",
     "test:ai": "npm --prefix tools/ai-architect test",
