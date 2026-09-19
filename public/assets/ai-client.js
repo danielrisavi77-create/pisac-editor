@@ -5,7 +5,7 @@
     var controller = new AbortController();
     var timer = setTimeout(function () { controller.abort(); }, 45000);
     try {
-      var response = await fetch("/.netlify/functions/ai-execute", {
+      var response = await fetch("/api/ai", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify(payload),
