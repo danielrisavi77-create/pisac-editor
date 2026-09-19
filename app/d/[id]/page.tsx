@@ -82,6 +82,7 @@ export default async function DocumentPage({
       <EditorClient
         documentId={project.id}
         projectId={project.id}
+        projectTitle={project.title}
         initialServerDocument={server.ok ? server.value.document : null}
         serverRevision={server.ok ? server.value.revision : null}
       />

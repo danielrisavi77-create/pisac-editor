@@ -110,6 +110,7 @@ import { createDrainRunner, type DrainRunner } from "@/lib/sync/drainRunner";
 
 import { commitDocument, createCheckpoint, listCheckpoints, loadDocument } from "./actions";
 import CheckpointBar, { type CheckpointCreation } from "./checkpoint-bar";
+import DocxExportBar from "./docx-export-bar";
 import ConflictPanel, { DegradedConflictPanel } from "./conflict-panel";
 import RecoveryPanel from "./recovery-panel";
 
@@ -161,6 +162,8 @@ export type EditorClientProps = {
    * queue against it.
    */
   projectId: string;
+  /** The project's title. Only used to name the exported DOCX file (F1-6). */
+  projectTitle: string;
   /** Canonical server document, or `null` when this request could not read one. */
   initialServerDocument: CanonicalDocument | null;
   /** Canonical server revision, or `null` when unknown. Never invented locally. */
@@ -254,6 +257,7 @@ function stateAfterLocalFailure(reason: LocalSaveFailureReason): SyncState {
 export default function EditorClient({
   documentId,
   projectId,
+  projectTitle,
   initialServerDocument,
   serverRevision,
 }: EditorClientProps) {
@@ -356,6 +360,7 @@ export default function EditorClient({
         db={null}
         documentId={documentId}
         projectId={projectId}
+        projectTitle={projectTitle}
         document={resolved.document}
         baseRevision={resolved.revision}
         initialSyncState={stateAfterLocalFailure(boot.reason)}
@@ -381,6 +386,7 @@ export default function EditorClient({
       db={boot.writable ? boot.db : null}
       documentId={documentId}
       projectId={projectId}
+      projectTitle={projectTitle}
       document={resolved.document}
       baseRevision={resolved.revision}
       initialSyncState={
@@ -421,6 +427,8 @@ type JournalledEditorProps = {
   documentId: string;
   /** The project whose canonical server document the drain commits to. */
   projectId: string;
+  /** Names the exported DOCX file (F1-6). */
+  projectTitle: string;
   document: CanonicalDocument;
   baseRevision: number;
   initialSyncState: SyncState;
@@ -440,6 +448,7 @@ function JournalledEditor({
   db,
   documentId,
   projectId,
+  projectTitle,
   document,
   baseRevision,
   initialSyncState,
@@ -448,6 +457,18 @@ function JournalledEditor({
 }: JournalledEditorProps) {
   const [syncState, dispatch] = useReducer(syncReducer, initialSyncState);
   const [candidate, setCandidate] = useState<CanonicalCandidate | null>(null);
+  /**
+   * What the author is currently looking at, as a canonical document (F1-6).
+   *
+   * It starts as the document the editor was mounted with and then follows
+   * every canonical candidate the editor produces — and, crucially, every
+   * document this component pushes INTO the editor (a discarded conflict, a
+   * recovery). Deriving it from `candidate` alone would leave the DOCX export
+   * handing out the pre-discard text after the author chose the server's
+   * version, which is exactly the kind of quiet mismatch the export summary is
+   * supposed to rule out.
+   */
+  const [visibleDocument, setVisibleDocument] = useState<CanonicalDocument>(document);
   /**
    * The conflict the author is being asked about, while state is CONFLICT —
    * with "my version" already advanced to the newest durable local text (see
@@ -692,6 +713,9 @@ function JournalledEditor({
       }
 
       setCandidate(next);
+      if (next.ok) {
+        setVisibleDocument(next.doc);
+      }
 
       // A candidate the canonical model cannot express is never journalled:
       // storing it would make the snapshot unreadable on the next visit.
@@ -832,6 +856,7 @@ function JournalledEditor({
       base.current = fresh.nextBaseRevision;
       lastError.current = undefined;
       flushRef.current?.setDocument(fresh.nextDocument);
+      setVisibleDocument(fresh.nextDocument);
       dispatch({ type: "CONFLICT_RESOLVED", via: "discard" });
       runner.current?.resumeAfterConflict();
       return null;
@@ -958,6 +983,7 @@ function JournalledEditor({
       base.current = done.baseRevision;
       lastError.current = undefined;
       flushRef.current?.setDocument(done.document);
+      setVisibleDocument(done.document);
       dispatch({ type: "RECOVERED", via: choice });
       if (choice === "salvage-local") {
         // The salvaged text is durable but still owes the server; the machine
@@ -1030,6 +1056,20 @@ function JournalledEditor({
     },
     [projectId, refreshCheckpoints, unsyncedChangesRemain],
   );
+
+  /**
+   * Whether the DOCX about to be handed over contains text the server has not
+   * accepted (F1-6).
+   *
+   * Two independent reasons, either of which is enough: something is still
+   * queued locally, or the state is not SYNCED. They are not the same claim —
+   * an empty queue with a commit in flight is SAVING_SERVER, and the export
+   * still is not the server's version — and the sentence the author reads must
+   * hold for both.
+   */
+  const exportIncludesLocalChanges = useCallback(async (): Promise<boolean> => {
+    return (await unsyncedChangesRemain()) || syncState !== "SYNCED";
+  }, [unsyncedChangesRemain, syncState]);
 
   const rejected = candidate !== null && !candidate.ok ? candidate : null;
 
@@ -1118,6 +1158,18 @@ function JournalledEditor({
         restore button here on purpose.
       */}
       <CheckpointBar checkpoints={checkpoints} onCreate={handleCreateCheckpoint} />
+
+      {/*
+        Next to the checkpoint bar, and for the same reason: taking the work
+        out of Pisač is a deliberate act, not something to trip over above the
+        text. It exports the newest canonical projection — what is on screen —
+        and says so when that is more than the server has (F1-6).
+      */}
+      <DocxExportBar
+        document={visibleDocument}
+        title={projectTitle}
+        hasLocalOnlyChanges={exportIncludesLocalChanges}
+      />
     </div>
   );
 }
