@@ -168,10 +168,13 @@ export const SYNC_TRANSITIONS: Readonly<Record<SyncState, SyncTransitionRow>> = 
      * A discard drops the local change, so what remains is exactly the
      * server's canonical revision: SYNCED.
      *
-     * OBLIGATION for F1-5a: the discard path must `clearPending` the queued
-     * rows it just abandoned (and record the original conflict) before the
-     * SYNCED claim is honest. That is not implemented here — F1-3a has no
-     * server sync at all, so no document can reach CONFLICT yet.
+     * The obligations both paths carry are discharged outside this table, by
+     * the editor (F1-5a): a rebase journals the re-based document against the
+     * server's revision before this transition is dispatched, and a discard
+     * clears the abandoned queue and adopts the server's document in one
+     * journal transaction — without which the SYNCED claim above would not be
+     * honest. The conflict itself is recorded before either, and survives its
+     * own resolution (`src/domain/sync/conflict.ts`).
      */
     CONFLICT_RESOLVED: { cases: { rebase: "SAVING_LOCAL", discard: "SYNCED" } },
   },

@@ -18,6 +18,13 @@
  * and a place to put the revision the server names. Only the writer tab gets
  * one, and it is stopped on unmount.
  *
+ * F1-5a adds the only honest way out of a refused commit: the runner records
+ * the conflict (both versions, kept) before the machine claims CONFLICT, the
+ * editor goes read-only, and `conflict-panel` asks the author to choose. Both
+ * choices are applied here — a rebase journals my document against the
+ * server's revision and lets the drain re-attempt it; a discard adopts the
+ * server's document in one journal transaction. Neither deletes the record.
+ *
  * Three honesty rules shape the wiring:
  *
  *   1. The persisted `meta.state` wins on reload. CONFLICT and
@@ -50,6 +57,8 @@ import {
   restoreSyncState,
   serverSyncErrorToOutcome,
   syncReducer,
+  type ConflictRecord,
+  type ConflictResolutionOk,
   type DrainOutcome,
   type JournalContents,
   type LocalSaveFailureReason,
@@ -62,11 +71,21 @@ import {
   type RevisionedDocument,
 } from "@/domain/serverSync/bootstrap";
 import { openJournal, type JournalDatabase } from "@/lib/journal/db";
-import { loadJournal, markState, saveLocal } from "@/lib/journal/journal";
+import {
+  adoptServerDocument,
+  loadJournal,
+  loadUnresolvedConflict,
+  markConflictResolved,
+  markState,
+  refreshConflictServerSide,
+  saveLocal,
+  type FetchServerFn,
+} from "@/lib/journal/journal";
 import { acquireDocumentLock, documentLockName } from "@/lib/journal/lock";
 import { createDrainRunner, type DrainRunner } from "@/lib/sync/drainRunner";
 
-import { commitDocument } from "./actions";
+import { commitDocument, loadDocument } from "./actions";
+import ConflictPanel from "./conflict-panel";
 
 const statusRow = {
   display: "flex",
@@ -155,6 +174,28 @@ async function commitViaServer(
     return { status: "transport_error" };
   }
 }
+
+/**
+ * Reads the canonical server document for the conflict record (F1-5a).
+ *
+ * `null` for every unhappy answer, including a throw: the conflict is recorded
+ * either way, and a conflict whose server side is missing is honestly shown as
+ * such rather than guessed at.
+ */
+async function fetchServerDocument(projectId: string) {
+  try {
+    const result = await loadDocument(projectId);
+    return result.ok
+      ? { document: result.value.document, revision: result.value.revision }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Shown when a resolution could not be written to the local journal. */
+const RESOLUTION_FAILED_MESSAGE =
+  "Odluku nije bilo moguće spremiti u lokalnu pohranu. Pokušaj ponovno.";
 
 /** The state a failed local probe lands in, derived from the machine itself. */
 function stateAfterLocalFailure(reason: LocalSaveFailureReason): SyncState {
@@ -337,6 +378,8 @@ function JournalledEditor({
 }: JournalledEditorProps) {
   const [syncState, dispatch] = useReducer(syncReducer, initialSyncState);
   const [candidate, setCandidate] = useState<CanonicalCandidate | null>(null);
+  /** The conflict the author is being asked about, while state is CONFLICT. */
+  const [conflict, setConflict] = useState<ConflictRecord | null>(null);
 
   const base = useRef(baseRevision);
   const lastError = useRef<LocalSaveFailureReason | undefined>(undefined);
@@ -359,6 +402,12 @@ function JournalledEditor({
    * once per journal — and `stop()` on teardown cancels the timers and makes
    * the runner ignore whatever is still in flight.
    */
+  /** One place the server document is read from, for both runner and panel. */
+  const fetchServer = useCallback<FetchServerFn>(
+    () => fetchServerDocument(projectId),
+    [projectId],
+  );
+
   useEffect(() => {
     if (!db) {
       return;
@@ -371,13 +420,60 @@ function JournalledEditor({
       onServerRevision: (revision) => {
         base.current = revision;
       },
+      // On a refused CAS the runner fetches the server's version and records
+      // the conflict BEFORE it claims CONFLICT (F1-5a).
+      fetchServer,
     });
     runner.current = drain;
     return () => {
       drain.stop();
       runner.current = null;
     };
-  }, [db, documentId, projectId]);
+  }, [db, documentId, projectId, fetchServer]);
+
+  /*
+   * The conflict the panel asks about.
+   *
+   * Runs both when the drain raises a conflict during this session and when a
+   * session opens with a persisted CONFLICT — a reload is not a decision, so
+   * the restored state brings its record back with it. A record whose server
+   * side is missing (the follow-up read failed when the conflict was detected,
+   * or the tab was closed offline) is refreshed here, which is what turns the
+   * disabled "Preuzmi noviju verziju" button back on.
+   */
+  useEffect(() => {
+    if (!db || syncState !== "CONFLICT") {
+      setConflict(null);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      const loaded = await loadUnresolvedConflict(db, documentId);
+      if (cancelled || !loaded.ok) {
+        return;
+      }
+
+      let record = loaded.conflict;
+      if (record && record.serverDocument === null) {
+        const refreshed = await refreshConflictServerSide(db, documentId, fetchServer);
+        if (cancelled) {
+          return;
+        }
+        if (refreshed.ok && refreshed.conflict) {
+          record = refreshed.conflict;
+        }
+      }
+
+      if (!cancelled) {
+        setConflict(record);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [db, documentId, syncState, fetchServer]);
 
   // Persist the states that must survive a reload. Fire-and-forget: this is a
   // best-effort record, and a store that cannot take it is already reflected
@@ -402,7 +498,7 @@ function JournalledEditor({
   // which is what the state says at that moment, is then the honest claim.
   useEffect(() => {
     const flush = () => {
-      flushRef.current?.();
+      flushRef.current?.flush();
     };
     window.addEventListener("pagehide", flush);
     window.addEventListener("beforeunload", flush);
@@ -449,6 +545,93 @@ function JournalledEditor({
     [db, documentId],
   );
 
+  /**
+   * Applies the author's explicit conflict resolution (F1-5a).
+   *
+   * The decision itself was taken by `resolveConflict` in the panel; this is
+   * the part that touches the world, and the order of every step is load
+   * bearing:
+   *
+   *   rebase  — journal my document against the SERVER's revision first, so
+   *             the rebased content is durable before it is announced; only
+   *             then leave CONFLICT (CONFLICT_RESOLVED → SAVING_LOCAL) and
+   *             report the save that already happened (LOCAL_SAVE_OK →
+   *             LOCAL_DURABLE). The drain halt is lifted explicitly and the
+   *             queue is re-attempted. The CAS remains the backstop: if a
+   *             third writer commits in between, this comes back as another
+   *             honest conflict rather than an overwrite.
+   *   discard — adopt the server's document in ONE journal transaction
+   *             (snapshot + queue + meta), replace what the editor is showing,
+   *             and only then leave CONFLICT. The conflict ROW survives with
+   *             the discarded document on it; `markConflictResolved` adds the
+   *             decision to it and deletes nothing.
+   *
+   * A journal that refuses the write leaves the document in CONFLICT and says
+   * so: a decision that was not recorded has not been made, and pretending
+   * otherwise would strand the author in a state whose exit has already been
+   * spent.
+   */
+  const handleResolved = useCallback(
+    async (outcome: ConflictResolutionOk): Promise<string | null> => {
+      if (!db) {
+        return RESOLUTION_FAILED_MESSAGE;
+      }
+
+      if (outcome.via === "rebase") {
+        const saved = await saveLocal(
+          db,
+          documentId,
+          outcome.nextDocument,
+          outcome.nextBaseRevision,
+        );
+        if (!saved.ok) {
+          lastError.current = saved.reason;
+          return RESOLUTION_FAILED_MESSAGE;
+        }
+
+        base.current = outcome.nextBaseRevision;
+        lastError.current = undefined;
+        dispatch({ type: "CONFLICT_RESOLVED", via: "rebase" });
+        dispatch({ type: "LOCAL_SAVE_OK" });
+        await markConflictResolved(db, documentId, "rebase");
+        runner.current?.resumeAfterConflict();
+        runner.current?.notifyLocalSave();
+        return null;
+      }
+
+      const adopted = await adoptServerDocument(
+        db,
+        documentId,
+        outcome.nextDocument,
+        outcome.nextBaseRevision,
+      );
+      if (!adopted.ok) {
+        lastError.current = adopted.reason;
+        return RESOLUTION_FAILED_MESSAGE;
+      }
+
+      base.current = outcome.nextBaseRevision;
+      lastError.current = undefined;
+      flushRef.current?.setDocument(outcome.nextDocument);
+      dispatch({ type: "CONFLICT_RESOLVED", via: "discard" });
+      await markConflictResolved(db, documentId, "discard");
+      runner.current?.resumeAfterConflict();
+      return null;
+    },
+    [db, documentId, flushRef],
+  );
+
+  /** Another go at reading the server's version for a half-known conflict. */
+  const handleRefresh = useCallback(async () => {
+    if (!db) {
+      return;
+    }
+    const refreshed = await refreshConflictServerSide(db, documentId, fetchServer);
+    if (refreshed.ok && refreshed.conflict) {
+      setConflict(refreshed.conflict);
+    }
+  }, [db, documentId, fetchServer]);
+
   const rejected = candidate !== null && !candidate.ok ? candidate : null;
 
   return (
@@ -457,11 +640,27 @@ function JournalledEditor({
         <SyncStatusChip state={syncState} blocked={blocked === "multi-tab"} />
       </div>
 
+      {/*
+        The panel sits ABOVE the editor: it is a question that has to be
+        answered, not a footnote under the text it is about.
+      */}
+      {syncState === "CONFLICT" && conflict !== null ? (
+        <ConflictPanel
+          record={conflict}
+          onResolved={handleResolved}
+          onRefresh={handleRefresh}
+        />
+      ) : null}
+
       <DocumentEditor
         initialDocument={document}
         onCanonicalChange={handleChange}
         onDirty={handleDirty}
         flushRef={flushRef}
+        // Read-only while the author is being asked to choose between two
+        // versions: a third one typed into the middle of that question would
+        // make whichever they pick untrue by the time it is applied.
+        editable={syncState !== "CONFLICT"}
       />
 
       {/*

@@ -18,6 +18,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/react";
+import { EditorState } from "@tiptap/pm/state";
 
 import type { CanonicalDocument } from "../domain/document";
 
@@ -32,11 +33,30 @@ import { createEditorExtensions, DEFAULT_PLACEHOLDER } from "./schema";
 export const DEFAULT_DEBOUNCE_MS = 500;
 
 /**
- * Handle through which the owner can force the pending projection out early.
- * A plain mutable box rather than a React ref type, so the caller may keep it
- * anywhere (a ref, a closure) without importing React's ref generics.
+ * What the owner may do to the editor from outside the render tree.
+ *
+ * Two operations, both of which have to bypass props: `flush` because the
+ * owner needs the pending projection *now* (the session is ending), and
+ * `setDocument` because the content is read once on mount — re-projecting it
+ * through a prop on every render would fight the author's cursor.
  */
-export type EditorFlushHandle = { current: (() => void) | null };
+export type EditorHandle = {
+  /** Projects the candidate that is still inside the debounce window. */
+  flush: () => void;
+  /**
+   * Replaces the whole document. The only caller in F1 is an explicit conflict
+   * DISCARD (F1-5a), where the author has chosen to adopt the server's
+   * version — which is why it also clears the undo history (see below).
+   */
+  setDocument: (doc: CanonicalDocument) => void;
+};
+
+/**
+ * Handle through which the owner reaches the editor. A plain mutable box
+ * rather than a React ref type, so the caller may keep it anywhere (a ref, a
+ * closure) without importing React's ref generics.
+ */
+export type EditorFlushHandle = { current: EditorHandle | null };
 
 export type EditorProps = {
   /** The document the session starts from. Read once, on mount. */
@@ -60,6 +80,13 @@ export type EditorProps = {
    * so the last debounce window is not simply dropped.
    */
   flushRef?: EditorFlushHandle;
+  /**
+   * False makes the surface read-only. Used while the document is in CONFLICT
+   * (F1-5a): the author is being asked to choose between two versions, and
+   * typing a third one into the middle of that question would make whichever
+   * they pick untrue by the time it is applied.
+   */
+  editable?: boolean;
   debounceMs?: number;
   placeholder?: string;
 };
@@ -130,18 +157,27 @@ function readToolbarState(editor: Editor | null): ToolbarState {
 function ToolbarButton({
   label,
   pressed,
+  disabled,
   onPress,
 }: {
   label: string;
   pressed: boolean;
+  disabled: boolean;
   onPress: () => void;
 }) {
   return (
     <button
       type="button"
       aria-pressed={pressed}
+      disabled={disabled}
       onClick={onPress}
-      style={pressed ? activeToolbarButton : toolbarButton}
+      style={
+        disabled
+          ? { ...toolbarButton, opacity: 0.5, cursor: "not-allowed" }
+          : pressed
+            ? activeToolbarButton
+            : toolbarButton
+      }
     >
       {label}
     </button>
@@ -153,6 +189,7 @@ export default function DocumentEditor({
   onCanonicalChange,
   onDirty,
   flushRef,
+  editable = true,
   debounceMs = DEFAULT_DEBOUNCE_MS,
   placeholder = DEFAULT_PLACEHOLDER,
 }: EditorProps) {
@@ -201,17 +238,6 @@ export default function DocumentEditor({
     project(waiting);
   }, [project]);
 
-  useEffect(() => {
-    if (!flushRef) {
-      return;
-    }
-    flushRef.current = flush;
-    // Deliberately not cleared on cleanup: React tears an unmounting subtree
-    // down from the top, so the owner's cleanup — the one that flushes — runs
-    // after this effect is registered and possibly after its sibling teardown.
-    // A handle nulled here would silently drop the author's last candidate.
-  }, [flush, flushRef]);
-
   const editor = useEditor({
     immediatelyRender: false, // The page is server-rendered; hydrate first.
     extensions: createEditorExtensions(placeholder),
@@ -241,6 +267,72 @@ export default function DocumentEditor({
     },
   });
 
+  /**
+   * Replaces the whole document with `doc`, with the undo history cleared.
+   *
+   * Two things have to happen together, and neither is optional:
+   *
+   *   1. The candidate still sitting in the debounce window is DROPPED. It
+   *      describes the content being replaced, and letting it land after the
+   *      replacement would journal the very text the author just discarded.
+   *   2. The history is emptied, by rebuilding the editor state from the new
+   *      document. ProseMirror's history plugin has no public "clear", and a
+   *      plain `setContent` leaves the author one Ctrl+Z away from undoing a
+   *      decision they made explicitly — restoring their local version on top
+   *      of the server's without ever passing through the conflict machinery.
+   *      A fresh `EditorState` re-initialises every plugin, history included.
+   *
+   * `emitUpdate: false` keeps this from looking like an authored change: it is
+   * not one, and an `onUpdate` here would re-dirty a document that was just
+   * brought into agreement with the server.
+   */
+  const setDocument = useCallback(
+    (doc: CanonicalDocument) => {
+      if (!editor || editor.isDestroyed) {
+        return;
+      }
+
+      if (timer.current !== null) {
+        clearTimeout(timer.current);
+        timer.current = null;
+      }
+      pendingEditor.current = null;
+
+      editor.commands.setContent(canonicalToTiptap(doc), { emitUpdate: false });
+
+      try {
+        const { state: current, view } = editor;
+        view.updateState(
+          EditorState.create({ doc: current.doc, plugins: current.plugins }),
+        );
+      } catch {
+        // The content is already correct; only the history reset failed.
+        // Losing that is a usability wart, not a correctness one, and it must
+        // not take the resolution down with it.
+      }
+    },
+    [editor],
+  );
+
+  useEffect(() => {
+    if (!flushRef) {
+      return;
+    }
+    flushRef.current = { flush, setDocument };
+    // Deliberately not cleared on cleanup: React tears an unmounting subtree
+    // down from the top, so the owner's cleanup — the one that flushes — runs
+    // after this effect is registered and possibly after its sibling teardown.
+    // A handle nulled here would silently drop the author's last candidate.
+  }, [flush, setDocument, flushRef]);
+
+  // Read-only is a state of the surface, not of its content: the document is
+  // still shown in full while the author decides how to resolve a conflict.
+  useEffect(() => {
+    if (editor && !editor.isDestroyed && editor.isEditable !== editable) {
+      editor.setEditable(editable);
+    }
+  }, [editor, editable]);
+
   useEffect(
     () => () => {
       if (timer.current !== null) {
@@ -262,31 +354,37 @@ export default function DocumentEditor({
         <ToolbarButton
           label="Podebljano"
           pressed={state.bold}
+          disabled={!editable}
           onPress={() => editor?.chain().focus().toggleBold().run()}
         />
         <ToolbarButton
           label="Kurziv"
           pressed={state.italic}
+          disabled={!editable}
           onPress={() => editor?.chain().focus().toggleItalic().run()}
         />
         <ToolbarButton
           label="Naslov 1"
           pressed={state.heading1}
+          disabled={!editable}
           onPress={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
         />
         <ToolbarButton
           label="Naslov 2"
           pressed={state.heading2}
+          disabled={!editable}
           onPress={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
         />
         <ToolbarButton
           label="Naslov 3"
           pressed={state.heading3}
+          disabled={!editable}
           onPress={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
         />
         <ToolbarButton
           label="Odlomak"
           pressed={state.paragraph}
+          disabled={!editable}
           onPress={() => editor?.chain().focus().setParagraph().run()}
         />
       </div>

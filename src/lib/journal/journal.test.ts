@@ -1,6 +1,7 @@
 // @vitest-environment node
 import "fake-indexeddb/auto";
 
+import Dexie from "dexie";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -19,13 +20,18 @@ import {
 } from "./db";
 import {
   PENDING_LIMIT,
+  adoptServerDocument,
   clearPending,
   loadJournal,
+  loadUnresolvedConflict,
+  markConflictResolved,
   markState,
   markSynced,
+  recordConflict,
+  refreshConflictServerSide,
   saveLocal,
 } from "./journal";
-import { restoreSyncState } from "@/domain/sync";
+import { buildConflictRecord, restoreSyncState } from "@/domain/sync";
 
 const DOC_A = "11111111-1111-4111-8111-111111111111";
 const DOC_B = "22222222-2222-4222-8222-222222222222";
@@ -61,6 +67,7 @@ function failingDb(db: JournalDatabase, error: unknown): JournalDb {
     snapshots: db.snapshots,
     pending: db.pending,
     meta: db.meta,
+    conflicts: db.conflicts,
     transaction: (() =>
       Promise.reject(error)) as unknown as JournalDatabase["transaction"],
   };
@@ -653,5 +660,340 @@ describe("markSynced — recording a server ACK (F1-4b)", () => {
       ok: false,
       reason: "unavailable",
     });
+  });
+});
+
+/* ------------------------------------------------------------- conflicts */
+
+/** A conflict for `documentId`, with both versions and a fixed detection time. */
+function conflictAt(
+  detectedAt: string,
+  options: { server?: CanonicalDocument | null; localText?: string } = {},
+) {
+  const record = buildConflictRecord(
+    {
+      documentId: DOC_A,
+      localDocument: docWithText(options.localText ?? "moja verzija", uuidSeq("a")),
+      localBaseRevision: 2,
+      serverDocument:
+        options.server === undefined
+          ? docWithText("poslužiteljska verzija", uuidSeq("b"))
+          : options.server,
+      serverRevision: 7,
+    },
+    () => detectedAt,
+  );
+  return record;
+}
+
+/** A db whose `conflicts` table throws on every read — for the error mapping. */
+function failingConflicts(db: JournalDatabase, error: unknown): JournalDb {
+  return {
+    snapshots: db.snapshots,
+    pending: db.pending,
+    meta: db.meta,
+    conflicts: {
+      where: () => {
+        throw error;
+      },
+      put: () => Promise.reject(error),
+    } as unknown as JournalDatabase["conflicts"],
+    transaction: ((
+      _mode: string,
+      _table: unknown,
+      scope: () => Promise<unknown>,
+    ) => scope()) as unknown as JournalDatabase["transaction"],
+  };
+}
+
+describe("schema v2 upgrade", () => {
+  it("adds `conflicts` to an existing v1 journal without losing its rows", async () => {
+    const name = `pisac-journal-upgrade-${dbCounter}`;
+
+    // A journal exactly as schema v1 wrote it — no `conflicts` store at all.
+    const v1 = new Dexie(name);
+    v1.version(1).stores({
+      snapshots: "documentId",
+      pending: "[documentId+localSeq], documentId",
+      meta: "documentId",
+    });
+    await v1.open();
+    await v1.table("snapshots").put({
+      documentId: DOC_A,
+      revision: 3,
+      document: docWithText("stari zapis", uuidSeq("f")),
+      savedAt: "2026-09-18T09:00:00.000Z",
+    });
+    await v1.table("meta").put({ documentId: DOC_A, state: "LOCAL_DURABLE", localSeq: 4 });
+    v1.close();
+
+    // Opening it with the current class upgrades it in place.
+    const upgraded = new JournalDatabase(name);
+    await upgraded.open();
+    try {
+      expect(upgraded.verno).toBe(2);
+
+      const loaded = await loadJournal(upgraded, DOC_A);
+      if (!loaded.ok) {
+        throw new Error("expected a successful load");
+      }
+      expect(loaded.contents.snapshot?.revision).toBe(3);
+      expect(loaded.contents.meta?.localSeq).toBe(4);
+
+      // And the new table is usable straight away.
+      const recorded = await recordConflict(upgraded, conflictAt("2026-09-19T12:00:00.000Z"));
+      expect(recorded.ok).toBe(true);
+      const waiting = await loadUnresolvedConflict(upgraded, DOC_A);
+      expect(waiting.ok && waiting.conflict?.localBaseRevision).toBe(2);
+    } finally {
+      await upgraded.delete();
+    }
+  });
+
+  it("opens a fresh journal straight at v2 with all four stores", async () => {
+    expect(db.verno).toBe(2);
+    expect(db.tables.map((table) => table.name).sort()).toEqual([
+      "conflicts",
+      "meta",
+      "pending",
+      "snapshots",
+    ]);
+  });
+});
+
+describe("recordConflict / loadUnresolvedConflict", () => {
+  it("stores a conflict and reads it back unresolved", async () => {
+    const record = conflictAt("2026-09-19T12:00:00.000Z");
+    expect(await recordConflict(db, record)).toEqual({ ok: true, conflict: record });
+
+    const loaded = await loadUnresolvedConflict(db, DOC_A);
+    expect(loaded.ok && loaded.conflict).toEqual(record);
+  });
+
+  it("returns null when the document has no conflict", async () => {
+    expect(await loadUnresolvedConflict(db, DOC_B)).toEqual({ ok: true, conflict: null });
+  });
+
+  it("keeps conflicts of different documents apart", async () => {
+    await recordConflict(db, conflictAt("2026-09-19T12:00:00.000Z"));
+    const loaded = await loadUnresolvedConflict(db, DOC_B);
+    expect(loaded.ok && loaded.conflict).toBeNull();
+  });
+
+  it("keeps a second conflict as a second row, overwriting nothing", async () => {
+    const first = conflictAt("2026-09-19T12:00:00.000Z", { localText: "prva" });
+    const second = conflictAt("2026-09-19T12:30:00.000Z", { localText: "druga" });
+    await recordConflict(db, first);
+    await recordConflict(db, second);
+
+    expect(await db.conflicts.count()).toBe(2);
+    // The newest unresolved one is the one the author is being asked about.
+    const loaded = await loadUnresolvedConflict(db, DOC_A);
+    expect(loaded.ok && loaded.conflict?.detectedAt).toBe("2026-09-19T12:30:00.000Z");
+  });
+
+  it("re-recording the same detection is idempotent", async () => {
+    const record = conflictAt("2026-09-19T12:00:00.000Z");
+    await recordConflict(db, record);
+    await recordConflict(db, record);
+
+    expect(await db.conflicts.count()).toBe(1);
+  });
+
+  it("stores a conflict whose server document could not be fetched", async () => {
+    await recordConflict(db, conflictAt("2026-09-19T12:00:00.000Z", { server: null }));
+
+    const loaded = await loadUnresolvedConflict(db, DOC_A);
+    expect(loaded.ok && loaded.conflict?.serverDocument).toBeNull();
+    expect(loaded.ok && loaded.conflict?.serverRevision).toBe(7);
+  });
+
+  it("maps a failing store to a reason instead of throwing", async () => {
+    const error = Object.assign(new Error("gone"), { name: "DatabaseClosedError" });
+    expect(await loadUnresolvedConflict(failingConflicts(db, error), DOC_A)).toEqual({
+      ok: false,
+      reason: "unavailable",
+    });
+    expect(await recordConflict(failingConflicts(db, error), conflictAt("x"))).toEqual({
+      ok: false,
+      reason: "unavailable",
+    });
+  });
+});
+
+describe("markConflictResolved", () => {
+  it("records the decision and KEEPS the row", async () => {
+    await recordConflict(db, conflictAt("2026-09-19T12:00:00.000Z"));
+
+    const resolved = await markConflictResolved(
+      db,
+      DOC_A,
+      "discard",
+      () => "2026-09-19T12:10:00.000Z",
+    );
+
+    expect(resolved.ok && resolved.conflict?.resolvedVia).toBe("discard");
+    expect(resolved.ok && resolved.conflict?.resolvedAt).toBe("2026-09-19T12:10:00.000Z");
+    // The constitution's rule: the conflict stays recorded after resolution.
+    expect(await db.conflicts.count()).toBe(1);
+  });
+
+  it("keeps both versions on the resolved row", async () => {
+    const record = conflictAt("2026-09-19T12:00:00.000Z");
+    await recordConflict(db, record);
+    await markConflictResolved(db, DOC_A, "discard");
+
+    const stored = await db.conflicts.get([DOC_A, "2026-09-19T12:00:00.000Z"]);
+    // Discarding drops the local change from the queue, never from the record.
+    expect(stored?.localDocument).toEqual(record.localDocument);
+    expect(stored?.serverDocument).toEqual(record.serverDocument);
+  });
+
+  it("takes the conflict out of the unresolved set", async () => {
+    await recordConflict(db, conflictAt("2026-09-19T12:00:00.000Z"));
+    await markConflictResolved(db, DOC_A, "rebase");
+
+    expect(await loadUnresolvedConflict(db, DOC_A)).toEqual({ ok: true, conflict: null });
+  });
+
+  it("resolves the newest unresolved conflict and leaves older rows alone", async () => {
+    await recordConflict(db, conflictAt("2026-09-19T12:00:00.000Z", { localText: "prva" }));
+    await recordConflict(db, conflictAt("2026-09-19T12:30:00.000Z", { localText: "druga" }));
+
+    await markConflictResolved(db, DOC_A, "rebase");
+
+    const older = await db.conflicts.get([DOC_A, "2026-09-19T12:00:00.000Z"]);
+    const newer = await db.conflicts.get([DOC_A, "2026-09-19T12:30:00.000Z"]);
+    expect(newer?.resolvedVia).toBe("rebase");
+    expect(older?.resolvedVia).toBeUndefined();
+  });
+
+  it("is a no-op, not a failure, when nothing is unresolved", async () => {
+    expect(await markConflictResolved(db, DOC_A, "rebase")).toEqual({
+      ok: true,
+      conflict: null,
+    });
+  });
+
+  it("maps a failing store to a reason instead of throwing", async () => {
+    const error = Object.assign(new Error("broken"), { name: "DataError" });
+    expect(await markConflictResolved(failingConflicts(db, error), DOC_A, "rebase")).toEqual({
+      ok: false,
+      reason: "corrupt",
+    });
+  });
+});
+
+describe("refreshConflictServerSide", () => {
+  it("fills in a server document that could not be fetched at detection time", async () => {
+    await recordConflict(db, conflictAt("2026-09-19T12:00:00.000Z", { server: null }));
+    const server = docWithText("napokon stigla", uuidSeq("c"));
+
+    const refreshed = await refreshConflictServerSide(db, DOC_A, async () => ({
+      document: server,
+      revision: 9,
+    }));
+
+    expect(refreshed.ok && refreshed.conflict?.serverDocument).toEqual(server);
+    expect(refreshed.ok && refreshed.conflict?.serverRevision).toBe(9);
+    // The stored row is updated too, not just the returned copy.
+    const stored = await db.conflicts.get([DOC_A, "2026-09-19T12:00:00.000Z"]);
+    expect(stored?.serverRevision).toBe(9);
+  });
+
+  it("leaves the row untouched when the fetch comes back empty", async () => {
+    await recordConflict(db, conflictAt("2026-09-19T12:00:00.000Z", { server: null }));
+
+    const refreshed = await refreshConflictServerSide(db, DOC_A, async () => null);
+
+    expect(refreshed.ok && refreshed.conflict?.serverDocument).toBeNull();
+    expect(refreshed.ok && refreshed.conflict?.serverRevision).toBe(7);
+  });
+
+  it("treats a throwing fetch as no answer at all", async () => {
+    await recordConflict(db, conflictAt("2026-09-19T12:00:00.000Z", { server: null }));
+
+    const refreshed = await refreshConflictServerSide(db, DOC_A, async () => {
+      throw new Error("offline");
+    });
+
+    expect(refreshed.ok).toBe(true);
+    expect(refreshed.ok && refreshed.conflict?.serverDocument).toBeNull();
+  });
+
+  it("does not resurrect a resolved conflict", async () => {
+    await recordConflict(db, conflictAt("2026-09-19T12:00:00.000Z", { server: null }));
+    await markConflictResolved(db, DOC_A, "rebase");
+
+    const refreshed = await refreshConflictServerSide(db, DOC_A, async () => ({
+      document: docWithText("kasno", uuidSeq("c")),
+      revision: 11,
+    }));
+
+    expect(refreshed.ok && refreshed.conflict).toBeNull();
+    const stored = await db.conflicts.get([DOC_A, "2026-09-19T12:00:00.000Z"]);
+    expect(stored?.serverDocument).toBeNull();
+  });
+});
+
+describe("adoptServerDocument", () => {
+  it("replaces the snapshot, empties the queue and records SYNCED", async () => {
+    await saveLocal(db, DOC_A, docWithText("moja", uuidSeq("d")), 2, uuidSeq("c"));
+    await saveLocal(db, DOC_A, docWithText("moja opet", uuidSeq("d")), 2, uuidSeq("e"));
+    const server = docWithText("poslužiteljska", uuidSeq("b"));
+
+    const adopted = await adoptServerDocument(db, DOC_A, server, 7);
+
+    expect(adopted.ok && adopted.cleared).toBe(2);
+    const loaded = await loadJournal(db, DOC_A);
+    if (!loaded.ok) {
+      throw new Error("expected a successful load");
+    }
+    // The discarded local document must not survive in the snapshot: the next
+    // visit resolves its initial document from there first.
+    expect(loaded.contents.snapshot?.document).toEqual(server);
+    expect(loaded.contents.snapshot?.revision).toBe(7);
+    expect(loaded.contents.pending).toEqual([]);
+    expect(loaded.contents.meta?.state).toBe("SYNCED");
+    expect(restoreSyncState(loaded.contents)).toBe("SYNCED");
+  });
+
+  it("keeps the local sequence as a high-water mark", async () => {
+    await saveLocal(db, DOC_A, docWithText("prva", uuidSeq("d")), 0, uuidSeq("c"));
+    await saveLocal(db, DOC_A, docWithText("druga", uuidSeq("d")), 0, uuidSeq("e"));
+
+    await adoptServerDocument(db, DOC_A, docWithText("server", uuidSeq("b")), 5);
+
+    const loaded = await loadJournal(db, DOC_A);
+    expect(loaded.ok && loaded.contents.meta?.localSeq).toBe(2);
+  });
+
+  it("refuses a revision that is not a whole, non-negative number", async () => {
+    const server = docWithText("server", uuidSeq("b"));
+    expect(await adoptServerDocument(db, DOC_A, server, 1.5)).toEqual({
+      ok: false,
+      reason: "unknown",
+    });
+    expect(await adoptServerDocument(db, DOC_A, server, -1)).toEqual({
+      ok: false,
+      reason: "unknown",
+    });
+  });
+
+  it("leaves another document's queue alone", async () => {
+    await saveLocal(db, DOC_B, docWithText("tuđa", uuidSeq("a")), 0, uuidSeq("f"));
+    await saveLocal(db, DOC_A, docWithText("moja", uuidSeq("d")), 0, uuidSeq("c"));
+
+    await adoptServerDocument(db, DOC_A, docWithText("server", uuidSeq("b")), 3);
+
+    const other = await loadJournal(db, DOC_B);
+    expect(other.ok && other.contents.pending.length).toBe(1);
+  });
+
+  it("maps a failing store to a reason instead of throwing", async () => {
+    const error = Object.assign(new Error("full"), { name: "QuotaExceededError" });
+    expect(
+      await adoptServerDocument(failingDb(db, error), DOC_A, docWithText("s", uuidSeq("b")), 1),
+    ).toEqual({ ok: false, reason: "quota" });
   });
 });

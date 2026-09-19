@@ -11,6 +11,7 @@
 
 import Dexie, { type Table } from "dexie";
 
+import type { ConflictRecord } from "@/domain/sync/conflict";
 import type {
   JournalSnapshot,
   PendingTransaction,
@@ -19,7 +20,7 @@ import type {
 import type { LocalSaveFailureReason } from "@/domain/sync/states";
 
 export const JOURNAL_DB_NAME = "pisac-journal";
-export const JOURNAL_DB_VERSION = 1;
+export const JOURNAL_DB_VERSION = 2;
 
 /**
  * Schema v1.
@@ -31,18 +32,38 @@ export const JOURNAL_DB_VERSION = 1;
  * - `meta`       pk `documentId`            — sync state + local sequence.
  *
  * All three are written in one transaction by `saveLocal` (dossier §7).
+ *
+ * Schema v2 (F1-5a) is purely additive — it adds `conflicts` and touches
+ * nothing else, so Dexie carries the three v1 stores over untouched and an
+ * existing journal upgrades without a data migration.
+ *
+ * - `conflicts`  pk `[documentId+detectedAt]` — one row per detected conflict,
+ *                plus a `documentId` index. The key is the *detection*, not
+ *                the document, precisely so a resolved conflict is never
+ *                overwritten by the next one: the constitution requires the
+ *                original conflict to stay recorded, and a row keyed by
+ *                document alone would quietly replace history.
+ *
+ *                `resolvedVia` is deliberately NOT indexed. It is absent on an
+ *                unresolved row, and IndexedDB leaves records with a missing
+ *                key out of an index entirely — so the one query that matters
+ *                ("is there an unresolved conflict?") could not use it.
  */
 export class JournalDatabase extends Dexie {
   snapshots!: Table<JournalSnapshot, string>;
   pending!: Table<PendingTransaction, [string, number]>;
   meta!: Table<SyncMeta, string>;
+  conflicts!: Table<ConflictRecord, [string, string]>;
 
   constructor(name: string = JOURNAL_DB_NAME) {
     super(name);
-    this.version(JOURNAL_DB_VERSION).stores({
+    this.version(1).stores({
       snapshots: "documentId",
       pending: "[documentId+localSeq], documentId",
       meta: "documentId",
+    });
+    this.version(2).stores({
+      conflicts: "[documentId+detectedAt], documentId",
     });
   }
 }
@@ -54,7 +75,7 @@ export class JournalDatabase extends Dexie {
  */
 export type JournalDb = Pick<
   JournalDatabase,
-  "snapshots" | "pending" | "meta" | "transaction"
+  "snapshots" | "pending" | "meta" | "conflicts" | "transaction"
 >;
 
 export type JournalOpenResult =

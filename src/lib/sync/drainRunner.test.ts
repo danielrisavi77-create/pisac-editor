@@ -14,7 +14,13 @@ import type { DrainOutcome } from "@/domain/sync/drain";
 import type { SyncEvent } from "@/domain/sync/states";
 
 import { JournalDatabase } from "@/lib/journal/db";
-import { loadJournal, markState, saveLocal } from "@/lib/journal/journal";
+import {
+  loadJournal,
+  loadUnresolvedConflict,
+  markState,
+  saveLocal,
+  type FetchServerFn,
+} from "@/lib/journal/journal";
 
 import { createDrainRunner, type DelayFn, type DrainRunner } from "./drainRunner";
 
@@ -52,13 +58,17 @@ function docWithText(text: string): CanonicalDocument {
   return { ...empty, nodes: [paragraphNode(empty.nodes[0].id, [textNode(text)])] };
 }
 
-function firstText(tx: DocumentTransaction): string {
-  const node = tx.document.nodes[0];
+function firstTextOf(doc: CanonicalDocument): string {
+  const node = doc.nodes[0];
   if (node.type !== "paragraph") {
     return "";
   }
   const first = node.children[0];
   return first?.type === "text" ? first.text : "";
+}
+
+function firstText(tx: DocumentTransaction): string {
+  return firstTextOf(tx.document);
 }
 
 /** Writes one durable candidate, exactly as the editor would. */
@@ -156,6 +166,7 @@ type Harness = {
 /** Builds a runner with a hand-driven clock, a fixed jitter and a commit stub. */
 function harness(
   respond: (tx: DocumentTransaction, call: number) => Promise<DrainOutcome>,
+  options: { fetchServer?: FetchServerFn } = {},
 ): Harness {
   const clock = scheduler();
   const events: SyncEvent[] = [];
@@ -171,6 +182,7 @@ function harness(
     },
     dispatch: (event) => events.push(event),
     onServerRevision: (revision) => revisions.push(revision),
+    fetchServer: options.fetchServer,
     delayFn: clock.delayFn,
     // No jitter: the backoff series is asserted exactly.
     jitterFn: () => 0.5,
@@ -667,5 +679,214 @@ describe("createDrainRunner — coalescing, single flight and teardown", () => {
     expect(h.clock.pending()).toBe(0);
     await settle();
     expect(h.sent).toEqual([]);
+  });
+});
+
+describe("createDrainRunner — recording the conflict (F1-5a)", () => {
+  const serverSide = () => ({
+    document: docWithText("verzija s poslužitelja"),
+    revision: 9,
+  });
+
+  it("records the conflict BEFORE the state machine is told about it", async () => {
+    await save("moja verzija", 4);
+
+    // The read is started from inside the dispatch, so it can only find a row
+    // that was already written when SYNC_STALE_BASE was announced.
+    const captured: {
+      promise: ReturnType<typeof loadUnresolvedConflict> | null;
+    } = { promise: null };
+    const clock = scheduler();
+    const events: SyncEvent[] = [];
+    const runner = createDrainRunner({
+      db,
+      documentId: DOC,
+      commit: async () => ({ status: "stale_base", currentRevision: 9 }),
+      dispatch: (event) => {
+        events.push(event);
+        if (event.type === "SYNC_STALE_BASE") {
+          captured.promise = loadUnresolvedConflict(db, DOC);
+        }
+      },
+      onServerRevision: () => {},
+      fetchServer: async () => serverSide(),
+      delayFn: clock.delayFn,
+      jitterFn: () => 0.5,
+    });
+    runners.push(runner);
+
+    clock.fire();
+    await until(() => events.some((event) => event.type === "SYNC_STALE_BASE"));
+    const found = await captured.promise;
+
+    if (!found?.ok) {
+      throw new Error("expected the conflict to be readable at dispatch time");
+    }
+    expect(found.conflict).not.toBeNull();
+    expect(found.conflict?.serverRevision).toBe(9);
+  });
+
+  it("keeps both versions, the stale base and the server's revision", async () => {
+    await save("moja verzija", 4);
+
+    const h = harness(async () => ({ status: "stale_base", currentRevision: 9 }), {
+      fetchServer: async () => serverSide(),
+    });
+    h.clock.fire();
+    await until(() => h.sent.length === 1);
+    await settle();
+
+    const loaded = await loadUnresolvedConflict(db, DOC);
+    if (!loaded.ok || !loaded.conflict) {
+      throw new Error("expected a recorded conflict");
+    }
+    expect(firstTextOf(loaded.conflict.localDocument)).toBe("moja verzija");
+    expect(loaded.conflict.localBaseRevision).toBe(4);
+    expect(loaded.conflict.serverDocument).not.toBeNull();
+    expect(loaded.conflict.serverRevision).toBe(9);
+    expect(loaded.conflict.resolvedVia).toBeUndefined();
+  });
+
+  it("still records the conflict when the server document cannot be fetched", async () => {
+    await save("moja verzija", 4);
+
+    const h = harness(async () => ({ status: "stale_base", currentRevision: 9 }), {
+      fetchServer: async () => null,
+    });
+    h.clock.fire();
+    await until(() => h.sent.length === 1);
+    await settle();
+
+    const loaded = await loadUnresolvedConflict(db, DOC);
+    expect(loaded.ok && loaded.conflict?.serverDocument).toBeNull();
+    // The refusal itself carries the revision, so that half is still known.
+    expect(loaded.ok && loaded.conflict?.serverRevision).toBe(9);
+    // And the author is still told: the claim is never swallowed.
+    expect(h.events).toEqual([{ type: "SYNC_STARTED" }, { type: "SYNC_STALE_BASE" }]);
+  });
+
+  it("treats a throwing fetch as no answer, not as a crash", async () => {
+    await save("moja verzija", 4);
+
+    const h = harness(async () => ({ status: "stale_base", currentRevision: 7 }), {
+      fetchServer: async () => {
+        throw new Error("offline");
+      },
+    });
+    h.clock.fire();
+    await until(() => h.sent.length === 1);
+    await settle();
+
+    const loaded = await loadUnresolvedConflict(db, DOC);
+    expect(loaded.ok && loaded.conflict?.serverDocument).toBeNull();
+    expect(h.events).toEqual([{ type: "SYNC_STARTED" }, { type: "SYNC_STALE_BASE" }]);
+  });
+
+  it("records a conflict even with no fetcher wired at all", async () => {
+    await save("moja verzija", 2);
+
+    const h = harness(async () => ({ status: "stale_base", currentRevision: 5 }));
+    h.clock.fire();
+    await until(() => h.sent.length === 1);
+    await settle();
+
+    const loaded = await loadUnresolvedConflict(db, DOC);
+    expect(loaded.ok && loaded.conflict?.serverDocument).toBeNull();
+    expect(loaded.ok && loaded.conflict?.localBaseRevision).toBe(2);
+  });
+
+  it("leaves the queue alone: nothing is resolved on the author's behalf", async () => {
+    await save("moja verzija", 4);
+
+    const h = harness(async () => ({ status: "stale_base", currentRevision: 9 }), {
+      fetchServer: async () => serverSide(),
+    });
+    h.clock.fire();
+    await until(() => h.sent.length === 1);
+    await settle();
+
+    const loaded = await loadJournal(db, DOC);
+    expect(loaded.ok && loaded.contents.pending).toHaveLength(1);
+    expect(h.revisions).toEqual([]);
+    expect(h.clock.pending()).toBe(0);
+  });
+
+  it("records a second conflict as a second row when one is raised again", async () => {
+    await save("prva verzija", 4);
+
+    const h = harness(async () => ({ status: "stale_base", currentRevision: 9 }), {
+      fetchServer: async () => serverSide(),
+    });
+    h.clock.fire();
+    await until(() => h.sent.length === 1);
+    await settle();
+
+    // The author rebases: a new candidate, and the halt is lifted explicitly.
+    await save("rebazirana verzija", 9);
+    h.runner.resumeAfterConflict();
+    h.clock.fire();
+    await until(() => h.sent.length === 2);
+    await settle();
+
+    expect(await db.conflicts.count()).toBe(2);
+  });
+});
+
+describe("createDrainRunner — leaving a conflict", () => {
+  it("resumes only on an explicit resolution, never on a new save", async () => {
+    await save("konflikt", 1);
+
+    const h = harness(
+      async (_tx, call) =>
+        call === 1
+          ? { status: "stale_base", currentRevision: 9 }
+          : { status: "committed", revision: 10 },
+      { fetchServer: async () => ({ document: docWithText("njihovo"), revision: 9 }) },
+    );
+    h.clock.fire();
+    await until(() => h.sent.length === 1);
+    await settle();
+
+    // Typing is not a decision: the drain stays put.
+    await save("još teksta", 1);
+    h.runner.notifyLocalSave();
+    expect(h.clock.pending()).toBe(0);
+    await settle();
+    expect(h.sent).toHaveLength(1);
+
+    // The author's explicit choice is.
+    h.runner.resumeAfterConflict();
+    expect(h.clock.pending()).toBe(1);
+    h.clock.fire();
+    await until(() => h.revisions.length === 1);
+    expect(h.sent).toHaveLength(2);
+    expect(h.revisions).toEqual([10]);
+  });
+
+  it("is a no-op when the runner is not halted on a conflict", async () => {
+    await save("bez sukoba");
+
+    const h = harness(committed(1));
+    h.clock.fire();
+    await until(() => h.revisions.length === 1);
+    await settle();
+
+    const booked = h.clock.delays().length;
+    h.runner.resumeAfterConflict();
+    // Nothing to resume, so nothing is scheduled.
+    expect(h.clock.delays().length).toBe(booked);
+  });
+
+  it("does not resume a runner that has been stopped", async () => {
+    await save("konflikt");
+
+    const h = harness(async () => ({ status: "stale_base", currentRevision: 3 }));
+    h.clock.fire();
+    await until(() => h.sent.length === 1);
+    await settle();
+
+    h.runner.stop();
+    h.runner.resumeAfterConflict();
+    expect(h.clock.pending()).toBe(0);
   });
 });

@@ -30,12 +30,17 @@
 
 import type { CanonicalDocument } from "@/domain/document";
 import type { DocumentTransaction } from "@/domain/document";
+import { isResolvedConflict, type ConflictRecord } from "@/domain/sync/conflict";
 import type {
   JournalContents,
   PendingTransaction,
   SyncMeta,
 } from "@/domain/sync/journal-types";
-import type { LocalSaveFailureReason, SyncState } from "@/domain/sync/states";
+import type {
+  ConflictResolution,
+  LocalSaveFailureReason,
+  SyncState,
+} from "@/domain/sync/states";
 
 import { classifyJournalError, type JournalDb } from "./db";
 
@@ -58,6 +63,28 @@ export type MarkStateResult =
 export type MarkSyncedResult =
   | { ok: true; meta: SyncMeta; revision: number }
   | { ok: false; reason: LocalSaveFailureReason };
+
+export type ConflictResult =
+  | { ok: true; conflict: ConflictRecord | null }
+  | { ok: false; reason: LocalSaveFailureReason };
+
+export type AdoptServerDocumentResult =
+  | { ok: true; meta: SyncMeta; cleared: number; revision: number }
+  | { ok: false; reason: LocalSaveFailureReason };
+
+/** A document as the server holds it, with the revision the server named. */
+export type ServerSide = {
+  document: CanonicalDocument;
+  revision: number;
+};
+
+/**
+ * Reads the canonical server document. Injected, never implemented here: this
+ * module must stay ignorant of Supabase, of server actions and of the network.
+ * Returns `null` when the read did not come back — that is a fact about the
+ * round trip, not an exception to be thrown at a journal.
+ */
+export type FetchServerFn = () => Promise<ServerSide | null>;
 
 /**
  * How many pending rows one document may keep.
@@ -347,6 +374,232 @@ export async function markState(
     });
 
     return { ok: true, meta };
+  } catch (error) {
+    return { ok: false, reason: classifyJournalError(error) };
+  }
+}
+
+/* ------------------------------------------------------------- conflicts */
+
+/**
+ * Conflicts, as durable rows (F1-5a).
+ *
+ * The constitution requires the ORIGINAL conflict to stay recorded: what the
+ * author was trying to commit, what the server held instead, and which of the
+ * two they chose. None of the functions below deletes a conflict row, and
+ * resolving one only adds `resolvedVia`/`resolvedAt` to it — the version the
+ * author decided against is still in the store afterwards, which is what makes
+ * "discard" a decision rather than a deletion.
+ *
+ * Rows are keyed by `[documentId+detectedAt]`, so a second conflict on the
+ * same document is a second row and cannot overwrite the first.
+ */
+
+/**
+ * The unresolved conflicts for one document, newest last.
+ *
+ * Reads the whole (small) per-document set and filters in JS rather than
+ * through an index: `resolvedVia` is absent on exactly the rows we are looking
+ * for, and IndexedDB does not index a missing key.
+ */
+async function unresolvedFor(
+  db: JournalDb,
+  documentId: string,
+): Promise<ConflictRecord[]> {
+  const rows = await db.conflicts.where("documentId").equals(documentId).toArray();
+  return rows
+    .filter((row) => !isResolvedConflict(row))
+    .sort((a, b) => (a.detectedAt < b.detectedAt ? -1 : a.detectedAt > b.detectedAt ? 1 : 0));
+}
+
+/**
+ * Stores a detected conflict.
+ *
+ * A plain `put`: re-recording the same detection (same document, same instant)
+ * is idempotent, and a later detection is a new row. Called BEFORE the state
+ * machine is told about the conflict, so a session that dies between the two
+ * still has the evidence.
+ */
+export async function recordConflict(
+  db: JournalDb,
+  record: ConflictRecord,
+): Promise<ConflictResult> {
+  try {
+    await db.transaction("rw", db.conflicts, async () => {
+      await db.conflicts.put(record);
+    });
+    return { ok: true, conflict: record };
+  } catch (error) {
+    return { ok: false, reason: classifyJournalError(error) };
+  }
+}
+
+/**
+ * The conflict this document is waiting on, or `null`.
+ *
+ * The newest unresolved row wins: it is the one whose local document is still
+ * in the queue and the one the author is being asked about. Older rows —
+ * resolved or not — stay where they are.
+ */
+export async function loadUnresolvedConflict(
+  db: JournalDb,
+  documentId: string,
+): Promise<ConflictResult> {
+  try {
+    const rows = await unresolvedFor(db, documentId);
+    return { ok: true, conflict: rows.length === 0 ? null : rows[rows.length - 1] };
+  } catch (error) {
+    return { ok: false, reason: classifyJournalError(error) };
+  }
+}
+
+/**
+ * Records the author's decision on the newest unresolved conflict.
+ *
+ * The row is UPDATED, never removed: `resolvedVia` and `resolvedAt` are added
+ * and everything else — both documents, both revisions — stays exactly as it
+ * was. Returns `{ conflict: null }` when there was nothing unresolved, which
+ * is not an error: a double click, or a resolution recorded by another path,
+ * must not fail the author's action.
+ */
+export async function markConflictResolved(
+  db: JournalDb,
+  documentId: string,
+  via: ConflictResolution,
+  nowFn: () => string = defaultNow,
+): Promise<ConflictResult> {
+  try {
+    const resolved = await db.transaction("rw", db.conflicts, async () => {
+      const rows = await unresolvedFor(db, documentId);
+      const target = rows.length === 0 ? null : rows[rows.length - 1];
+      if (!target) {
+        return null;
+      }
+      const next: ConflictRecord = { ...target, resolvedVia: via, resolvedAt: nowFn() };
+      await db.conflicts.put(next);
+      return next;
+    });
+
+    return { ok: true, conflict: resolved };
+  } catch (error) {
+    return { ok: false, reason: classifyJournalError(error) };
+  }
+}
+
+/**
+ * Fills in (or refreshes) the server side of the waiting conflict.
+ *
+ * The server's document is fetched by the caller's function — this module
+ * never talks to a server — and the fetch runs OUTSIDE the write transaction,
+ * because an IndexedDB transaction that waits on a network round trip is a
+ * transaction that will be auto-committed out from under itself.
+ *
+ * A fetch that comes back empty is not a failure: the row is returned
+ * unchanged, still with `serverDocument: null`, and the panel keeps offering
+ * the retry rather than pretending it has a version to adopt.
+ */
+export async function refreshConflictServerSide(
+  db: JournalDb,
+  documentId: string,
+  fetchServer: FetchServerFn,
+): Promise<ConflictResult> {
+  let server: ServerSide | null = null;
+  try {
+    server = await fetchServer();
+  } catch {
+    // A throwing fetch tells us nothing about the server; it is the same
+    // situation as one that answered "no".
+    server = null;
+  }
+
+  try {
+    const updated = await db.transaction("rw", db.conflicts, async () => {
+      const rows = await unresolvedFor(db, documentId);
+      const target = rows.length === 0 ? null : rows[rows.length - 1];
+      if (!target || !server) {
+        return target;
+      }
+      const next: ConflictRecord = {
+        ...target,
+        serverDocument: server.document,
+        serverRevision: server.revision,
+      };
+      await db.conflicts.put(next);
+      return next;
+    });
+
+    return { ok: true, conflict: updated };
+  } catch (error) {
+    return { ok: false, reason: classifyJournalError(error) };
+  }
+}
+
+/**
+ * Adopts the server's document as the local one — the journal half of an
+ * explicit DISCARD (F1-5a).
+ *
+ * All three writes happen in ONE transaction, for the same reason `saveLocal`
+ * does (dossier §7):
+ *   1. the snapshot becomes the server's document at the server's revision,
+ *   2. every pending row for the document is dropped — the queue is exactly
+ *      what the author just decided not to send,
+ *   3. meta records SYNCED, which is honest only because 2. emptied the queue.
+ *
+ * Doing 2. and 3. without 1. (`clearPending` + `markSynced`) would leave the
+ * DISCARDED local document sitting in the snapshot, stamped with the server's
+ * revision. The next visit resolves its initial document from the snapshot
+ * first (`resolveInitialDocument`), so the author's discarded text would come
+ * back — as SYNCED, claiming the server holds it. That is the silent
+ * last-write-wins the constitution forbids, arriving one reload later.
+ *
+ * The conflict row itself is untouched: the discarded document is preserved
+ * there, and `markConflictResolved` is what records the decision.
+ */
+export async function adoptServerDocument(
+  db: JournalDb,
+  documentId: string,
+  document: CanonicalDocument,
+  revision: number,
+  nowFn: () => string = defaultNow,
+): Promise<AdoptServerDocumentResult> {
+  if (!Number.isSafeInteger(revision) || revision < 0) {
+    // Same rule as `markSynced`: a revision that cannot be compared against on
+    // the next CAS is refused rather than stored.
+    return { ok: false, reason: "unknown" };
+  }
+
+  try {
+    const applied = await db.transaction(
+      "rw",
+      db.snapshots,
+      db.pending,
+      db.meta,
+      async () => {
+        await db.snapshots.put({
+          documentId,
+          revision,
+          document,
+          savedAt: nowFn(),
+        });
+
+        const keys = await db.pending.where("documentId").equals(documentId).primaryKeys();
+        await db.pending.bulkDelete(keys);
+
+        const current = await db.meta.get(documentId);
+        const next: SyncMeta = {
+          documentId,
+          // The queue was just emptied inside this same transaction, so the
+          // server really does hold everything this document owes.
+          state: "SYNCED" satisfies SyncState,
+          localSeq: current?.localSeq ?? 0,
+        };
+        await db.meta.put(next);
+
+        return { meta: next, cleared: keys.length };
+      },
+    );
+
+    return { ok: true, meta: applied.meta, cleared: applied.cleared, revision };
   } catch (error) {
     return { ok: false, reason: classifyJournalError(error) };
   }
