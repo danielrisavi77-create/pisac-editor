@@ -39,7 +39,8 @@ function json(status, body) {
   });
 }
 
-export default async function handler(request) {
+export function createHandler(architectInstance = architect) {
+  return async function handler(request) {
   if (request.method !== "POST") {
     return json(405, {ok:false,code:"METHOD_NOT_ALLOWED",message:"POST is required."});
   }
@@ -73,7 +74,7 @@ export default async function handler(request) {
     return json(400, {ok:false,code:"INVALID_PURPOSE",message:"Unsupported assistant purpose."});
   }
 
-  const result = await architect.execute(prompt, {
+  const result = await architectInstance.execute(prompt, {
     feature:"assistant",
     purpose,
     selectedText:selectedText || null,
@@ -113,7 +114,10 @@ export default async function handler(request) {
       verificationStatus:result.verification?.status || "not-required"
     }
   });
+  };
 }
+
+export default createHandler();
 
 export const config = {
   path:"/api/ai",
