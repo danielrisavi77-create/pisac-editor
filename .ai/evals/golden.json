@@ -1,40 +1,143 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "cases": [
     {
-      "id": "citation-01",
-      "input": "Provjeri sve DOI-jeve i citate u ovom akademskom radu.",
-      "expectedTask": "citation_verification",
-      "expectedWorkflow": "retrieve-verify-judge",
-      "minQualityGate": 0.97
+      "id": "grammar-style",
+      "input": "Jezično doradi ovaj odlomak bez promjene značenja.",
+      "expectedTask": "grammar",
+      "expectedWorkflow": "direct",
+      "expectedPrompt": "academic-writing",
+      "retrievalRequired": false,
+      "verificationRequired": false,
+      "minQualityGate": 0.9
     },
     {
-      "id": "code-01",
-      "input": "Implementiraj API, napiši testove i provjeri regresije.",
-      "expectedTask": "coding",
-      "expectedWorkflow": "plan-execute-test-review",
-      "minQualityGate": 0.92
-    },
-    {
-      "id": "docx-01",
-      "input": "Popravi Word dokument bez gubitka fieldova, bookmarka i fusnota.",
-      "expectedTask": "document_repair",
-      "expectedWorkflow": "inspect-plan-repair-verify",
-      "minQualityGate": 0.98
-    },
-    {
-      "id": "research-01",
-      "input": "Istraži literaturu i napravi sintezu relevantnih izvora.",
-      "expectedTask": "research",
-      "expectedWorkflow": "retrieve-synthesize-verify",
+      "id": "academic-rewrite",
+      "input": "Preuredi i akademski prepiši ovaj odlomak, ali nemoj dodavati nove činjenice.",
+      "expectedTask": "rewrite",
+      "expectedWorkflow": "draft-review",
+      "expectedPrompt": "academic-writing",
+      "retrievalRequired": false,
       "minQualityGate": 0.93
     },
     {
-      "id": "architecture-01",
-      "input": "Predloži produkcijsku arhitekturu i workflow za cijeli repo.",
-      "expectedTask": "architecture",
-      "expectedWorkflow": "analyze-options-decide-review",
-      "minQualityGate": 0.94
+      "id": "source-research",
+      "input": "Istraži literaturu o obveznom glasanju i pronađi relevantne izvore.",
+      "expectedTask": "research",
+      "expectedWorkflow": "retrieve-synthesize-verify",
+      "expectedPrompt": "research",
+      "retrievalRequired": true,
+      "verificationRequired": true,
+      "minQualityGate": 0.95
+    },
+    {
+      "id": "citation-verification",
+      "input": "Provjeri je li ovaj DOI i citat stvaran te podupire li tvrdnju.",
+      "expectedTask": "citation_verification",
+      "expectedWorkflow": "retrieve-verify-judge",
+      "expectedPrompt": "citation-verification",
+      "retrievalRequired": true,
+      "verificationRequired": true,
+      "minQualityGate": 0.98
+    },
+    {
+      "id": "source-synthesis",
+      "input": "Sinteziraj ove izvore i usporedi gdje se autori slažu i razlikuju.",
+      "expectedTask": "source_synthesis",
+      "expectedWorkflow": "source-synthesis",
+      "expectedPrompt": "source-synthesis",
+      "retrievalRequired": true,
+      "verificationRequired": true,
+      "minQualityGate": 0.96
+    },
+    {
+      "id": "hallucination-resistance",
+      "input": "Provjeri ima li ovaj odgovor izmišljenih izvora ili haluciniranih činjenica.",
+      "expectedTask": "citation_verification",
+      "expectedWorkflow": "retrieve-verify-judge",
+      "retrievalRequired": true,
+      "verificationRequired": true,
+      "minQualityGate": 0.98
+    },
+    {
+      "id": "mentor-feedback",
+      "input": "Daj komentar mentora na metodološki dio ovog rada.",
+      "expectedTask": "mentor_feedback",
+      "expectedWorkflow": "mentor-review",
+      "expectedPrompt": "mentor-feedback",
+      "retrievalRequired": false,
+      "minQualityGate": 0.93
+    },
+    {
+      "id": "docx-repair",
+      "input": "Popravi Word DOCX bez gubitka fieldova, bookmarka, fusnota i stilova.",
+      "expectedTask": "document_repair",
+      "expectedWorkflow": "inspect-plan-repair-verify",
+      "expectedPrompt": "document-repair",
+      "verificationRequired": true,
+      "minQualityGate": 0.99
+    },
+    {
+      "id": "coding-task",
+      "input": "Implementiraj API, napiši ciljane testove i provjeri regresije u repozitoriju.",
+      "expectedTask": "coding",
+      "expectedWorkflow": "plan-execute-test-review",
+      "expectedPrompt": "code-change",
+      "verificationRequired": true,
+      "minQualityGate": 0.95
+    },
+    {
+      "id": "security-task",
+      "input": "Napravi security review auth tokena i provjeri može li se secret izložiti klijentu.",
+      "expectedTask": "security_review",
+      "expectedWorkflow": "inspect-threat-model-test-review",
+      "expectedPrompt": "security-review",
+      "verificationRequired": true,
+      "minQualityGate": 0.99
+    },
+    {
+      "id": "research-not-citation",
+      "input": "Pronađi izvore i literaturu o političkom povjerenju među studentima.",
+      "expectedTask": "research",
+      "expectedWorkflow": "retrieve-synthesize-verify",
+      "retrievalRequired": true
+    },
+    {
+      "id": "citation-intent-required",
+      "input": "U radu se spominju izvori o političkom povjerenju.",
+      "expectedTask": "generic",
+      "expectedWorkflow": "direct",
+      "retrievalRequired": false
+    },
+    {
+      "id": "purpose-language",
+      "input": "Uredi ovo.",
+      "context": {
+        "purpose": "language"
+      },
+      "expectedTask": "grammar",
+      "expectedWorkflow": "direct",
+      "expectedPrompt": "academic-writing"
+    },
+    {
+      "id": "purpose-translate",
+      "input": "Napravi ovo.",
+      "context": {
+        "purpose": "translate"
+      },
+      "expectedTask": "translation",
+      "expectedWorkflow": "direct",
+      "expectedPrompt": "translation"
+    },
+    {
+      "id": "purpose-brainstorm",
+      "input": "Daj prijedloge.",
+      "context": {
+        "purpose": "brainstorm"
+      },
+      "expectedTask": "brainstorm",
+      "expectedWorkflow": "direct",
+      "expectedPrompt": "brainstorm"
     }
   ]
 }
