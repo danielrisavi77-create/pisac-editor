@@ -46,7 +46,7 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 - BLOCKED(owner) F1-8 Activate: restore Supabase project Pisac (needs a free active slot or Pro), apply migrations 2026091904-06 via MCP, set NEXT_PUBLIC_* env in Netlify, run authenticated E2E, flip fixture statuses toward PASS with evidence (SHA+env+result).
 
 
-- TODO F1-12 README + docs refresh: rewrite README.md for the Next.js app (HR: pokretanje, demo, struktura, testovi, deploy noti), remove stale prototype instructions; verify docs/ index links. (sonnet)
+- IN_PROGRESS F1-12 README + docs refresh: rewrite README.md for the Next.js app (HR: pokretanje, demo, struktura, testovi, deploy noti), remove stale prototype instructions; verify docs/ index links. (sonnet)
 - TODO F1-13 Quality pass: run the /simplify recipe over the branch diff (reuse, dead code, duplication); apply safe cleanups only; tests stay green. (opus)
 
 ## Blocked / questions for owner
