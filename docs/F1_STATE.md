@@ -44,11 +44,12 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 
 - DONE 9c6a111 F1-12 README rewritten (HR, 49 lines) for the Next.js F1 kernel; stale prototype instructions removed.
 
+- DONE d98e344 F1-13 quality pass: -77 production LOC, isPlainObject/ownProperty and requireSession deduped, dead server actions removed; 1090 tests.
+
 ## Queue (top = next). Tags: [review] = reviewer pass required.
 - BLOCKED(owner) F1-8 Activate: restore Supabase project Pisac (needs a free active slot or Pro), apply migrations 2026091904-06 via MCP, set NEXT_PUBLIC_* env in Netlify, run authenticated E2E, flip fixture statuses toward PASS with evidence (SHA+env+result).
 
 
-- IN_PROGRESS F1-13 Quality pass: run the /simplify recipe over the branch diff (reuse, dead code, duplication); apply safe cleanups only; tests stay green. (opus)
 
 ## Blocked / questions for owner
 - Q1 ANSWERED by owner 19.9.: pisac-editor gets its OWN Supabase project (option b). Migration numbering stays 2026MMDDNN.
