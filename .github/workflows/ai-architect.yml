@@ -6,9 +6,9 @@ on:
       - ".ai/**"
       - "tools/ai-architect/**"
       - "netlify/functions/**"
-      - "public/assets/ai-client.js"
-      - "public/assets/app.js"
-      - "public/index.html"
+      - "public/legacy/assets/ai-client.js"
+      - "public/legacy/assets/app.js"
+      - "public/legacy/index.html"
       - "netlify.toml"
       - ".github/workflows/ai-architect.yml"
       - ".github/workflows/ai-architect-live-eval.yml"
@@ -24,9 +24,9 @@ on:
       - ".ai/**"
       - "tools/ai-architect/**"
       - "netlify/functions/**"
-      - "public/assets/ai-client.js"
-      - "public/assets/app.js"
-      - "public/index.html"
+      - "public/legacy/assets/ai-client.js"
+      - "public/legacy/assets/app.js"
+      - "public/legacy/index.html"
       - "netlify.toml"
       - "AI_ARCHITECT.md"
       - "docs/AI_FEATURE_AUDIT.md"
@@ -82,8 +82,8 @@ jobs:
 
       - name: Syntax-check browser and server execution layers
         run: |
-          node --check public/assets/ai-client.js
-          node --check public/assets/app.js
+          node --check public/legacy/assets/ai-client.js
+          node --check public/legacy/assets/app.js
           node --check netlify/functions/ai-execute.mjs
           node --check tools/ai-architect/src/architect.mjs
 

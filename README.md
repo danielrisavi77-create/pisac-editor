@@ -6,32 +6,35 @@ Ovo je početni kod za novi repozitorij, a ne izvorna povijest projekta.
 
 ## Pokretanje
 
-Potreban je Python 3. Iz korijena projekta pokreni:
+Potreban je Node 24 (vidi `.nvmrc`). Iz korijena projekta pokreni:
 
 ```sh
-python -m http.server 8080 --directory public
+npm ci
+npm run dev
 ```
 
-Otvori http://localhost:8080. Nema npm ovisnosti ni build koraka.
+Otvori http://localhost:3000. Vanilla prototip je na http://localhost:3000/legacy/.
 Google Fonts zahtijeva internetsku vezu; preglednik može koristiti zamjenske fontove.
 
 ## Struktura
 
-- `public/index.html`: sučelje
-- `public/assets/styles.css`: izgled
-- `public/assets/app.js`: logika uređivača, provenijencije i Asistent UI
-- `public/assets/ai-client.js`: browser klijent bez API ključeva
+- `app/`: Next.js App Router (ljuska aplikacije, `layout.tsx` i `page.tsx`)
+- `src/domain/`: čista domenska jezgra F1 (bez frameworka i bez Supabasea)
+- `public/legacy/index.html`: sučelje vanilla prototipa, posluženo na `/legacy/`
+- `public/legacy/assets/styles.css`: izgled prototipa
+- `public/legacy/assets/app.js`: logika uređivača, provenijencije i Asistent UI
+- `public/legacy/assets/ai-client.js`: browser klijent bez API ključeva
 - `netlify/functions/ai-execute.mjs`: server-side AI Architect endpoint
 - `.ai/`: routing, prompt, workflow, model i eval konfiguracija
 - `tools/ai-architect/`: reusable AI Architect core + CLI + testovi
-- `netlify.toml`: objava `public` direktorija i Functions konfiguracija
+- `netlify.toml`: Next build na Netlifyju (`@netlify/plugin-nextjs`) i Functions konfiguracija
 
 ## Repozitorij i objava
 
 Repozitorij: https://github.com/danielrisavi77-create/pisac-editor
 
 Za automatsku objavu poveži postojeći Netlify projekt s ovim repozitorijem.
-Konfiguracija `netlify.toml` objavljuje direktorij `public`, bez build koraka.
+Konfiguracija `netlify.toml` pokreće `npm run build` i objavljuje Next.js izlaz (`.next`).
 Prijenos na GitHub sam po sebi ne mijenja postojeću Netlify stranicu.
 
 ## Stvarni status i ograničenja
