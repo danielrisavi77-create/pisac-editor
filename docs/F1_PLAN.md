@@ -25,7 +25,7 @@ state machine, and registers the F1 fixture IDs. Source: dossier §6, §7,
 | 4. local durability/server sync | F1-3a, F1-3b, F1-4a, F1-4b | TODO | Dexie journal module, sync status chip, `documents`/`document_revisions` migration, server action |
 | 5. recovery/conflict/checkpoints | F1-5a, F1-5b | TODO | conflict/rebase/discard logic, checkpoint snapshot module |
 | 6. DOCX | F1-6 | TODO | `docx` export module, export manifest with fidelity labels |
-| 7. fixtures/browser E2E | F1-7 | TODO | `e2e/*.spec.ts`, fixture evidence records |
+| 7. fixtures/browser E2E | F1-7 | DONE | `e2e/*.spec.ts`, fixture evidence records |
 
 ## 3. Sync state machine
 

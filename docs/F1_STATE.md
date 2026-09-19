@@ -30,9 +30,15 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 
 - DONE 3d5e708 F1-6 DOCX export of F1 subset: fidelity manifest (SUPPORTED_EXACT/UNKNOWN paths, PARTIAL overall), lazy docx import, honest HR labels incl. local-changes note, PK smoke verified.
 
-## Queue (top = next). Tags: [review] = reviewer pass required.
+- DONE 4c71bfa F1-7 Playwright E2E (17 passed: smoke, auth-guard, a11y; pinned preinstalled Chromium), e2e/EVIDENCE.md (4 E2E-PARTIAL, 11 UNIT-COVERED, auth legs BLOCKED on paused Supabase), CI e2e job.
 
-- IN_PROGRESS F1-7 Fixtures + Playwright E2E for the F1 fixture IDs; evidence record fixture→test→SHA.
+## Queue (top = next). Tags: [review] = reviewer pass required.
+- BLOCKED(owner) F1-8 Activate: restore Supabase project Pisac (needs a free active slot or Pro), apply migrations 2026091904-06 via MCP, set NEXT_PUBLIC_* env in Netlify, run authenticated E2E, flip fixture statuses toward PASS with evidence (SHA+env+result).
+- TODO F1-9a Deferred UX nits: return-to after login (safe same-origin path only), authed user on /prijava redirects to /workspace, project title preserved on create error, single getUser per request path.
+- TODO F1-9b Croatian date/plural polish + empty states pass over /workspace and /d pages; mobile-first layout check at 360px.
+- TODO F1-10 [review] Security pass: run /security-review skill over the branch diff; fix findings.
+- TODO F1-11 Perf: bundle budget check (first-load JS per route recorded in docs/F1_STATE.md Notes), lazy-load conflict/recovery panels, measure editor keystroke→projection latency with a unit benchmark.
+
 
 ## Blocked / questions for owner
 - Q1 ANSWERED by owner 19.9.: pisac-editor gets its OWN Supabase project (option b). Migration numbering stays 2026MMDDNN.
