@@ -6,7 +6,7 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 - R1 PRs #1–#5 closed with rationale; PR #6 superseded by PR #7 (this branch). Loop routine active: hourly.
 
 ## Queue (top = next). Tags: [review] = reviewer pass required.
-- TODO F1-0a Tooling: Next.js App Router + TypeScript scaffold in repo root (`app/`, `package.json` scripts: dev/build/test/lint), Vitest, ESLint, `.nvmrc`; move `public/index.html` + `public/assets/*` to `legacy/` and keep `netlify.toml` publishing a working site (Next on Netlify). Root `npm test` must still run `tools/ai-architect` tests plus Vitest. CI: `.github/workflows/ci.yml` (install, lint, typecheck, unit tests).
+- IN_PROGRESS F1-0a Tooling: Next.js App Router + TypeScript scaffold in repo root (`app/`, `package.json` scripts: dev/build/test/lint), Vitest, ESLint, `.nvmrc`; move `public/index.html` + `public/assets/*` to `legacy/` and keep `netlify.toml` publishing a working site (Next on Netlify). Root `npm test` must still run `tools/ai-architect` tests plus Vitest. CI: `.github/workflows/ci.yml` (install, lint, typecheck, unit tests).
 - TODO F1-0b Governance: `docs/F1_PLAN.md` mapping the 7 F1 PRs to concrete steps in this file; fixture ID list FX-FR-001-001…FX-X-SEC-001 with owner test file names (definition only, marked NOT PASS).
 - TODO F1-1a [review] Supabase auth: magic-link sign-in, session refresh, protected `/workspace` route, `src/lib/supabase/{client,server}.ts`, env template. No service role in client bundle.
 - TODO F1-1b [review] Personal workspace + academic project: migration `supabase/migrations/<next>_f1_workspace.sql` (workspaces, academic_projects, RLS owner-only), server actions create/list. Migration prepared, not applied.

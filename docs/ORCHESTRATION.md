@@ -10,6 +10,7 @@
 2. Picks the first `TODO` item. Splits it if it would touch >8 files or >400 LOC. Writes a worker prompt that names: files to touch, acceptance checks, test commands, commit message, "do not" list.
 3. Worker implements → runs `npm test` (root) and `npm test` in `tools/ai-architect` → commits → final report ≤25 lines (counts, SHAs, blockers).
 4. Orchestrator verifies with ONE shell call: `git log --oneline -3 && npm test 2>&1 | grep -E '^# (tests|pass|fail)' && (cd tools/ai-architect && npm test 2>&1 | grep -E '^# (tests|pass|fail)')`.
+4b. If any item is `IN_PROGRESS` (a worker from a previous turn may still be running), end the iteration in one line; do not start another worker.
 5. Green → push, mark item `DONE <sha>`, add the next sub-step(s) discovered, commit `docs(state): ...`. Red → one fix round with the same worker (SendMessage); still red → mark `BLOCKED <reason>`, move on.
 6. Milestone (an F1 PR boundary) → one PR comment with the checklist; otherwise silence.
 
