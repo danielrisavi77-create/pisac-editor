@@ -1,6 +1,12 @@
 export { AIArchitect } from "./architect.mjs";
 export { recommend, explainPlan } from "./router.mjs";
 export { scanRepo } from "./scanner.mjs";
-export { recordOutcome, summarizeOutcomes, sanitizeOutcome, normalizedUtility } from "./outcomes.mjs";
 export { validateConfig } from "./validator.mjs";
 export { runGoldenEval } from "./evaluator.mjs";
+export { MODEL_REGISTRY, getModel, requireModel, resolveModelRefs, validateModelRegistry } from "./model-registry.mjs";
+export { normalizeBudget, newBudgetLedger, remainingBudget } from "./budget.mjs";
+export { OutcomeStore, LocalOutcomeStore, NoopOutcomeStore, SupabaseOutcomeStore, createOutcomeStore } from "./outcome-store.mjs";
+export { computeMetrics, groupTaskModelStats } from "./metrics.mjs";
+export { UsagePolicy, productionUsageReadiness } from "./usage-policy.mjs";
+export { verifyContract } from "./contract-verifier.mjs";
+export { recordOutcome, summarizeOutcomes, sanitizeOutcome, normalizedUtility } from "./outcomes.mjs";
