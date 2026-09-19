@@ -132,3 +132,20 @@ test("v0.3 Supabase migration is RLS/service-role locked and security-invoker",a
   assert.ok(sql.includes("with (security_invoker=true)"));
   assert.ok(sql.includes("grant select on public.ai_architect_calibration_stats to service_role"));
 });
+
+test("production planning never prefers the test-only local mock", async () => {
+  const { recommend } = await import("../src/router.mjs");
+  const plan = await recommend("Jezično doradi ovaj tekst", root);
+  assert.equal(plan.modelSelection.candidates.some(c => c.id === "local:local/mock"), false);
+  assert.notEqual(plan.modelSelection.preferred?.id, "local:local/mock");
+});
+
+test("output prediction hard cap is respected at P95", () => {
+  const model=getModel("openai:gpt-5.6-luna");
+  const prediction=predictTokenBudget({
+    inputTokens:12000,taskClass:"grammar",complexity:2,model,effort:"low",desiredOutputTokens:2500
+  });
+  assert.ok(prediction.billedOutput.p95 <= 2500);
+  assert.ok(prediction.billedOutput.p90 <= prediction.billedOutput.p95);
+  assert.ok(prediction.billedOutput.p50 <= prediction.billedOutput.p90);
+});
