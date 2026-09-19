@@ -3,5 +3,6 @@ export * from "./states";
 export * from "./journal-types";
 export * from "./restore";
 export * from "./conflict";
+export * from "./recovery";
 export * from "./drain";
 export * from "./labels";

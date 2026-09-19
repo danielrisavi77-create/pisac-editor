@@ -71,6 +71,7 @@ import {
   type DrainOutcome,
   type JournalContents,
   type LocalSaveFailureReason,
+  type RecoveryChoice,
   type SyncState,
 } from "@/domain/sync";
 import type { DocumentTransaction } from "@/domain/document";
@@ -93,11 +94,18 @@ import {
   saveLocal,
   type FetchServerFn,
 } from "@/lib/journal/journal";
+import {
+  attemptJournalRecovery,
+  executeRecovery,
+  type JournalRecoveryReport,
+  type RecoveryFailureReason,
+} from "@/lib/journal/recovery";
 import { acquireDocumentLock, documentLockName } from "@/lib/journal/lock";
 import { createDrainRunner, type DrainRunner } from "@/lib/sync/drainRunner";
 
 import { commitDocument, loadDocument } from "./actions";
 import ConflictPanel, { DegradedConflictPanel } from "./conflict-panel";
+import RecoveryPanel from "./recovery-panel";
 
 const statusRow = {
   display: "flex",
@@ -209,6 +217,26 @@ async function fetchServerDocument(projectId: string) {
 const RESOLUTION_FAILED_MESSAGE =
   "Odluku nije bilo moguće spremiti u lokalnu pohranu. Pokušaj ponovno.";
 
+/** Shown when the recovery plan itself is missing when a choice arrives. */
+const RECOVERY_FAILED_MESSAGE =
+  "Oporavak nije bilo moguće provesti. Pokušaj ponovno.";
+
+/**
+ * One Croatian sentence per way a recovery can fail (F1-5b).
+ *
+ * Each names what actually happened rather than "greška": the author is being
+ * asked to choose between two versions of their own work, and a message that
+ * hides which half went wrong makes the next choice a guess.
+ */
+const RECOVERY_FAILURE_MESSAGES: Record<RecoveryFailureReason, string> = {
+  quota: "U lokalnoj pohrani nema mjesta. Oslobodi prostor pa pokušaj ponovno.",
+  unavailable: "Lokalna pohrana nije dostupna u ovom pregledniku.",
+  corrupt: "Lokalnu pohranu nije bilo moguće obnoviti. Pokušaj ponovno.",
+  unknown: RECOVERY_FAILED_MESSAGE,
+  "unavailable-choice": "Taj izbor više nije dostupan. Pokušaj ponovno.",
+  "server-unreadable": "Verzija s poslužitelja nije dohvaćena. Pokušaj ponovno.",
+};
+
 /** The state a failed local probe lands in, derived from the machine itself. */
 function stateAfterLocalFailure(reason: LocalSaveFailureReason): SyncState {
   return syncReducer(syncReducer(INITIAL_SYNC_STATE, { type: "LOCAL_SAVE_STARTED" }), {
@@ -224,6 +252,22 @@ export default function EditorClient({
   serverRevision,
 }: EditorClientProps) {
   const [boot, setBoot] = useState<Boot>({ status: "loading" });
+  /**
+   * Bumped when the local database had to be deleted and recreated (F1-5b).
+   *
+   * A recovery that resets the store invalidates everything this session
+   * holds: the Dexie handle, the drain runner bound to it, and the document
+   * the editor was mounted with. Re-running the boot is the honest way to pick
+   * the new store up — the restored state then comes from the journal the
+   * author's own choice just wrote, rather than from a reducer that would have
+   * to be nudged into agreeing with it.
+   */
+  const [bootNonce, setBootNonce] = useState(0);
+
+  const reboot = useCallback(() => {
+    setBoot({ status: "loading" });
+    setBootNonce((n) => n + 1);
+  }, []);
 
   /**
    * The server side of the bootstrap, or `null`. Both halves are required:
@@ -280,7 +324,7 @@ export default function EditorClient({
       cancelled = true;
       release();
     };
-  }, [documentId]);
+  }, [documentId, bootNonce]);
 
   if (boot.status === "loading") {
     return (
@@ -302,7 +346,7 @@ export default function EditorClient({
     // the state says so.
     return (
       <JournalledEditor
-        key={`${documentId}:no-journal`}
+        key={`${documentId}:no-journal:${bootNonce}`}
         db={null}
         documentId={documentId}
         projectId={projectId}
@@ -310,6 +354,7 @@ export default function EditorClient({
         baseRevision={resolved.revision}
         initialSyncState={stateAfterLocalFailure(boot.reason)}
         blocked={boot.reason}
+        onJournalReset={reboot}
       />
     );
   }
@@ -326,7 +371,7 @@ export default function EditorClient({
 
   return (
     <JournalledEditor
-      key={documentId}
+      key={`${documentId}:${bootNonce}`}
       db={boot.writable ? boot.db : null}
       documentId={documentId}
       projectId={projectId}
@@ -338,6 +383,7 @@ export default function EditorClient({
           : stateAfterLocalFailure("unavailable")
       }
       blocked={boot.writable ? null : "multi-tab"}
+      onJournalReset={reboot}
     />
   );
 }
@@ -373,6 +419,11 @@ type JournalledEditorProps = {
   baseRevision: number;
   initialSyncState: SyncState;
   blocked: BlockedReason | null;
+  /**
+   * Called when a recovery deleted and recreated the local database, so this
+   * session must be rebuilt around the new store (F1-5b).
+   */
+  onJournalReset: () => void;
 };
 
 /**
@@ -387,6 +438,7 @@ function JournalledEditor({
   baseRevision,
   initialSyncState,
   blocked,
+  onJournalReset,
 }: JournalledEditorProps) {
   const [syncState, dispatch] = useReducer(syncReducer, initialSyncState);
   const [candidate, setCandidate] = useState<CanonicalCandidate | null>(null);
@@ -403,6 +455,13 @@ function JournalledEditor({
    * offer a real rebase instead of a dead end.
    */
   const conflictServerRevision = useRef<number | null>(null);
+  /**
+   * What can still be rescued while the state is RECOVERY_REQUIRED (F1-5b).
+   * `null` while the journal and the server are being read; the panel is only
+   * rendered once there is a plan to render, so no button ever promises
+   * something that has not been checked.
+   */
+  const [recovery, setRecovery] = useState<JournalRecoveryReport | null>(null);
 
   /**
    * True while the journal must not take ordinary candidates: the document is
@@ -813,6 +872,100 @@ function JournalledEditor({
     setConflict(await readConflict());
   }, [readConflict]);
 
+  /* ------------------------------------------------- recovery (F1-5b) */
+
+  /**
+   * Reads whatever the damaged store will still give up, plus the server's
+   * version, and plans the way out.
+   *
+   * Runs both when a local write fails as 'corrupt' during this session and
+   * when a session opens with a persisted RECOVERY_REQUIRED — a reload is not
+   * a decision, so the restored state brings the question back with it.
+   */
+  const readRecovery = useCallback(async (): Promise<JournalRecoveryReport> => {
+    return attemptJournalRecovery(db, documentId, fetchServer);
+  }, [db, documentId, fetchServer]);
+
+  useEffect(() => {
+    if (syncState !== "RECOVERY_REQUIRED") {
+      setRecovery(null);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      const report = await readRecovery();
+      if (!cancelled) {
+        setRecovery(report);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [syncState, readRecovery]);
+
+  /**
+   * Applies the author's explicit recovery choice (F1-5b).
+   *
+   * The write comes first and the state machine second, exactly as a conflict
+   * resolution does: a decision that could not be written down has not been
+   * made, and claiming RECOVERED for it would spend the single exit this
+   * sticky state has.
+   *
+   * When the store had to be deleted and recreated, this session's journal
+   * handle, drain runner and editor content all belong to a database that no
+   * longer exists — so the whole view is rebuilt from the fresh store instead
+   * of being patched up in place, and the restored state comes from the meta
+   * the author's own choice just wrote (LOCAL_DURABLE for a salvage, SYNCED
+   * for an adoption).
+   */
+  const handleRecoveryChoice = useCallback(
+    async (choice: RecoveryChoice): Promise<string | null> => {
+      const report = recovery;
+      if (!report) {
+        return RECOVERY_FAILED_MESSAGE;
+      }
+
+      const done = await executeRecovery(
+        // A store that could not be fully read must not be written to either:
+        // passing `null` is what asks `executeRecovery` to recreate it, and
+        // that only ever happens on the branch the author just chose.
+        report.journalUsable ? db : null,
+        documentId,
+        choice,
+        report.plan,
+        fetchServer,
+      );
+
+      if (!done.ok) {
+        return RECOVERY_FAILURE_MESSAGES[done.reason];
+      }
+
+      if (done.databaseReset) {
+        onJournalReset();
+        return null;
+      }
+
+      base.current = done.baseRevision;
+      lastError.current = undefined;
+      flushRef.current?.setDocument(done.document);
+      dispatch({ type: "RECOVERED", via: choice });
+      if (choice === "salvage-local") {
+        // The salvaged text is durable but still owes the server; the machine
+        // is in SAVING_LOCAL and this is the write that already happened.
+        dispatch({ type: "LOCAL_SAVE_OK" });
+        runner.current?.notifyLocalSave();
+      }
+      return null;
+    },
+    [db, documentId, fetchServer, flushRef, recovery, onJournalReset],
+  );
+
+  const handleRecoveryRetry = useCallback(async () => {
+    setRecovery(await readRecovery());
+  }, [readRecovery]);
+
   const rejected = candidate !== null && !candidate.ok ? candidate : null;
 
   return (
@@ -843,6 +996,20 @@ function JournalledEditor({
         />
       )}
 
+      {/*
+        The same rule for the damaged store: the question comes before the
+        text it is about. `recovery` is null only while the journal and the
+        server are being read, and a panel with no plan would have nothing
+        honest to put on its buttons.
+      */}
+      {syncState === "RECOVERY_REQUIRED" && recovery !== null ? (
+        <RecoveryPanel
+          plan={recovery.plan}
+          onChoose={handleRecoveryChoice}
+          onRetry={handleRecoveryRetry}
+        />
+      ) : null}
+
       <DocumentEditor
         initialDocument={document}
         onCanonicalChange={handleChange}
@@ -850,8 +1017,10 @@ function JournalledEditor({
         flushRef={flushRef}
         // Read-only while the author is being asked to choose between two
         // versions: a third one typed into the middle of that question would
-        // make whichever they pick untrue by the time it is applied.
-        editable={syncState !== "CONFLICT"}
+        // make whichever they pick untrue by the time it is applied. The same
+        // holds for RECOVERY_REQUIRED, where the journal cannot take the text
+        // anyway — `frozen` is exactly the set of states that freeze it.
+        editable={!frozen}
       />
 
       {/*

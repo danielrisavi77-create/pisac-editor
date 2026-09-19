@@ -46,6 +46,25 @@ export const CONFLICT_RESOLUTIONS = ["rebase", "discard"] as const;
 
 export type ConflictResolution = (typeof CONFLICT_RESOLUTIONS)[number];
 
+/**
+ * How the author chose to leave RECOVERY_REQUIRED (F1-5b).
+ *
+ * The exact mirror of `CONFLICT_RESOLUTIONS`, and for the same reason: a
+ * corrupt or unreadable local store leaves two versions of the truth — the
+ * bytes this machine could still read, and the ones the server holds — and
+ * which of the two survives is the author's decision, never this module's.
+ *
+ * 'salvage-local' — keep the newest local text that still validates and queue
+ *                   it for the server.
+ * 'adopt-server'  — take the server's document and drop what was local.
+ *
+ * There is deliberately no third, automatic option: recovering "by itself"
+ * would mean choosing which of the author's two versions to destroy.
+ */
+export const RECOVERY_CHOICES = ["salvage-local", "adopt-server"] as const;
+
+export type RecoveryChoice = (typeof RECOVERY_CHOICES)[number];
+
 export type SyncEvent =
   /** A new canonical candidate exists — the author changed the document. */
   | { type: "EDIT" }
@@ -70,8 +89,18 @@ export type SyncEvent =
   | { type: "SYNC_FAILED"; retryable: boolean }
   /** The author explicitly chose to rebase or to discard the local change. */
   | { type: "CONFLICT_RESOLVED"; via: ConflictResolution }
-  /** The recovery flow restored the journal from a checkpoint (F1-5b). */
-  | { type: "RECOVERED" };
+  /**
+   * The author explicitly chose how to leave RECOVERY_REQUIRED, and the
+   * journal write that choice implies has already succeeded (F1-5b).
+   *
+   * It carries `via` for the same reason `CONFLICT_RESOLVED` does: the two
+   * choices end in two different, honest claims. Salvaging local text has
+   * journalled a new candidate that still owes the server (SAVING_LOCAL →
+   * LOCAL_DURABLE); adopting the server's document has emptied the queue and
+   * stored the server's own revision, which is the one case where SYNCED is
+   * true the moment the write lands.
+   */
+  | { type: "RECOVERED"; via: RecoveryChoice };
 
 export type SyncEventType = SyncEvent["type"];
 
@@ -184,7 +213,25 @@ export const SYNC_TRANSITIONS: Readonly<Record<SyncState, SyncTransitionRow>> = 
     SYNC_STARTED: { to: "SYNCING" },
   },
   RECOVERY_REQUIRED: {
-    RECOVERED: { to: "EDITING" },
+    /*
+     * The mirror image of CONFLICT's row, and for the same reasons (F1-5b).
+     *
+     * 'salvage-local' produces NEW content — the newest local text that still
+     * validates, re-queued against the server's revision — and new content
+     * goes through the journal before it goes to the server, so the target is
+     * SAVING_LOCAL rather than a straight return to EDITING.
+     *
+     * 'adopt-server' drops what was local and takes the server's document at
+     * the server's revision, which is exactly SYNCED.
+     *
+     * Both obligations are discharged outside this table, by the editor: the
+     * salvage is journalled (`rebaseLocal`, the one write allowed while the
+     * journal is frozen) and the adoption goes through `adoptServerDocument`
+     * in one transaction, BEFORE either transition is dispatched. Without
+     * that, the SYNCED claim above would not be honest and a crash between
+     * the two would leave a document that quietly stopped recovering.
+     */
+    RECOVERED: { cases: { "salvage-local": "SAVING_LOCAL", "adopt-server": "SYNCED" } },
   },
 };
 
@@ -202,6 +249,7 @@ export function transitionVariant(event: SyncEvent): string | null {
     case "SYNC_FAILED":
       return String(event.retryable);
     case "CONFLICT_RESOLVED":
+    case "RECOVERED":
       return event.via;
     default:
       return null;

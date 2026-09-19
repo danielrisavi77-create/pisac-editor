@@ -163,3 +163,42 @@ export async function openJournal(
     return { ok: false, reason: classifyJournalError(error) };
   }
 }
+
+/**
+ * DESTRUCTIVE. Deletes the whole journal database and opens a fresh, empty one
+ * (F1-5b).
+ *
+ * Everything the store held for EVERY document goes: snapshots, the pending
+ * queues that still owe the server, the sync meta, and the conflict records
+ * the constitution requires to be kept. There is no undo, and nothing here
+ * copies anything out first — the caller does that, before calling, by holding
+ * the document it is about to restore in memory.
+ *
+ * It exists for exactly one situation: the store is so damaged that Dexie
+ * cannot open it or cannot write to it, so the recovery flow has nowhere to
+ * put the document the author just chose to keep. Deleting is then the only
+ * way to give them a working editor again.
+ *
+ * CALL IT ONLY ON AN EXPLICIT USER CHOICE, from `executeRecovery`, and never
+ * as a repair that a failed read or a failed write triggers by itself. A
+ * journal that wipes itself when it looks broken is a journal that can destroy
+ * an author's unsent work without anyone ever being asked — which is the same
+ * silent data loss the eight sync states exist to make impossible to hide.
+ */
+export async function resetJournalDatabase(
+  name: string = JOURNAL_DB_NAME,
+): Promise<JournalOpenResult> {
+  if (!indexedDbAvailable()) {
+    return { ok: false, reason: "unavailable" };
+  }
+
+  try {
+    // Closes any handle this tab still holds and removes the database itself,
+    // so the reopen below runs the schema from version 1 on empty stores.
+    await Dexie.delete(name);
+  } catch (error) {
+    return { ok: false, reason: classifyJournalError(error) };
+  }
+
+  return openJournal(name);
+}

@@ -6,6 +6,7 @@ import {
   CONFLICT_RESOLUTIONS,
   INITIAL_SYNC_STATE,
   LOCAL_SAVE_FAILURE_REASONS,
+  RECOVERY_CHOICES,
   SYNC_EVENT_TYPES,
   SYNC_STATES,
   SYNC_TRANSITIONS,
@@ -30,7 +31,7 @@ const EVENTS: readonly SyncEvent[] = [
   { type: "SYNC_FAILED", retryable: true },
   { type: "SYNC_FAILED", retryable: false },
   ...CONFLICT_RESOLUTIONS.map((via): SyncEvent => ({ type: "CONFLICT_RESOLVED", via })),
-  { type: "RECOVERED" },
+  ...RECOVERY_CHOICES.map((via): SyncEvent => ({ type: "RECOVERED", via })),
 ];
 
 function label(event: SyncEvent): string {
@@ -213,11 +214,32 @@ describe("recovery handling", () => {
   });
 
   it("leaves RECOVERY_REQUIRED only through RECOVERED", () => {
-    expect(syncReducer("RECOVERY_REQUIRED", { type: "RECOVERED" })).toBe("EDITING");
+    expect(syncReducer("RECOVERY_REQUIRED", { type: "RECOVERED", via: "salvage-local" })).toBe(
+      "SAVING_LOCAL",
+    );
+    expect(syncReducer("RECOVERY_REQUIRED", { type: "RECOVERED", via: "adopt-server" })).toBe(
+      "SYNCED",
+    );
+  });
+
+  it("covers every declared recovery choice, and nothing else", () => {
+    const transition = SYNC_TRANSITIONS.RECOVERY_REQUIRED.RECOVERED;
+    expect(transition && "cases" in transition).toBe(true);
+    if (transition && "cases" in transition) {
+      expect(Object.keys(transition.cases).sort()).toEqual([...RECOVERY_CHOICES].sort());
+    }
+  });
+
+  it("ignores a recovery choice it does not know", () => {
+    const rogue = { type: "RECOVERED", via: "constructor" } as unknown as SyncEvent;
+    expect(syncReducer("RECOVERY_REQUIRED", rogue)).toBe("RECOVERY_REQUIRED");
   });
 
   it("ignores RECOVERED when nothing needed recovering", () => {
-    expect(syncReducer("SYNCED", { type: "RECOVERED" })).toBe("SYNCED");
+    for (const via of RECOVERY_CHOICES) {
+      expect(syncReducer("SYNCED", { type: "RECOVERED", via })).toBe("SYNCED");
+      expect(syncReducer("CONFLICT", { type: "RECOVERED", via })).toBe("CONFLICT");
+    }
   });
 });
 
@@ -286,8 +308,21 @@ describe("whole pipeline", () => {
     state = syncReducer(state, { type: "LOCAL_SAVE_STARTED" });
     state = syncReducer(state, { type: "LOCAL_SAVE_FAILED", reason: "corrupt" });
     expect(state).toBe("RECOVERY_REQUIRED");
-    state = syncReducer(state, { type: "RECOVERED" });
-    expect(state).toBe("EDITING");
+    // The salvaged text was journalled before this is dispatched, so the
+    // machine resumes exactly where an ordinary local write would.
+    state = syncReducer(state, { type: "RECOVERED", via: "salvage-local" });
+    expect(state).toBe("SAVING_LOCAL");
+    state = syncReducer(state, { type: "LOCAL_SAVE_OK" });
+    expect(state).toBe("LOCAL_DURABLE");
+  });
+
+  it("walks the corrupt-store path into adopting the server's document", () => {
+    let state: SyncState = "EDITING";
+    state = syncReducer(state, { type: "LOCAL_SAVE_STARTED" });
+    state = syncReducer(state, { type: "LOCAL_SAVE_FAILED", reason: "corrupt" });
+    expect(state).toBe("RECOVERY_REQUIRED");
+    state = syncReducer(state, { type: "RECOVERED", via: "adopt-server" });
+    expect(state).toBe("SYNCED");
   });
 
   it("walks the stale-base path into an explicit discard", () => {
