@@ -1,30 +1,56 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "project": {
     "name": "pisac-editor",
     "type": "academic-writing-editor",
-    "description": "Academic editor with student/mentor views; AI Architect pilot project."
+    "stage": "prototype",
+    "description": "Academic writing editor with Student/Mentor views, provenance tracking and a repo-native AI Architect."
   },
   "priorities": {
-    "quality": 0.45,
+    "quality": 0.5,
     "factuality": 0.25,
-    "cost": 0.12,
-    "latency": 0.08,
+    "cost": 0.1,
+    "latency": 0.05,
     "determinism": 0.1
+  },
+  "execution": {
+    "retriesPerCandidate": 1,
+    "defaultMaxCostUsd": 0.08,
+    "defaultMaxLatencyMs": 30000,
+    "failClosedOnHighRisk": true
+  },
+  "privacy": {
+    "storeTaskContent": false,
+    "storeOutputContent": false,
+    "hashTaskAndOutput": true,
+    "maxContextChars": 12000
   },
   "risk": {
     "default": "medium",
     "highRiskTasks": [
       "citation_verification",
-      "source_synthesis",
+      "hallucination_check",
       "document_repair",
       "security_review"
     ]
   },
   "constraints": {
     "hallucinationTolerance": "low",
-    "citationClaimsRequireVerification": true,
+    "citationClaimsRequireRetrievedEvidence": true,
     "destructiveCodeChangesRequireReview": true,
-    "preferCheapestModelThatPassesQualityGate": true
+    "preferCheapestModelThatPassesQualityGate": true,
+    "qualityGateBeatsCostOptimization": true
+  },
+  "featurePolicies": {
+    "assistant": {
+      "purposes": {
+        "explain": "allowed",
+        "brainstorm": "allowed",
+        "language": "allowed",
+        "translate": "allowed",
+        "restructure": "allowed",
+        "generate": "flag-for-review"
+      }
+    }
   }
 }
