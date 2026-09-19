@@ -9,8 +9,8 @@ import { describe, expect, it } from "vitest";
  * the same approach as src/domain/workspace/migration.test.ts.
  * `docker` is unavailable here, so this guards the properties that would be
  * expensive to get wrong in a file that is applied by hand: RLS on, an
- * append-only revision log, the idempotency key, a security *invoker* RPC
- * with an empty search_path, and no anonymous access.
+ * append-only revision log, the idempotency key, the write path closed to
+ * everything but the two definer functions, and no anonymous access.
  *
  * Each check is a pure function over SQL text, and the negative fixtures at
  * the bottom prove the tripwires actually fire.
@@ -25,14 +25,16 @@ const lower = sql.toLowerCase();
 const TABLES = ["pisac_documents", "pisac_document_revisions"] as const;
 type TableName = (typeof TABLES)[number];
 
-const RPC = "pisac_commit_document";
-const RPC_SIGNATURE = `public.${RPC}(uuid, bigint, jsonb, text)`;
+const COMMIT_FN = "pisac_commit_document";
+const ENSURE_FN = "pisac_ensure_document";
+const COMMIT_SIGNATURE = `public.${COMMIT_FN}(uuid, bigint, jsonb, text)`;
+const ENSURE_SIGNATURE = `public.${ENSURE_FN}(uuid)`;
 
 /**
  * Strips `--` line comments, block comments and dollar-quoted function
  * bodies, then splits on `;`. The body has to go before the split: a plpgsql
  * body is full of semicolons that are not statement ends, and the
- * function header (`security invoker`, `set search_path`) is what matters
+ * function header (`security definer`, `set search_path`) is what matters
  * here anyway.
  */
 function splitStatements(source: string): string[] {
@@ -72,7 +74,69 @@ function policies(source: string): { table: string | null; command: string | nul
     }));
 }
 
+/**
+ * The plpgsql body of one function: everything between the `$$` markers that
+ * follow its `create or replace`. Lower-cased but otherwise verbatim, because
+ * the order of statements inside it is exactly what the lock tripwire checks.
+ */
+function functionBody(source: string, name: string): string | null {
+  const text = source.toLowerCase();
+  const start = text.indexOf(`create or replace function public.${name}(`);
+  if (start < 0) {
+    return null;
+  }
+  const open = text.indexOf("$$", start);
+  if (open < 0) {
+    return null;
+  }
+  const close = text.indexOf("$$", open + 2);
+  if (close < 0) {
+    return null;
+  }
+  return text.slice(open + 2, close);
+}
+
+const DUPLICATE_LOOKUP = "and r.client_transaction_id = p_client_transaction_id";
+
+/**
+ * Where the commit body locks, where it compares the base revision, and every
+ * place it looks the idempotency key up. Character offsets, so "before" and
+ * "after" are decidable rather than assumed.
+ */
+function commitBodyOrder(body: string): {
+  lock: number;
+  cas: number;
+  duplicateLookups: number[];
+} {
+  const duplicateLookups: number[] = [];
+  let at = body.indexOf(DUPLICATE_LOOKUP);
+  while (at >= 0) {
+    duplicateLookups.push(at);
+    at = body.indexOf(DUPLICATE_LOOKUP, at + DUPLICATE_LOOKUP.length);
+  }
+
+  return {
+    lock: body.indexOf("for update"),
+    cas: body.indexOf("is distinct from p_base_revision"),
+    duplicateLookups,
+  };
+}
+
+/** True when the row is locked before the base revision is ever compared. */
+function locksBeforeCompare(body: string): boolean {
+  const { lock, cas } = commitBodyOrder(body);
+  return lock >= 0 && cas >= 0 && lock < cas;
+}
+
+/** True when the idempotency key is looked up again after the lock is taken. */
+function rechecksUnderLock(body: string): boolean {
+  const { lock, duplicateLookups } = commitBodyOrder(body);
+  return lock >= 0 && duplicateLookups.some((at) => at > lock);
+}
+
 const statements = splitStatements(sql);
+const commitBody = functionBody(sql, COMMIT_FN) ?? "";
+const ensureBody = functionBody(sql, ENSURE_FN) ?? "";
 
 describe("2026091905_f1_documents.sql", () => {
   it("lives under supabase/migrations with the planned filename", () => {
@@ -108,69 +172,103 @@ describe("2026091905_f1_documents.sql", () => {
     expect(lower).toContain("unique (document_id, revision)");
   });
 
+  it("stores a content digest so a reused idempotency key can be told apart", () => {
+    expect(lower).toContain("document_digest text not null");
+    expect(lower).toContain("char_length(document_digest) = 32");
+    expect(commitBody).toContain("md5(p_document::text)");
+    expect(commitBody).toContain("'status', 'txid_reused'");
+  });
+
   it("guards the client transaction id length in the schema, not only in the RPC", () => {
     expect(lower).toContain("char_length(client_transaction_id) between 1 and 128");
   });
 
-  it("gives the revision log select and insert policies only", () => {
-    const commands = policies(sql)
-      .filter((policy) => policy.table === "pisac_document_revisions")
-      .map((policy) => policy.command);
+  it("caps the document at 1 MiB in the database as well as the client", () => {
+    expect(commitBody).toContain("pg_column_size(p_document) > 1048576");
+    expect(commitBody).toContain("'status', 'too_large'");
+  });
+});
+
+describe("the write path is the two definer functions and nothing else", () => {
+  it("declares both functions security definer with an empty search_path", () => {
+    for (const name of [COMMIT_FN, ENSURE_FN]) {
+      const definition = statements.find((statement) =>
+        statement.startsWith(`create or replace function public.${name}(`),
+      );
+
+      expect(definition, name).toBeDefined();
+      expect(definition, name).toContain("security definer");
+      expect(definition, name).toContain("set search_path = ''");
+      expect(definition, name).not.toContain("security invoker");
+    }
+  });
+
+  it("checks auth.uid() for null in both bodies before anything else", () => {
+    for (const body of [commitBody, ensureBody]) {
+      expect(body).toContain("v_actor := auth.uid()");
+      expect(body).toContain("if v_actor is null then");
+      expect(body).toContain("'status', 'unauthenticated'");
+      expect(body.indexOf("if v_actor is null then")).toBeLessThan(
+        body.indexOf("public.pisac_documents"),
+      );
+    }
+  });
+
+  it("proves ownership inside each body, because definer skips RLS", () => {
+    // document -> project -> workspace -> owner, against the session's actor.
+    expect(commitBody).toContain("join public.pisac_projects p on p.id = d.project_id");
+    expect(commitBody).toContain("join public.pisac_workspaces w on w.id = p.workspace_id");
+    expect(commitBody).toContain("w.owner_id = v_actor");
+    expect(commitBody).toContain("'status', 'not_found'");
+
+    expect(ensureBody).toContain("join public.pisac_workspaces w on w.id = p.workspace_id");
+    expect(ensureBody).toContain("w.owner_id = v_actor");
+    expect(ensureBody).toContain("'status', 'not_found'");
+  });
+
+  it("revokes insert, update and delete on both tables from authenticated", () => {
+    for (const table of TABLES) {
+      expect(statements).toContain(
+        `revoke insert, update, delete on table public.${table} from authenticated`,
+      );
+    }
+  });
+
+  it("leaves authenticated with select policies only", () => {
+    const commands = policies(sql).map((policy) => policy.command);
 
     expect(commands.length).toBeGreaterThanOrEqual(2);
-    expect(new Set(commands)).toEqual(new Set(["select", "insert"]));
+    expect(new Set(commands)).toEqual(new Set(["select"]));
   });
 
-  it("revokes update and delete on the revision log from authenticated too", () => {
-    expect(statements).toContain(
-      "revoke update, delete on table public.pisac_document_revisions from authenticated",
-    );
-  });
-
-  it("never lets the revision log be deleted from, policy or not", () => {
-    expect(lower).not.toContain("for delete");
-  });
-
-  it("scopes every policy through project -> workspace ownership", () => {
-    expect(lower).toContain("auth.uid()");
-    expect(lower).toContain("join public.pisac_workspaces w on w.id = p.workspace_id");
+  it("declares no insert, update or delete policy anywhere in the file", () => {
+    // `for update of d` inside the commit body is a row lock, not a policy,
+    // so the check runs over statements with the bodies already stripped.
+    for (const clause of ["for insert", "for delete"]) {
+      expect(statements.some((statement) => statement.includes(clause))).toBe(false);
+    }
+    expect(
+      statements.some(
+        (statement) => statement.startsWith("create policy") && statement.includes("for update"),
+      ),
+    ).toBe(false);
   });
 
   it("targets only the two document tables in every create policy", () => {
     const targets = policies(sql).map((policy) => policy.table);
 
-    expect(targets.length).toBeGreaterThanOrEqual(5);
+    expect(targets.length).toBeGreaterThanOrEqual(2);
     for (const target of targets) {
       expect(TABLES).toContain(target as TableName);
     }
   });
 
-  it("declares the RPC as security invoker with an empty search_path", () => {
-    const definition = statements.find((statement) =>
-      statement.startsWith(`create or replace function public.${RPC}(`),
-    );
-
-    expect(definition).toBeDefined();
-    expect(definition).toContain("security invoker");
-    expect(definition).toContain("set search_path = ''");
-    expect(definition).not.toContain("security definer");
-  });
-
-  it("returns the four commit statuses the client contract parses", () => {
-    for (const status of ["committed", "duplicate", "stale_base", "not_found"]) {
-      expect(lower).toContain(`'status', '${status}'`);
-    }
-  });
-
-  it("locks the document row and compares the base revision before writing", () => {
-    expect(lower).toContain("for update");
-    expect(lower).toContain("if v_current is distinct from p_base_revision then");
-  });
-
   it("revokes execute from public and anon, granting it to authenticated only", () => {
-    expect(statements).toContain(`revoke all on function ${RPC_SIGNATURE} from public`);
-    expect(statements).toContain(`revoke all on function ${RPC_SIGNATURE} from anon`);
-    expect(statements).toContain(`grant execute on function ${RPC_SIGNATURE} to authenticated`);
+    for (const signature of [COMMIT_SIGNATURE, ENSURE_SIGNATURE]) {
+      expect(statements).toContain(`revoke all on function ${signature} from public`);
+      expect(statements).toContain(`revoke all on function ${signature} from anon`);
+      expect(statements).toContain(`grant execute on function ${signature} to authenticated`);
+    }
   });
 
   it("names the anon role only to revoke from it", () => {
@@ -186,7 +284,56 @@ describe("2026091905_f1_documents.sql", () => {
   it("never mentions the service role", () => {
     expect(lower).not.toContain("service_role");
   });
+});
 
+describe("the commit body locks before it decides", () => {
+  it("has a readable body for both functions", () => {
+    expect(commitBody.length).toBeGreaterThan(200);
+    expect(ensureBody.length).toBeGreaterThan(200);
+  });
+
+  it("takes the row lock before comparing the base revision", () => {
+    expect(locksBeforeCompare(commitBody)).toBe(true);
+  });
+
+  it("looks the idempotency key up before the lock, as the fast path", () => {
+    const { lock, duplicateLookups } = commitBodyOrder(commitBody);
+    expect(duplicateLookups.length).toBeGreaterThanOrEqual(2);
+    expect(duplicateLookups[0]).toBeLessThan(lock);
+  });
+
+  it("re-checks the idempotency key under the lock", () => {
+    expect(rechecksUnderLock(commitBody)).toBe(true);
+  });
+
+  it("returns the commit statuses the client contract parses", () => {
+    for (const status of [
+      "committed",
+      "duplicate",
+      "txid_reused",
+      "stale_base",
+      "too_large",
+      "not_found",
+      "unauthenticated",
+      "invalid_document",
+      "invalid_client_transaction_id",
+    ]) {
+      expect(commitBody).toContain(`'status', '${status}'`);
+    }
+  });
+
+  it("writes the revision and the pointer only after the compare-and-set", () => {
+    const { cas } = commitBodyOrder(commitBody);
+    expect(commitBody.indexOf("insert into public.pisac_document_revisions")).toBeGreaterThan(cas);
+    expect(commitBody.indexOf("update public.pisac_documents")).toBeGreaterThan(cas);
+  });
+
+  it("states the isolation level it was written for", () => {
+    expect(lower).toContain("read committed");
+  });
+});
+
+describe("2026091905 housekeeping", () => {
   it("reuses the updated_at trigger function from the workspace migration", () => {
     expect(statements.some((s) => s.startsWith("create trigger pisac_documents_set_updated_at")))
       .toBe(true);
@@ -244,5 +391,50 @@ describe("migration tripwires fire on bad SQL", () => {
     expect(policies("create policy p for select using (true);")).toEqual([
       { table: null, command: null },
     ]);
+  });
+
+  it("extracts a function body, and reports a missing one instead of passing", () => {
+    const source = "create or replace function public.f(x int) returns int as $$ BODY $$;";
+    expect(functionBody(source, "f")).toBe(" body ");
+    expect(functionBody(source, "g")).toBeNull();
+    expect(functionBody("create or replace function public.f(x int)", "f")).toBeNull();
+  });
+
+  it("catches a body that compares the base revision before taking the lock", () => {
+    const doctored = `
+      if v_current is distinct from p_base_revision then return null; end if;
+      select d.current_revision into v_current from public.pisac_documents d
+        where d.id = p_document_id for update;
+    `;
+    expect(locksBeforeCompare(doctored)).toBe(false);
+  });
+
+  it("catches a body that never locks at all", () => {
+    const doctored = "if v_current is distinct from p_base_revision then return null; end if;";
+    expect(locksBeforeCompare(doctored)).toBe(false);
+    expect(rechecksUnderLock(doctored)).toBe(false);
+  });
+
+  it("catches a body that checks the idempotency key only before the lock", () => {
+    const doctored = `
+      select r.revision from public.pisac_document_revisions r
+        where r.document_id = p_document_id ${DUPLICATE_LOOKUP};
+      select d.current_revision into v_current from public.pisac_documents d for update;
+      if v_current is distinct from p_base_revision then return null; end if;
+    `;
+    expect(locksBeforeCompare(doctored)).toBe(true);
+    expect(commitBodyOrder(doctored).duplicateLookups).toHaveLength(1);
+    expect(rechecksUnderLock(doctored)).toBe(false);
+  });
+
+  it("accepts a body that locks first and re-checks after", () => {
+    const good = `
+      select r.revision from public.pisac_document_revisions r where 1 ${DUPLICATE_LOOKUP};
+      select d.current_revision into v_current from public.pisac_documents d for update;
+      select r.revision from public.pisac_document_revisions r where 1 ${DUPLICATE_LOOKUP};
+      if v_current is distinct from p_base_revision then return null; end if;
+    `;
+    expect(locksBeforeCompare(good)).toBe(true);
+    expect(rechecksUnderLock(good)).toBe(true);
   });
 });

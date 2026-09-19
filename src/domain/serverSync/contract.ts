@@ -24,12 +24,30 @@ import type { CanonicalDocument, DocumentTransaction } from "../document";
 export const COMMIT_STATUSES = [
   "committed",
   "duplicate",
+  "txid_reused",
   "stale_base",
+  "too_large",
   "not_found",
   "unauthenticated",
   "invalid_document",
   "invalid_client_transaction_id",
 ] as const;
+
+/**
+ * 1 MiB, mirrored by the `pg_column_size` guard in the RPC. Checked here
+ * first so an oversized document never leaves the machine, and there so a
+ * direct call cannot plant one in the revision log forever.
+ */
+export const MAX_DOCUMENT_BYTES = 1_048_576;
+
+/** UTF-8 byte length of a document as it would be sent, not its character count. */
+export function documentByteLength(document: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(document) ?? "").length;
+}
+
+export function exceedsDocumentSizeLimit(document: unknown): boolean {
+  return documentByteLength(document) > MAX_DOCUMENT_BYTES;
+}
 
 export type CommitStatus = (typeof COMMIT_STATUSES)[number];
 
@@ -43,7 +61,10 @@ export type CommitStatus = (typeof COMMIT_STATUSES)[number];
 export type CommitOutcome =
   | { status: "committed"; revision: number }
   | { status: "duplicate"; revision: number }
+  /** The same idempotency key was sent with different content: a client bug. */
+  | { status: "txid_reused" }
   | { status: "stale_base"; currentRevision: number }
+  | { status: "too_large" }
   | { status: "not_found" }
   | { status: "unauthenticated" }
   | { status: "invalid_document" }
@@ -51,6 +72,16 @@ export type CommitOutcome =
 
 /** Returned when the payload is not a recognisable outcome at all. */
 export type InvalidCommitOutcome = { status: "invalid" };
+
+/**
+ * What `pisac_ensure_document` answers. The document stays `unknown`: it is
+ * canonical server state, but it is still untrusted bytes until
+ * `validateDocument` has seen it.
+ */
+export type EnsureOutcome =
+  | { status: "ok"; documentId: string; revision: number; document: unknown }
+  | { status: "not_found" }
+  | { status: "unauthenticated" };
 
 /** Arguments of the RPC, named exactly as the SQL function declares them. */
 export type CommitRequest = {
@@ -72,6 +103,7 @@ export type CommitRequest = {
  */
 export type ServerSyncErrorCode =
   | "zapis-neispravan"
+  | "prevelik"
   | "rad-nepoznat"
   | "citanje"
   | "slanje"
@@ -79,6 +111,7 @@ export type ServerSyncErrorCode =
 
 export const SERVER_SYNC_ERROR_MESSAGES: Record<ServerSyncErrorCode, string> = {
   "zapis-neispravan": "Zapis rada nije u ispravnom obliku, pa nije poslan.",
+  prevelik: "Dokument je prevelik za spremanje.",
   "rad-nepoznat": "Rad nije pronađen na poslužitelju.",
   citanje: "Rad trenutačno nije moguće dohvatiti s poslužitelja.",
   slanje: "Promjena nije poslana na poslužitelj. Pokušat ćemo ponovno.",
@@ -137,9 +170,11 @@ function isRevision(value: unknown, minimum: number): value is number {
 /**
  * Narrows an untrusted RPC payload to a `CommitOutcome`.
  *
- * Strict by design: an unknown status, a missing revision or an extra field
- * all yield `{ status: 'invalid' }`. Guessing here would mean guessing about
- * an author's document.
+ * Strict about what it reads: an unknown status or a missing, fractional or
+ * unsafe revision all yield `{ status: 'invalid' }`, because guessing here
+ * would mean guessing about an author's document. Keys it does not know are
+ * ignored rather than rejected, so adding a field to the RPC's answer in a
+ * later migration does not break older clients.
  */
 export function parseCommitOutcome(raw: unknown): CommitOutcome | InvalidCommitOutcome {
   if (!isPlainObject(raw)) {
@@ -169,6 +204,8 @@ export function parseCommitOutcome(raw: unknown): CommitOutcome | InvalidCommitO
       }
       return { status: "stale_base", currentRevision };
     }
+    case "txid_reused":
+    case "too_large":
     case "not_found":
     case "unauthenticated":
     case "invalid_document":
@@ -177,6 +214,38 @@ export function parseCommitOutcome(raw: unknown): CommitOutcome | InvalidCommitO
     default:
       return { status: "invalid" };
   }
+}
+
+/** Narrows an untrusted `pisac_ensure_document` payload. Same rules. */
+export function parseEnsureOutcome(raw: unknown): EnsureOutcome | InvalidCommitOutcome {
+  if (!isPlainObject(raw)) {
+    return { status: "invalid" };
+  }
+
+  const status = ownProperty(raw, "status");
+
+  if (status === "not_found" || status === "unauthenticated") {
+    return { status };
+  }
+  if (status !== "ok") {
+    return { status: "invalid" };
+  }
+
+  const documentId = ownProperty(raw, "documentId");
+  const revision = ownProperty(raw, "revision");
+
+  if (typeof documentId !== "string" || documentId === "") {
+    return { status: "invalid" };
+  }
+  // 0 is the revision of a document that exists and holds no commit yet.
+  if (!isRevision(revision, 0)) {
+    return { status: "invalid" };
+  }
+  if (!Object.prototype.hasOwnProperty.call(raw, "document")) {
+    return { status: "invalid" };
+  }
+
+  return { status: "ok", documentId, revision, document: raw.document };
 }
 
 /**
@@ -196,10 +265,19 @@ export function commitRequestFromTransaction(
   if (typeof documentId !== "string" || documentId === "") {
     return null;
   }
-  if (typeof tx.clientTransactionId !== "string" || tx.clientTransactionId === "") {
+  // The column and the RPC both cap this at 128; refusing here means the
+  // over-long key never becomes a round trip that can only fail.
+  if (
+    typeof tx.clientTransactionId !== "string" ||
+    tx.clientTransactionId === "" ||
+    tx.clientTransactionId.length > 128
+  ) {
     return null;
   }
   if (!isRevision(tx.baseRevision, 0)) {
+    return null;
+  }
+  if (exceedsDocumentSizeLimit(tx.document)) {
     return null;
   }
 

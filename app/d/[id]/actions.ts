@@ -1,10 +1,10 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
 import {
-  emptyDocument,
   validateDocument,
   type CanonicalDocument,
   type DocumentTransaction,
@@ -12,7 +12,9 @@ import {
 import {
   SERVER_SYNC_ERROR_MESSAGES,
   commitRequestFromTransaction,
+  exceedsDocumentSizeLimit,
   parseCommitOutcome,
+  parseEnsureOutcome,
   type CommitOutcome,
   type ServerSyncErrorCode,
 } from "@/domain/serverSync/contract";
@@ -21,10 +23,13 @@ import {
  * Server actions for the canonical server document (F1-4a).
  *
  * The canonical revision lives in Postgres and nowhere else: the local
- * journal holds a *base* revision, never one it minted itself. Everything
- * here goes through `pisac_commit_document`, which does the compare-and-set
- * under a row lock — this file must never write `pisac_documents` directly
- * from a read-modify-write, because that is last-write-wins by another name.
+ * journal holds a *base* revision, never one it minted itself.
+ *
+ * Neither table is writable by `authenticated` — see the revokes in
+ * supabase/migrations/2026091905_f1_documents.sql. Both writes go through a
+ * security definer function that checks ownership itself, so there is no
+ * read-modify-write in this file at all; a `.update()` here would be
+ * last-write-wins by another name, and the database would now refuse it.
  *
  * Like the workspace actions, expected failures are returned as typed error
  * objects with a Croatian message; the only control-flow exception is
@@ -44,14 +49,10 @@ export type ServerSyncError = {
 export type ServerSyncResult<T> = { ok: true; value: T } | ServerSyncError;
 
 export type LoadedDocument = {
+  /** The server-side document row id, which the commit RPC takes. */
+  documentId: string;
   document: CanonicalDocument;
   revision: number;
-};
-
-type DocumentRow = {
-  id: string;
-  current_revision: number;
-  current_document: unknown;
 };
 
 function fail(code: ServerSyncErrorCode): ServerSyncError {
@@ -59,7 +60,7 @@ function fail(code: ServerSyncErrorCode): ServerSyncError {
 }
 
 /** Authenticated Supabase client. Redirects when there is no session. */
-async function requireSession() {
+async function requireSession(): Promise<SupabaseClient> {
   const supabase = await createClient();
   if (!supabase) {
     redirect("/postavljanje");
@@ -85,100 +86,73 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Get-or-create the single F1 document of a project.
+ * Get-or-create the single F1 document of a project, through
+ * `pisac_ensure_document`.
  *
- * RLS scopes the read to the owner, so a project that is not the caller's is
- * indistinguishable from one that does not exist — and the insert would be
- * refused by the policy anyway. A lost race on the unique `project_id` is
- * resolved by re-reading, exactly like `ensureWorkspace`.
+ * The function proves ownership against `auth.uid()` in its own body, so a
+ * project that is not the caller's comes back as `not_found` — the same
+ * answer as one that does not exist, which is what the page already relies on
+ * so the id cannot be probed.
+ *
+ * What comes back is untrusted too: it may have been written by an older
+ * client or a future schema version. An unreadable canonical document is
+ * reported rather than repaired or silently replaced by an empty one.
  */
-async function ensureDocumentRow(projectId: string): Promise<ServerSyncResult<DocumentRow>> {
+async function ensureDocumentRow(
+  supabase: SupabaseClient,
+  projectId: string,
+): Promise<ServerSyncResult<LoadedDocument>> {
   if (typeof projectId !== "string" || projectId === "") {
     return fail("rad-nepoznat");
   }
 
-  const supabase = await requireSession();
-  const columns = "id, current_revision, current_document";
+  const { data, error } = await supabase.rpc("pisac_ensure_document", {
+    p_project_id: projectId,
+  });
 
-  const existing = await supabase
-    .from("pisac_documents")
-    .select(columns)
-    .eq("project_id", projectId)
-    .maybeSingle();
-
-  if (existing.error) {
-    return fail("citanje");
-  }
-  if (existing.data) {
-    return { ok: true, value: existing.data as DocumentRow };
-  }
-
-  // Revision 0 with one empty paragraph: the document exists, and nothing has
-  // been committed to it yet. That is not the same as "saved".
-  const created = await supabase
-    .from("pisac_documents")
-    .insert({
-      project_id: projectId,
-      current_revision: 0,
-      current_document: emptyDocument(),
-    })
-    .select(columns)
-    .single();
-
-  if (created.error) {
-    const retry = await supabase
-      .from("pisac_documents")
-      .select(columns)
-      .eq("project_id", projectId)
-      .maybeSingle();
-
-    if (retry.error || !retry.data) {
-      return fail("rad-nepoznat");
-    }
-    return { ok: true, value: retry.data as DocumentRow };
-  }
-
-  return { ok: true, value: created.data as DocumentRow };
-}
-
-/** Get-or-create, exposed for the page so a first visit has a document row. */
-export async function ensureDocument(projectId: string): Promise<ServerSyncResult<LoadedDocument>> {
-  const row = await ensureDocumentRow(projectId);
-  if (!row.ok) {
-    return row;
-  }
-  return toLoadedDocument(row.value);
-}
-
-/**
- * The canonical document and its revision, for page load.
- *
- * What comes back from the database is untrusted too: it may have been
- * written by an older client or a future schema version. An unreadable
- * canonical document is reported rather than repaired or silently replaced by
- * an empty one, because a caller that showed an empty document at the stored
- * revision would invite the author to overwrite their own text.
- */
-function toLoadedDocument(row: DocumentRow): ServerSyncResult<LoadedDocument> {
-  const revision = row.current_revision;
-  if (typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 0) {
+  if (error) {
     return fail("citanje");
   }
 
-  const validated = validateDocument(row.current_document);
+  const outcome = parseEnsureOutcome(data);
+
+  if (outcome.status === "invalid") {
+    return fail("odgovor-neispravan");
+  }
+  if (outcome.status === "unauthenticated") {
+    redirect("/prijava");
+  }
+  if (outcome.status === "not_found") {
+    return fail("rad-nepoznat");
+  }
+
+  const validated = validateDocument(outcome.document);
   if (!validated.ok) {
     return fail("zapis-neispravan");
   }
 
-  return { ok: true, value: { document: validated.doc, revision } };
+  return {
+    ok: true,
+    value: {
+      documentId: outcome.documentId,
+      document: validated.doc,
+      revision: outcome.revision,
+    },
+  };
 }
 
-export async function loadDocument(projectId: string): Promise<ServerSyncResult<LoadedDocument>> {
-  const row = await ensureDocumentRow(projectId);
-  if (!row.ok) {
-    return row;
-  }
-  return toLoadedDocument(row.value);
+/** Get-or-create, for the page so a first visit already has a document row. */
+export async function ensureDocument(
+  projectId: string,
+): Promise<ServerSyncResult<LoadedDocument>> {
+  return ensureDocumentRow(await requireSession(), projectId);
+}
+
+/** The canonical document and its revision, for page load. */
+export async function loadDocument(
+  projectId: string,
+): Promise<ServerSyncResult<LoadedDocument>> {
+  return ensureDocumentRow(await requireSession(), projectId);
 }
 
 /**
@@ -240,9 +214,10 @@ function parseCommitPayload(raw: unknown): DocumentTransaction | null {
 /**
  * One compare-and-set round trip.
  *
- * Order matters: the payload is validated, then the document row is ensured,
- * then the RPC runs. Nothing is written on a payload the canonical model
- * cannot express.
+ * Order matters: the payload is validated and measured, then the document row
+ * is ensured, then the RPC runs — all on one session. Nothing is written on a
+ * payload the canonical model cannot express, and an oversized document never
+ * leaves this process.
  */
 export async function commitDocument(
   projectId: string,
@@ -253,17 +228,22 @@ export async function commitDocument(
     return fail("zapis-neispravan");
   }
 
-  const row = await ensureDocumentRow(projectId);
+  if (exceedsDocumentSizeLimit(tx.document)) {
+    return fail("prevelik");
+  }
+
+  const supabase = await requireSession();
+
+  const row = await ensureDocumentRow(supabase, projectId);
   if (!row.ok) {
     return row;
   }
 
-  const request = commitRequestFromTransaction(row.value.id, tx);
+  const request = commitRequestFromTransaction(row.value.documentId, tx);
   if (!request) {
     return fail("zapis-neispravan");
   }
 
-  const supabase = await requireSession();
   const { data, error } = await supabase.rpc("pisac_commit_document", request);
 
   if (error) {

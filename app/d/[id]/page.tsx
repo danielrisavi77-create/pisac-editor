@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
-import { emptyDocument } from "@/domain/document";
 import { createClient } from "@/lib/supabase/server";
 
 import { ensureDocument } from "./actions";
@@ -69,19 +68,20 @@ export default async function DocumentPage({
       <h1 style={{ fontSize: "1.75rem", margin: "0 0 1.5rem" }}>{project.title}</h1>
 
       {/*
-        Three sources, in order of authority for *starting* the editor:
-        the local journal snapshot (read in the client, see editor-client),
-        then the canonical server document, then an empty document.
+        Two sources for *starting* the editor: the local journal snapshot
+        (read in the client, see editor-client) and the canonical server
+        document. There is deliberately no third, empty one — when `server`
+        could not be read and the journal is empty, the client says so
+        instead of opening blank content that the author would then commit
+        over canonical text this request simply failed to fetch.
 
-        `server` being unreadable is not fatal: the page stays editable and
-        simply makes no claim about a server revision. Passing the empty
-        document at `serverRevision` 0 instead would invite the author to
-        commit over canonical text this request failed to read.
+        The journal is client-side, so which of the two wins can only be
+        decided there; the page's job is to pass the server side honestly,
+        `null` and all.
       */}
       <EditorClient
         documentId={project.id}
         projectId={project.id}
-        initialDocument={emptyDocument()}
         initialServerDocument={server.ok ? server.value.document : null}
         serverRevision={server.ok ? server.value.revision : null}
       />

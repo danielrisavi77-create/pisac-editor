@@ -48,6 +48,11 @@ import {
   type LocalSaveFailureReason,
   type SyncState,
 } from "@/domain/sync";
+import {
+  LOAD_FAILURE_MESSAGE,
+  resolveInitialDocument,
+  type RevisionedDocument,
+} from "@/domain/serverSync/bootstrap";
 import { openJournal, type JournalDatabase } from "@/lib/journal/db";
 import { loadJournal, markState, saveLocal } from "@/lib/journal/journal";
 import { acquireDocumentLock, documentLockName } from "@/lib/journal/lock";
@@ -100,8 +105,6 @@ export type EditorClientProps = {
    * nothing in this step sends anything to the server.
    */
   projectId: string;
-  /** Last-resort fallback when there is neither a journal snapshot nor a server document. */
-  initialDocument: CanonicalDocument;
   /** Canonical server document, or `null` when this request could not read one. */
   initialServerDocument: CanonicalDocument | null;
   /** Canonical server revision, or `null` when unknown. Never invented locally. */
@@ -129,20 +132,20 @@ function stateAfterLocalFailure(reason: LocalSaveFailureReason): SyncState {
 
 export default function EditorClient({
   documentId,
-  initialDocument,
   initialServerDocument,
   serverRevision,
 }: EditorClientProps) {
   const [boot, setBoot] = useState<Boot>({ status: "loading" });
 
   /**
-   * What to start from when the journal has nothing: the canonical server
-   * document, and only then an empty one. The base revision follows the same
-   * source — claiming the server's revision for a document that did not come
-   * from the server would make the next compare-and-set lie.
+   * The server side of the bootstrap, or `null`. Both halves are required:
+   * a document without its revision is not something a compare-and-set can
+   * ever be built on, so it is treated as no answer at all.
    */
-  const serverDocument = initialServerDocument ?? initialDocument;
-  const serverBase = initialServerDocument !== null ? (serverRevision ?? 0) : 0;
+  const server: RevisionedDocument | null =
+    initialServerDocument !== null && serverRevision !== null
+      ? { document: initialServerDocument, revision: serverRevision }
+      : null;
 
   // Open the journal, claim the writer lock and read the journal before the
   // editor mounts: the editor takes its initial content once, so starting it
@@ -200,15 +203,22 @@ export default function EditorClient({
   }
 
   if (boot.status === "failed") {
-    // No journal: the page still has to be editable, but nothing about this
-    // session is durable and the state says so.
+    // No journal at all, so the server document is the only candidate. If it
+    // is missing too there is nothing honest to edit.
+    const resolved = resolveInitialDocument(null, server);
+    if (resolved.mode === "error") {
+      return <LoadFailure />;
+    }
+
+    // The page stays editable, but nothing about this session is durable and
+    // the state says so.
     return (
       <JournalledEditor
         key={`${documentId}:no-journal`}
         db={null}
         documentId={documentId}
-        document={serverDocument}
-        baseRevision={serverBase}
+        document={resolved.document}
+        baseRevision={resolved.revision}
         initialSyncState={stateAfterLocalFailure(boot.reason)}
         blocked={boot.reason}
       />
@@ -216,14 +226,22 @@ export default function EditorClient({
   }
 
   const snapshot = boot.contents.snapshot;
+  const resolved = resolveInitialDocument(
+    snapshot ? { document: snapshot.document, revision: snapshot.revision } : null,
+    server,
+  );
+
+  if (resolved.mode === "error") {
+    return <LoadFailure />;
+  }
 
   return (
     <JournalledEditor
       key={documentId}
       db={boot.writable ? boot.db : null}
       documentId={documentId}
-      document={snapshot?.document ?? serverDocument}
-      baseRevision={snapshot?.revision ?? serverBase}
+      document={resolved.document}
+      baseRevision={resolved.revision}
       initialSyncState={
         boot.writable
           ? restoreSyncState(boot.contents)
@@ -231,6 +249,27 @@ export default function EditorClient({
       }
       blocked={boot.writable ? null : "multi-tab"}
     />
+  );
+}
+
+/**
+ * Neither the journal nor the server could supply a document.
+ *
+ * No editor is mounted: an empty editor here would be a blank page the author
+ * could type into and then commit over canonical text this request failed to
+ * read. ERROR is one of the 8 states, so the chip can say it in the machine's
+ * own vocabulary rather than inventing a ninth.
+ */
+function LoadFailure() {
+  return (
+    <div data-sync-state="ERROR">
+      <div style={statusBar}>
+        <SyncStatusChip state="ERROR" />
+      </div>
+      <div style={problem}>
+        <p style={{ margin: 0 }}>{LOAD_FAILURE_MESSAGE}</p>
+      </div>
+    </div>
   );
 }
 

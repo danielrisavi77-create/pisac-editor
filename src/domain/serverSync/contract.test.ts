@@ -1,11 +1,22 @@
 import { describe, expect, it } from "vitest";
 
-import { emptyDocument, type DocumentTransaction } from "../document";
+import {
+  emptyDocument,
+  newNodeId,
+  paragraphNode,
+  textNode,
+  type CanonicalDocument,
+  type DocumentTransaction,
+} from "../document";
 import {
   COMMIT_STATUSES,
+  MAX_DOCUMENT_BYTES,
   SERVER_SYNC_ERROR_MESSAGES,
   commitRequestFromTransaction,
+  documentByteLength,
+  exceedsDocumentSizeLimit,
   parseCommitOutcome,
+  parseEnsureOutcome,
   parseServerSyncErrorCode,
 } from "./contract";
 
@@ -18,6 +29,18 @@ function uuidSeq(): () => string {
   ];
   let i = 0;
   return () => ids[i++ % ids.length];
+}
+
+/** Just over 1 MiB once serialised, so the size guard has something to catch. */
+function oversizedDocument(): CanonicalDocument {
+  return {
+    schemaVersion: 1,
+    nodes: [
+      paragraphNode(newNodeId(() => "33333333-3333-4333-8333-333333333333"), [
+        textNode("a".repeat(MAX_DOCUMENT_BYTES + 10)),
+      ]),
+    ],
+  };
 }
 
 function tx(overrides: Partial<DocumentTransaction> = {}): DocumentTransaction {
@@ -62,6 +85,8 @@ describe("parseCommitOutcome — statuses the RPC can return", () => {
 
   it("parses the payload-free statuses", () => {
     for (const status of [
+      "txid_reused",
+      "too_large",
       "not_found",
       "unauthenticated",
       "invalid_document",
@@ -69,6 +94,13 @@ describe("parseCommitOutcome — statuses the RPC can return", () => {
     ] as const) {
       expect(parseCommitOutcome({ status })).toEqual({ status });
     }
+  });
+
+  it("keeps txid_reused distinct from duplicate — it is a client bug, not an ACK", () => {
+    expect(parseCommitOutcome({ status: "txid_reused" })).toEqual({ status: "txid_reused" });
+    expect(parseCommitOutcome({ status: "txid_reused", revision: 3 })).toEqual({
+      status: "txid_reused",
+    });
   });
 
   it("covers every status the contract declares", () => {
@@ -231,12 +263,94 @@ describe("commitRequestFromTransaction", () => {
     expect(commitRequestFromTransaction(DOC_ID, tx({ baseRevision: 1.5 }))).toBeNull();
     expect(commitRequestFromTransaction(DOC_ID, tx({ baseRevision: -1 }))).toBeNull();
   });
+
+  it("refuses a client transaction id longer than the column allows", () => {
+    expect(
+      commitRequestFromTransaction(DOC_ID, tx({ clientTransactionId: "x".repeat(128) })),
+    ).not.toBeNull();
+    expect(
+      commitRequestFromTransaction(DOC_ID, tx({ clientTransactionId: "x".repeat(129) })),
+    ).toBeNull();
+  });
+
+  it("refuses a document over the size limit before it becomes a round trip", () => {
+    expect(commitRequestFromTransaction(DOC_ID, tx({ document: oversizedDocument() }))).toBeNull();
+  });
+});
+
+describe("document size limit", () => {
+  it("matches the 1 MiB pg_column_size guard in the RPC", () => {
+    expect(MAX_DOCUMENT_BYTES).toBe(1_048_576);
+  });
+
+  it("measures UTF-8 bytes, not characters", () => {
+    expect(documentByteLength("č".repeat(10))).toBeGreaterThan(documentByteLength("a".repeat(10)));
+  });
+
+  it("lets an ordinary document through", () => {
+    expect(exceedsDocumentSizeLimit(emptyDocument(uuidSeq()))).toBe(false);
+  });
+
+  it("catches a document just over the limit", () => {
+    expect(exceedsDocumentSizeLimit(oversizedDocument())).toBe(true);
+  });
+});
+
+describe("parseEnsureOutcome", () => {
+  const ok = {
+    status: "ok",
+    documentId: DOC_ID,
+    revision: 0,
+    document: { schemaVersion: 1, nodes: [] },
+  };
+
+  it("parses a document that exists but holds no commit yet", () => {
+    expect(parseEnsureOutcome(ok)).toEqual({
+      status: "ok",
+      documentId: DOC_ID,
+      revision: 0,
+      document: ok.document,
+    });
+  });
+
+  it("hands the document back untouched, for validateDocument to judge", () => {
+    const parsed = parseEnsureOutcome({ ...ok, document: "not a document" });
+    expect(parsed).toEqual({ ...ok, document: "not a document" });
+  });
+
+  it("parses the refusals", () => {
+    expect(parseEnsureOutcome({ status: "not_found" })).toEqual({ status: "not_found" });
+    expect(parseEnsureOutcome({ status: "unauthenticated" })).toEqual({
+      status: "unauthenticated",
+    });
+  });
+
+  it("rejects a missing document id, revision or document", () => {
+    for (const key of ["documentId", "revision", "document"]) {
+      const partial: Record<string, unknown> = { ...ok };
+      delete partial[key];
+      expect(parseEnsureOutcome(partial)).toEqual({ status: "invalid" });
+    }
+  });
+
+  it("rejects a fractional or negative revision", () => {
+    expect(parseEnsureOutcome({ ...ok, revision: 1.5 })).toEqual({ status: "invalid" });
+    expect(parseEnsureOutcome({ ...ok, revision: -1 })).toEqual({ status: "invalid" });
+  });
+
+  it("rejects non-objects, unknown statuses and inherited fields", () => {
+    expect(parseEnsureOutcome(null)).toEqual({ status: "invalid" });
+    expect(parseEnsureOutcome({ status: "fine" })).toEqual({ status: "invalid" });
+    expect(parseEnsureOutcome(Object.create(ok))).toEqual({ status: "invalid" });
+  });
 });
 
 describe("SERVER_SYNC_ERROR_MESSAGES", () => {
   it("carries a non-empty Croatian message for every code", () => {
     const codes = Object.keys(SERVER_SYNC_ERROR_MESSAGES);
-    expect(codes.length).toBeGreaterThanOrEqual(5);
+    expect(codes).toContain("prevelik");
+    expect(SERVER_SYNC_ERROR_MESSAGES.prevelik).toBe("Dokument je prevelik za spremanje.");
+    expect(codes.length).toBeGreaterThanOrEqual(6);
     for (const message of Object.values(SERVER_SYNC_ERROR_MESSAGES)) {
       expect(message.length).toBeGreaterThan(0);
     }
