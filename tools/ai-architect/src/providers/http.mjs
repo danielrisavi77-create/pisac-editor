@@ -12,9 +12,9 @@ export async function fetchJson(url, options = {}, {
     try { json = text ? JSON.parse(text) : {}; }
     catch { json = { rawText: text }; }
     if (!response.ok) {
-      const error = new Error(`HTTP ${response.status}: ${JSON.stringify(json).slice(0, 1200)}`);
+      const error = new Error(`Provider HTTP ${response.status}`);
       error.status = response.status;
-      error.body = json;
+      error.code = "PROVIDER_HTTP_ERROR";
       throw error;
     }
     return json;
