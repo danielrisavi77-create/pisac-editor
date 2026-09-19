@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { scanRepo } from "./scanner.mjs";
 import { recommend } from "./router.mjs";
 import { routeAndExecute } from "./openrouter.mjs";
+import { recordOutcome, summarizeOutcomes } from "./outcomes.mjs";
 
 function rootFromToolDir() {
   return resolve(import.meta.dirname, "../../..");
@@ -37,6 +38,7 @@ if (command === "scan") {
       : ""
   ].filter(Boolean).join("\n\n");
 
+  const started = Date.now();
   const result = await routeAndExecute({
     model: rec.recommendation.exactModel || "openrouter/auto-beta",
     messages:[
@@ -44,15 +46,32 @@ if (command === "scan") {
       {role:"user",content:text}
     ]
   });
+
   console.log(JSON.stringify({
     recommendation:rec,
     result:{
       selectedModel:result.selectedModel,
       usage:result.usage,
+      latencyMs:Date.now()-started,
       output:result.output
     }
   }, null, 2));
+} else if (command === "record") {
+  const raw = args.join(" ").trim();
+  if (!raw) {
+    console.error('Usage: npm run record -- \'{"task":"coding","workflow":"plan-execute-test-review","prompt":"code-change","model":"...","quality":0.95,"costUsd":0.02,"latencyMs":8000,"tokens":3500,"success":true}\'');
+    process.exit(2);
+  }
+  let record;
+  try { record = JSON.parse(raw); }
+  catch {
+    console.error("record expects one JSON object.");
+    process.exit(2);
+  }
+  console.log(JSON.stringify(await recordOutcome(record, root), null, 2));
+} else if (command === "stats") {
+  console.log(JSON.stringify(await summarizeOutcomes(root), null, 2));
 } else {
   console.log("AI Architect v0.1");
-  console.log('Commands: scan | recommend "task" | execute "task"');
+  console.log('Commands: scan | recommend "task" | execute "task" | record JSON | stats');
 }
