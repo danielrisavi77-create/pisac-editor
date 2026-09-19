@@ -34,6 +34,32 @@ function containsAny(text, patterns) {
   return patterns.some((pattern) => pattern.test(text));
 }
 
+function hasSecretShapedValue(text) {
+  const candidates = [
+    ...String(text).matchAll(/\bsk-(?:proj-|ant-|or-v1-)?[A-Za-z0-9_-]{24,}/g),
+    ...String(text).matchAll(/\bAIza[0-9A-Za-z_-]{24,}/g)
+  ].map((m) => m[0]);
+  return candidates.some((token) => {
+    const lower = token.toLowerCase();
+    if (/(test|fake|example|placeholder|secret|provider|message)/.test(lower)) return false;
+    const body = token.replace(/^[^-]+-/, "");
+    return /[a-z]/i.test(body) && /[0-9]/.test(body) && shannonEntropy(body) >= 3.4;
+  });
+}
+
+function shannonEntropy(value) {
+  const text = String(value);
+  if (!text) return 0;
+  const counts = new Map();
+  for (const ch of text) counts.set(ch, (counts.get(ch) || 0) + 1);
+  let entropy = 0;
+  for (const count of counts.values()) {
+    const p = count / text.length;
+    entropy -= p * Math.log2(p);
+  }
+  return entropy;
+}
+
 export async function scanRepo(root = process.cwd()) {
   const files = await walk(root);
   const byExt = {};
@@ -120,10 +146,7 @@ export async function scanRepo(root = process.cwd()) {
     },
     security: {
       envUsage: /process\.env|import\.meta\.env/i.test(corpus),
-      clientSecretRiskSignal: containsAny(corpus, [
-        /\bsk-(?:proj-|ant-|or-v1-)?[A-Za-z0-9_-]{20,}/,
-        /\bAIza[0-9A-Za-z_-]{20,}/
-      ]),
+      clientSecretRiskSignal: hasSecretShapedValue(corpus),
       authSignals: /auth|login|session|jwt|oauth/i.test(corpus)
     },
     instructions: {
