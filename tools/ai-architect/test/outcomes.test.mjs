@@ -17,6 +17,7 @@ test("outcome telemetry stores hashes and lengths, not task/output content", () 
     reasoningLevel:"low",
     usage:{inputTokens:20,outputTokens:10,totalTokens:30},
     qualityScore:0.95,
+    costUsd:0.01,
     success:true
   });
   assert.equal("taskText" in clean, false);
@@ -39,9 +40,27 @@ test("unevaluated runtime outcomes cannot influence adaptive utility", () => {
   assert.equal(clean.eligibleForLearning, false);
 });
 
-test("quality score is required before cost can affect utility", () => {
+test("quality and known cost are required before utility can influence routing", () => {
   assert.equal(normalizedUtility({qualityScore:null,costUsd:0,success:true}), null);
+  assert.equal(normalizedUtility({qualityScore:0.95,costUsd:null,success:true}), null);
+  assert.ok(normalizedUtility({qualityScore:0.95,costUsd:0,latencyMs:1000,usage:{totalTokens:1000},success:true}) > 0);
   assert.ok(normalizedUtility({qualityScore:0.95,costUsd:0.01,latencyMs:1000,usage:{totalTokens:1000},success:true}) > 0);
+});
+
+test("unknown cost remains null and cannot mark an outcome learning-eligible", () => {
+  const clean=sanitizeOutcome({
+    taskClass:"grammar",
+    workflow:{id:"direct",version:"2.0.0"},
+    prompt:{id:"academic-writing",version:"2.0.0"},
+    provider:"openai",
+    actualModel:"gpt-5.6-sol",
+    qualityScore:0.99,
+    costUsd:null,
+    success:true
+  });
+  assert.equal(clean.costUsd,null);
+  assert.equal(clean.utility,null);
+  assert.equal(clean.eligibleForLearning,false);
 });
 
 test("outcome key includes versioned workflow and prompt plus actual model", () => {
