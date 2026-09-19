@@ -19,6 +19,7 @@
  */
 
 import type { CanonicalDocument, DocumentTransaction } from "../document";
+import { isPlainObject, ownProperty } from "../json";
 
 /** Every status `pisac_commit_document` can return, and nothing else. */
 export const COMMIT_STATUSES = [
@@ -129,28 +130,6 @@ export function parseServerSyncErrorCode(raw: unknown): ServerSyncErrorCode | nu
   return Object.prototype.hasOwnProperty.call(SERVER_SYNC_ERROR_MESSAGES, raw)
     ? (raw as ServerSyncErrorCode)
     : null;
-}
-
-/**
- * Own, non-inherited property. `in` and a bare index would both walk the
- * prototype chain, so `{"__proto__": ...}` or a `status` of `"constructor"`
- * would otherwise sail through.
- */
-function ownProperty(value: Record<string, unknown>, key: string): unknown {
-  return Object.prototype.hasOwnProperty.call(value, key) ? value[key] : undefined;
-}
-
-/**
- * Rejects arrays and anything with a surprising prototype. A `JSON.parse`d
- * response is a plain object; a class instance or an array is not the RPC
- * answering, it is something else pretending.
- */
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const proto = Object.getPrototypeOf(value);
-  return proto === Object.prototype || proto === null;
 }
 
 /**

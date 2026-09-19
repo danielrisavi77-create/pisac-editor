@@ -27,6 +27,8 @@
 
 import { formatDateTimeHr } from "@/lib/i18n/hr";
 
+import { isPlainObject, ownProperty } from "../json";
+
 /** Every status `pisac_create_checkpoint` can return, and nothing else. */
 export const CHECKPOINT_STATUSES = [
   "created",
@@ -148,24 +150,6 @@ export function checkpointCreatedMessage(name: string, revision: number): string
  * locally is not in it, and the author has to be told before they rely on it.
  */
 export const UNSYNCED_CHANGES_NOTE = "Nesinkronizirane promjene nisu uključene.";
-
-/**
- * Own, non-inherited property. `in` and a bare index would both walk the
- * prototype chain, so `{"__proto__": ...}` or a `status` of `"constructor"`
- * would otherwise sail through.
- */
-function ownProperty(value: Record<string, unknown>, key: string): unknown {
-  return Object.prototype.hasOwnProperty.call(value, key) ? value[key] : undefined;
-}
-
-/** Rejects arrays and anything with a surprising prototype. */
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const proto = Object.getPrototypeOf(value);
-  return proto === Object.prototype || proto === null;
-}
 
 /**
  * A revision as PostgREST serialises a `bigint`. Fractional, negative,

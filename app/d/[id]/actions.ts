@@ -1,17 +1,16 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { createClient } from "@/lib/supabase/server";
+import { requireSession } from "@/lib/supabase/session";
 import {
   ensureDocumentRow,
   fail,
   type LoadedDocument,
-  type ServerSyncError,
   type ServerSyncResult,
 } from "@/lib/document/queries";
 import { validateDocument, type DocumentTransaction } from "@/domain/document";
+import { isPlainObject, ownProperty } from "@/domain/json";
 import {
   CHECKPOINT_ERROR_MESSAGES,
   checkpointNameErrorCode,
@@ -50,33 +49,6 @@ import {
  * the pending queue and turning an ACK into SYNCED is F1-4b; this step only
  * provides the single round trip.
  */
-export type { LoadedDocument, ServerSyncError, ServerSyncResult };
-
-/** Authenticated Supabase client. Redirects when there is no session. */
-async function requireSession(): Promise<SupabaseClient> {
-  const supabase = await createClient();
-  if (!supabase) {
-    redirect("/postavljanje");
-  }
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/prijava");
-  }
-
-  return supabase;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const proto = Object.getPrototypeOf(value);
-  return proto === Object.prototype || proto === null;
-}
 
 /**
  * The canonical document and its revision, for the editor client.
@@ -90,7 +62,8 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 export async function loadDocument(
   projectId: string,
 ): Promise<ServerSyncResult<LoadedDocument>> {
-  return ensureDocumentRow(await requireSession(), projectId);
+  const { supabase } = await requireSession();
+  return ensureDocumentRow(supabase, projectId);
 }
 
 /**
@@ -104,13 +77,10 @@ function parseCommitPayload(raw: unknown): DocumentTransaction | null {
     return null;
   }
 
-  const own = (key: string): unknown =>
-    Object.prototype.hasOwnProperty.call(raw, key) ? raw[key] : undefined;
-
-  const kind = own("kind");
-  const clientTransactionId = own("clientTransactionId");
-  const baseRevision = own("baseRevision");
-  const createdAt = own("createdAt");
+  const kind = ownProperty(raw, "kind");
+  const clientTransactionId = ownProperty(raw, "clientTransactionId");
+  const baseRevision = ownProperty(raw, "baseRevision");
+  const createdAt = ownProperty(raw, "createdAt");
 
   if (kind !== "REPLACE_DOCUMENT") {
     return null;
@@ -135,7 +105,7 @@ function parseCommitPayload(raw: unknown): DocumentTransaction | null {
 
   // The authoritative structural check. It runs before any database call, so
   // a malformed document never reaches the revision log at all.
-  const validated = validateDocument(own("document"));
+  const validated = validateDocument(ownProperty(raw, "document"));
   if (!validated.ok) {
     return null;
   }
@@ -165,7 +135,7 @@ export async function commitDocument(
   projectId: string,
   payload: unknown,
 ): Promise<ServerSyncResult<CommitOutcome>> {
-  const supabase = await requireSession();
+  const { supabase } = await requireSession();
 
   const tx = parseCommitPayload(payload);
   if (!tx) {
@@ -241,7 +211,7 @@ export async function createCheckpoint(
   projectId: string,
   name: string,
 ): Promise<CheckpointResult<CreatedCheckpoint>> {
-  const supabase = await requireSession();
+  const { supabase } = await requireSession();
 
   const validated = validateCheckpointName(name);
   if (!validated.ok) {
@@ -296,7 +266,7 @@ export async function createCheckpoint(
 export async function listCheckpoints(
   projectId: string,
 ): Promise<CheckpointResult<CheckpointSummary[]>> {
-  const supabase = await requireSession();
+  const { supabase } = await requireSession();
 
   const row = await ensureDocumentRow(supabase, projectId);
   if (!row.ok) {

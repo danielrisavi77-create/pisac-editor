@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { requireSession } from "@/lib/supabase/session";
 import { formatDateHr, projectsHr } from "@/lib/i18n/hr";
 import { loadWorkspaceOverview } from "@/lib/workspace/queries";
 import {
@@ -67,20 +68,9 @@ export default async function WorkspacePage({
   searchParams: Promise<{ greska?: string | string[]; naziv?: string | string[] }>;
 }) {
   const params = await searchParams;
-  const supabase = await createClient();
-  if (!supabase) {
-    redirect("/postavljanje");
-  }
-
   // The one and only session round trip of this request: the queries below
   // take this client and this user id rather than resolving them again.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/prijava");
-  }
+  const { supabase, user } = await requireSession();
 
   const { workspace, projects } = await loadWorkspaceOverview(supabase, user.id);
   const errorCode = parseActionErrorCode(params.greska);

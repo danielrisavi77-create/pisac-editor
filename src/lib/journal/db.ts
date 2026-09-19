@@ -20,7 +20,6 @@ import type {
 import type { LocalSaveFailureReason } from "@/domain/sync/states";
 
 export const JOURNAL_DB_NAME = "pisac-journal";
-export const JOURNAL_DB_VERSION = 2;
 
 /**
  * Schema v1.

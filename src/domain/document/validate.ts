@@ -25,6 +25,7 @@ import {
   type Mark,
   type NodeId,
 } from "./schema";
+import { isPlainObject } from "../json";
 
 /** Stable error codes. Never renamed without a schema version bump. */
 export const VALIDATION_ERROR_CODES = [
@@ -63,16 +64,6 @@ const DOCUMENT_FIELDS = new Set(["schemaVersion", "nodes"]);
 const PARAGRAPH_FIELDS = new Set(["type", "id", "children"]);
 const HEADING_FIELDS = new Set(["type", "id", "level", "children"]);
 const INLINE_FIELDS = new Set(["type", "text", "marks"]);
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value) &&
-    (Object.getPrototypeOf(value) === Object.prototype ||
-      Object.getPrototypeOf(value) === null)
-  );
-}
 
 function checkUnknownFields(
   value: Record<string, unknown>,

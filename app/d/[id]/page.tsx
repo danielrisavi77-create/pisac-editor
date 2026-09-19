@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 import { ensureDocumentRow } from "@/lib/document/queries";
-import { createClient } from "@/lib/supabase/server";
+import { requireSession } from "@/lib/supabase/session";
 
 import EditorClient from "./editor-client";
 
@@ -20,20 +20,9 @@ export default async function DocumentPage({
 }) {
   const { id } = await params;
 
-  const supabase = await createClient();
-  if (!supabase) {
-    redirect("/postavljanje");
-  }
-
   // The one and only session round trip of this request: both queries below
   // take this client, rather than each resolving the session again.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/prijava");
-  }
+  const { supabase } = await requireSession();
 
   // RLS scopes this to the signed-in owner, so "not yours" and "does not
   // exist" are the same 404 — the page must not leak that the id is real.

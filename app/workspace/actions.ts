@@ -1,22 +1,18 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
-import { createClient } from "@/lib/supabase/server";
+import { requireSession } from "@/lib/supabase/session";
 import {
   countProjectsIn,
   ensureWorkspaceFor,
   fail,
   insertProject,
-  listProjectsIn,
-  type ActionError,
   type ActionResult,
 } from "@/lib/workspace/queries";
 import {
   exceedsProjectLimit,
   type Project,
-  type Workspace,
   validateProjectTitle,
 } from "@/domain/workspace/types";
 
@@ -31,46 +27,9 @@ import {
  *
  * They never throw for expected failures: callers get a typed error object
  * with a Croatian message. The only control-flow exception is `redirect`,
- * used when there is no session at all (`/prijava`) or no Supabase project
- * configured yet (`/postavljanje`).
+ * raised inside `requireSession` when there is no session at all
+ * (`/prijava`) or no Supabase project configured yet (`/postavljanje`).
  */
-export type { ActionError, ActionResult };
-
-/** Authenticated Supabase client plus the current user id. Redirects otherwise. */
-async function requireSession() {
-  const supabase = await createClient();
-  if (!supabase) {
-    redirect("/postavljanje");
-  }
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/prijava");
-  }
-
-  return { supabase, userId: user.id };
-}
-
-/** Get-or-create the caller's single personal workspace. */
-export async function ensureWorkspace(): Promise<ActionResult<Workspace>> {
-  const { supabase, userId } = await requireSession();
-  return ensureWorkspaceFor(supabase, userId);
-}
-
-/** Projects of the caller's workspace, newest first. */
-export async function listProjects(): Promise<ActionResult<Project[]>> {
-  const { supabase, userId } = await requireSession();
-
-  const workspace = await ensureWorkspaceFor(supabase, userId);
-  if (!workspace.ok) {
-    return workspace;
-  }
-
-  return listProjectsIn(supabase, workspace.value.id);
-}
 
 /**
  * Create one project from the workspace form.
@@ -79,7 +38,7 @@ export async function listProjects(): Promise<ActionResult<Project[]>> {
  * this process should only do for a caller it has already identified.
  */
 export async function createProject(formData: FormData): Promise<ActionResult<Project>> {
-  const { supabase, userId } = await requireSession();
+  const { supabase, user } = await requireSession();
 
   // `FormData.get` yields a File for a file input, so a forged multipart body
   // must never be coerced to a string like "[object File]".
@@ -93,7 +52,7 @@ export async function createProject(formData: FormData): Promise<ActionResult<Pr
     return fail(title.reason === "empty" ? "naziv-prazan" : "naziv-dug");
   }
 
-  const workspace = await ensureWorkspaceFor(supabase, userId);
+  const workspace = await ensureWorkspaceFor(supabase, user.id);
   if (!workspace.ok) {
     return workspace;
   }
