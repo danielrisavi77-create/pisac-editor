@@ -17,7 +17,7 @@ export function createOpenAIProvider(config = {}, runtime = {}) {
   return {
     id: "openai",
     available() {
-      return Boolean(env[config.keyEnv || "OPENAI_API_KEY"]);
+      return config.enabled !== false && Boolean(env[config.keyEnv || "OPENAI_API_KEY"]);
     },
     async execute({ model, system, user, plan }) {
       const apiKey = env[config.keyEnv || "OPENAI_API_KEY"];
@@ -25,7 +25,8 @@ export function createOpenAIProvider(config = {}, runtime = {}) {
       const body = {
         model,
         instructions: system,
-        input: user
+        input: user,
+        ...(plan?.outputBudgetTokens ? { max_output_tokens:plan.outputBudgetTokens } : {})
       };
       if (plan?.reasoning && plan.reasoning !== "none") {
         body.reasoning = { effort: plan.reasoning };
