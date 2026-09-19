@@ -86,7 +86,11 @@ export class AIArchitect{
       const legacy=await this.statsSource();
       if(legacy&&typeof legacy==="object"&&!Array.isArray(legacy))calibrationStats={...calibrationStats,...legacy};
     }
-    return recommend(taskText,this.repoRoot,{...context,calibrationStats});
+    return recommend(taskText,this.repoRoot,{
+      ...context,
+      allowMock: context.allowMock ?? this.allowMock,
+      calibrationStats
+    });
   }
 
   async explain(taskText,context={}){
