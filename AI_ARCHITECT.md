@@ -73,7 +73,7 @@ Every plan can independently specify:
 - context budget;
 - temperature and output-token budget;
 - quality gate;
-- max cost and max latency;
+- max cost and max latency policy;
 - fallback policy.
 
 ## Provider abstraction
@@ -104,6 +104,8 @@ The execution layer:
 
 A degraded or unverified response is never reported as a successful live result.
 
+The current `maxCostUsd` check is a **post-response policy gate**, not a provider-side billing hard cap: a request may already have incurred cost before its reported cost is compared with the budget. OpenRouter Auto is additionally constrained with the router cost tier, but v0.2 does not claim strict per-request spend enforcement.
+
 ## Outcome learning and privacy
 
 Outcome records can contain:
@@ -124,7 +126,7 @@ Outcome records can contain:
 
 Full task and output text are not stored by default. The local record contains SHA-256 hashes and lengths.
 
-Adaptive selection only uses outcomes with a real quality/eval score. A cheaper candidate that does not meet the route quality gate cannot outrank a qualifying candidate.
+Adaptive selection only uses outcomes with a real quality/eval score **and known measured cost**. A cheaper candidate that does not meet the route quality gate cannot outrank a qualifying candidate, and an outcome with unknown cost is not eligible for utility-based promotion.
 
 ## CLI
 
@@ -170,7 +172,7 @@ Then configure one or more provider keys:
 
 `NOTDIAMOND_API_KEY` is reserved for a future learned-router phase and is not currently required.
 
-Because Pisač does not yet have authentication, live inference is opt-in rather than activated by the presence of a provider key. Rate limiting reduces abuse risk but does not replace user authentication or account-level usage quotas.
+Because Pisač does not yet have authentication, live inference is opt-in rather than activated by the presence of a provider key. The endpoint requires same-origin browser requests and is rate-limited, but these controls do **not** replace authentication or account-level usage quotas. Keep `AI_ARCHITECT_LIVE_ENABLED=false` for the public rollout until that stronger usage-control layer exists.
 
 ## Evaluation
 
