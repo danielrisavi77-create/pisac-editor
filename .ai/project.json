@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "project": {
+    "name": "pisac-editor",
+    "type": "academic-writing-editor",
+    "description": "Academic editor with student/mentor views; AI Architect pilot project."
+  },
+  "priorities": {
+    "quality": 0.45,
+    "factuality": 0.25,
+    "cost": 0.12,
+    "latency": 0.08,
+    "determinism": 0.1
+  },
+  "risk": {
+    "default": "medium",
+    "highRiskTasks": [
+      "citation_verification",
+      "source_synthesis",
+      "document_repair",
+      "security_review"
+    ]
+  },
+  "constraints": {
+    "hallucinationTolerance": "low",
+    "citationClaimsRequireVerification": true,
+    "destructiveCodeChangesRequireReview": true,
+    "preferCheapestModelThatPassesQualityGate": true
+  }
+}
