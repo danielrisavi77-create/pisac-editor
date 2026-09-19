@@ -7,10 +7,10 @@ vi.mock("@supabase/ssr", () => ({
   }),
 }));
 
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 import { decideAccess } from "./guard";
-import { refreshSession } from "./middleware";
+import { carryCookies, refreshSession } from "./middleware";
 
 describe("decideAccess", () => {
   it("allows a signed-in user into /workspace", () => {
@@ -86,5 +86,30 @@ describe("refreshSession (unconfigured)", () => {
     expect(result.isConfigured).toBe(false);
     expect(result.user).toBeNull();
     expect(result.response).toBeDefined();
+  });
+});
+
+describe("carryCookies", () => {
+  it("copies refreshed auth cookies onto a redirect response", () => {
+    const refreshed = NextResponse.next();
+    refreshed.cookies.set("sb-access-token", "rotated");
+    refreshed.cookies.set("sb-refresh-token", "rotated-refresh");
+
+    const redirect = carryCookies(
+      refreshed,
+      NextResponse.redirect("https://pisac.test/prijava"),
+    );
+
+    expect(redirect.cookies.get("sb-access-token")?.value).toBe("rotated");
+    expect(redirect.cookies.get("sb-refresh-token")?.value).toBe("rotated-refresh");
+  });
+
+  it("leaves the redirect untouched when the refresh wrote no cookies", () => {
+    const redirect = carryCookies(
+      NextResponse.next(),
+      NextResponse.redirect("https://pisac.test/prijava"),
+    );
+
+    expect(redirect.cookies.getAll()).toHaveLength(0);
   });
 });

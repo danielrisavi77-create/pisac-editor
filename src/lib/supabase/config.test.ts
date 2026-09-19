@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { getSupabaseConfig, isSupabaseConfigured } from "./config";
+import {
+  getSiteUrl,
+  getSupabaseConfig,
+  isSupabaseConfigured,
+  resolveAuthOrigin,
+} from "./config";
 
 describe("getSupabaseConfig", () => {
   it("returns null when no env vars are present", () => {
@@ -48,5 +53,37 @@ describe("isSupabaseConfigured", () => {
         NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon-key",
       }),
     ).toBe(true);
+  });
+});
+
+describe("getSiteUrl", () => {
+  it("is null when unset or blank", () => {
+    expect(getSiteUrl({})).toBeNull();
+    expect(getSiteUrl({ NEXT_PUBLIC_SITE_URL: "  " })).toBeNull();
+  });
+
+  it("trims and strips trailing slashes", () => {
+    expect(getSiteUrl({ NEXT_PUBLIC_SITE_URL: " https://pisac.hr/// " })).toBe(
+      "https://pisac.hr",
+    );
+  });
+});
+
+describe("resolveAuthOrigin", () => {
+  it("prefers the configured site URL over the request origin", () => {
+    expect(resolveAuthOrigin("https://pisac.hr", "https://evil.example")).toBe(
+      "https://pisac.hr",
+    );
+  });
+
+  it("falls back to the request origin only when no site URL is set", () => {
+    expect(resolveAuthOrigin(null, "http://localhost:3000")).toBe(
+      "http://localhost:3000",
+    );
+  });
+
+  it("is null when neither origin can be determined", () => {
+    expect(resolveAuthOrigin(null, null)).toBeNull();
+    expect(resolveAuthOrigin("  ", "")).toBeNull();
   });
 });

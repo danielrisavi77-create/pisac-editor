@@ -45,3 +45,33 @@ export function getSupabaseConfig(env?: EnvSource): SupabaseConfig | null {
 export function isSupabaseConfigured(env?: EnvSource): boolean {
   return getSupabaseConfig(env) !== null;
 }
+
+/**
+ * Canonical public origin of this deployment, e.g. `https://pisac.example`.
+ *
+ * Optional. When set it pins the origin used for magic-link redirects, so an
+ * attacker-controlled `Host` / `X-Forwarded-*` header cannot redirect the
+ * sign-in link to another host. Unset is the dev case: the caller falls back
+ * to the request origin.
+ */
+export function getSiteUrl(env?: EnvSource): string | null {
+  const raw = (env ? env.NEXT_PUBLIC_SITE_URL : process.env.NEXT_PUBLIC_SITE_URL) ?? "";
+  const trimmed = raw.trim().replace(/\/+$/, "");
+  return trimmed === "" ? null : trimmed;
+}
+
+/**
+ * Pure origin resolution: the configured site URL wins, the request origin is
+ * only a development fallback, and `null` means "refuse to build a link".
+ */
+export function resolveAuthOrigin(
+  siteUrl: string | null,
+  requestOrigin: string | null,
+): string | null {
+  const pinned = siteUrl?.trim().replace(/\/+$/, "") ?? "";
+  if (pinned !== "") {
+    return pinned;
+  }
+  const fallback = requestOrigin?.trim().replace(/\/+$/, "") ?? "";
+  return fallback === "" ? null : fallback;
+}

@@ -49,3 +49,18 @@ export async function refreshSession(
 
   return { response, user: user ?? null, isConfigured: true };
 }
+
+/**
+ * Copies every cookie written by a session refresh onto another response.
+ *
+ * A redirect built with `NextResponse.redirect()` starts with no headers, so
+ * without this the rotated auth tokens (or the deletions written when a
+ * refresh is rejected) would be dropped and the client would keep replaying
+ * stale cookies.
+ */
+export function carryCookies(from: NextResponse, to: NextResponse): NextResponse {
+  for (const cookie of from.cookies.getAll()) {
+    to.cookies.set(cookie);
+  }
+  return to;
+}

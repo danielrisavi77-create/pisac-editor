@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 
+import { getSiteUrl, resolveAuthOrigin } from "@/lib/supabase/config";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 
 export const metadata = { title: "Prijava — Pisač" };
@@ -57,7 +58,12 @@ async function signIn(formData: FormData) {
   const requestHeaders = await headers();
   const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
   const protocol = requestHeaders.get("x-forwarded-proto") ?? "https";
-  const origin = host ? `${protocol}://${host}` : "";
+  // The configured site URL wins; request headers are only a dev fallback, and
+  // are never trusted to build the link we mail out when a site URL is pinned.
+  const origin = resolveAuthOrigin(getSiteUrl(), host ? `${protocol}://${host}` : null);
+  if (!origin) {
+    redirect("/postavljanje");
+  }
 
   const { error } = await supabase.auth.signInWithOtp({
     email,
