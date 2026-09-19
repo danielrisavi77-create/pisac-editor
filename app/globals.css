@@ -57,15 +57,211 @@ body {
     Arial, "Noto Sans", sans-serif;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  /*
+   * Mobile-first rule #1 (F1-9b): nothing may push the page wider than the
+   * viewport. A long word — a project title pasted from a citation, a uuid in
+   * a message — wraps instead of forcing a horizontal scrollbar. There is
+   * deliberately no `overflow-x: hidden` anywhere: that would hide the
+   * symptom, and would also make the 360px E2E guard vacuous.
+   */
+  overflow-wrap: break-word;
+}
+
+/*
+ * Author-supplied text is allowed to break mid-word. It is the only content
+ * whose length we do not control, and a title with no spaces must not be what
+ * decides the page width.
+ */
+h1,
+h2,
+h3,
+.project-title,
+.project-meta {
+  overflow-wrap: anywhere;
 }
 
 a {
   color: inherit;
 }
 
+/*
+ * Keyboard focus must be perceivable, and stated by us rather than left to
+ * whatever the UA happens to draw on a given background.
+ */
+:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------- shared controls */
+
+/*
+ * One button and one field for the whole app (F1-9b). Before this, every page
+ * and panel carried its own inline style object, and they had drifted: three
+ * radii, two paddings, two disabled treatments. No framework — just the set
+ * that is actually used.
+ *
+ * `min-height: 44px` on every control is the touch target floor, applied to
+ * toolbar buttons too: a formatting button that is hard to hit on a phone is
+ * a formatting button that gets hit by accident.
+ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--fg);
+  border-radius: 0.5rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: 1.2;
+  text-align: center;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: var(--fg);
+  color: var(--bg);
+}
+
+/* Pressed toolbar state: the same inversion the primary button uses. */
+.btn[aria-pressed="true"] {
+  border-color: var(--fg);
+  background: var(--fg);
+  color: var(--bg);
+}
+
+.btn:disabled {
+  border-color: var(--muted);
+  background: transparent;
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+/* A disabled button that is merely waiting says so with the cursor. */
+.btn[data-busy="true"]:disabled {
+  cursor: progress;
+}
+
+.input {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--muted);
+  border-radius: 0.5rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+/* --------------------------------------------------------------- layout */
+
+/*
+ * The page shell. Mobile first: 1rem (16px) gutters and a shorter top pad,
+ * widening only once there is room for it.
+ */
+.page {
+  max-width: 36rem;
+  margin: 0 auto;
+  padding: 2rem 1rem 3rem;
+}
+
+/* The document route gets more room for the editor surface. */
+.page--document {
+  max-width: 44rem;
+}
+
+@media (min-width: 40rem) {
+  .page {
+    padding: 4rem 1rem;
+  }
+
+  .page--document {
+    padding: 3rem 1rem;
+  }
+}
+
+/* A row of actions or fields that must wrap rather than overflow. */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.card {
+  border: 1px solid var(--muted);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+}
+
+.hint {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* --------------------------------------------------------- editor chrome */
+
+/*
+ * The formatting toolbar wraps; on a 360px screen its six buttons take three
+ * rows rather than one scrollable one.
+ */
+.editor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0 0 0.75rem;
+}
+
+.editor-surface {
+  border: 1px solid var(--muted);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  min-height: 18rem;
+}
+
+/*
+ * The sync chip rides above the editor and stays put while the author
+ * scrolls: a status claim that can be scrolled out of sight is a status claim
+ * the author stops checking.
+ */
+.status-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  padding: 0.35rem 0;
+  background: var(--bg);
+}
+
+/*
+ * On a narrow screen the chip STOPS being sticky and simply stacks above the
+ * toolbar. Sticking it there would park it on top of the formatting buttons
+ * as soon as the author scrolled — a status claim covering the controls is
+ * worse than one that scrolls with them.
+ */
+@media (max-width: 30rem) {
+  .status-bar {
+    position: static;
+    justify-content: flex-start;
+  }
+}
+
 /* Editor surface (F1-2b). ProseMirror renders into `.tiptap`. */
 .tiptap {
   outline: none;
+  /*
+   * A readable measure, centred inside the surface on a wide screen and
+   * simply full width (inside the page's 16px gutters) on a phone.
+   */
+  max-width: 65ch;
+  margin-inline: auto;
 }
 
 .tiptap :first-child {
@@ -97,8 +293,19 @@ a {
   font-size: 0.85rem;
   line-height: 1.6;
   white-space: nowrap;
+  max-width: 100%;
   color: var(--tone-neutral-fg);
   background: var(--tone-neutral-bg);
+}
+
+/*
+ * The longest label — the multi-tab notice — does not fit on one line at
+ * 360px, and a chip that cannot wrap would widen the page instead.
+ */
+@media (max-width: 30rem) {
+  .sync-chip {
+    white-space: normal;
+  }
 }
 
 .sync-chip__dot {

@@ -33,39 +33,17 @@ import {
 } from "@/domain/serverSync/checkpoints";
 
 const bar = {
-  display: "flex",
-  flexWrap: "wrap",
-  alignItems: "center",
-  gap: "0.6rem",
   margin: "1.25rem 0 0",
 } as const;
 
+/*
+ * The field grows to fill the row on a wide screen and drops to its own line
+ * on a narrow one, where `1 1 14rem` would otherwise hold it beside a button
+ * it cannot fit next to.
+ */
 const field = {
   flex: "1 1 14rem",
-  minWidth: "10rem",
-  padding: "0.45rem 0.6rem",
-  borderRadius: "0.4rem",
-  border: "1px solid var(--muted)",
-  background: "transparent",
-  color: "inherit",
-  font: "inherit",
-} as const;
-
-const button = {
-  padding: "0.5rem 0.9rem",
-  borderRadius: "0.4rem",
-  border: "1px solid var(--fg)",
-  background: "transparent",
-  color: "inherit",
-  font: "inherit",
-  cursor: "pointer",
-} as const;
-
-const disabledButton = {
-  ...button,
-  borderColor: "var(--muted)",
-  color: "var(--muted)",
-  cursor: "not-allowed",
+  minWidth: "0",
 } as const;
 
 const message = {
@@ -125,6 +103,7 @@ export default function CheckpointBar({ checkpoints, onCreate }: CheckpointBarPr
   return (
     <section aria-label="Kontrolne točke" data-checkpoints="">
       <form
+        className="row"
         style={bar}
         onSubmit={(event) => {
           event.preventDefault();
@@ -136,13 +115,14 @@ export default function CheckpointBar({ checkpoints, onCreate }: CheckpointBarPr
         </label>
         <input
           id="checkpoint-name"
+          className="input"
           style={field}
           value={name}
           maxLength={CHECKPOINT_NAME_MAX_LENGTH}
           placeholder="npr. Prije lekture"
           onChange={(event) => setName(event.target.value)}
         />
-        <button type="submit" style={ready ? button : disabledButton} disabled={!ready}>
+        <button type="submit" className="btn" disabled={!ready}>
           Kontrolna točka
         </button>
       </form>
@@ -154,12 +134,17 @@ export default function CheckpointBar({ checkpoints, onCreate }: CheckpointBarPr
         </>
       )}
 
+      {/*
+        Empty state (F1-9b): one short sentence. There is deliberately no
+        action attached — a checkpoint is created by the form directly above
+        this line, and a second button pointing at it would be noise.
+      */}
       {checkpoints.length === 0 ? (
-        <p style={note}>Još nema kontrolnih točaka.</p>
+        <p style={note}>Nema kontrolnih točaka.</p>
       ) : (
         <ul style={list}>
           {checkpoints.map((checkpoint) => (
-            <li key={checkpoint.id}>
+            <li key={checkpoint.id} style={{ overflowWrap: "anywhere" }}>
               {checkpoint.name} · revizija {checkpoint.revision} ·{" "}
               {formatCheckpointDate(checkpoint.createdAt)}
             </li>

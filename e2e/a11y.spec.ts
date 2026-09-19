@@ -93,3 +93,47 @@ for (const route of ROUTES) {
     });
   });
 }
+
+/**
+ * Fixtures: FX-X-A11Y-001 (partial).
+ *
+ * The mobile-first guard (F1-9b). 360px is the narrowest screen we design for;
+ * at that width nothing may push the document wider than the viewport, because
+ * a page the author has to scroll sideways to read is a page whose controls
+ * they will miss. `scrollWidth` is asserted on `documentElement` rather than
+ * inferred from a screenshot, and there is deliberately no `overflow-x:
+ * hidden` in the stylesheet — that would clip the symptom and make this test
+ * pass on a page that is still broken.
+ */
+test.describe("mobile viewport, 360px", () => {
+  test.use({ viewport: { width: 360, height: 740 } });
+
+  for (const route of ROUTES) {
+    test(`${route} does not scroll horizontally`, async ({ page }) => {
+      await page.goto(route);
+      await page.locator("h1").waitFor();
+
+      const widths = await page.evaluate(() => ({
+        scroll: document.documentElement.scrollWidth,
+        client: document.documentElement.clientWidth,
+      }));
+
+      expect(widths.scroll).toBeLessThanOrEqual(360);
+      // The page really is being laid out at 360px, so the assertion above is
+      // about wrapping rather than about a viewport that never applied.
+      expect(widths.client).toBeLessThanOrEqual(360);
+    });
+  }
+
+  test("the landing heading is readable at 360px", async ({ page }) => {
+    await page.goto("/");
+
+    const heading = page.locator("h1");
+    await expect(heading).toBeVisible();
+    await expect(heading).toHaveText("Pisač");
+
+    const box = await heading.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.width).toBeLessThanOrEqual(360);
+  });
+});

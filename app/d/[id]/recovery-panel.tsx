@@ -32,6 +32,7 @@ import type {
   RecoveryPlan,
   RecoveryUnavailableReason,
 } from "@/domain/sync";
+import { blocksHr, wordsHr } from "@/lib/i18n/hr";
 
 const panel = {
   border: "1px solid var(--fg)",
@@ -57,52 +58,7 @@ const note = {
   fontSize: "0.9rem",
 } as const;
 
-const choices = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: "0.6rem",
-} as const;
-
-const choiceButton = {
-  padding: "0.5rem 0.9rem",
-  borderRadius: "0.4rem",
-  border: "1px solid var(--fg)",
-  background: "transparent",
-  color: "inherit",
-  font: "inherit",
-  cursor: "pointer",
-} as const;
-
-const disabledButton = {
-  ...choiceButton,
-  borderColor: "var(--muted)",
-  color: "var(--muted)",
-  cursor: "not-allowed",
-} as const;
-
-/** Croatian number agreement, as in the conflict panel. */
-function plural(n: number, one: string, few: string, many: string): string {
-  const lastTwo = Math.abs(n) % 100;
-  const last = Math.abs(n) % 10;
-  if (lastTwo >= 11 && lastTwo <= 14) {
-    return `${n} ${many}`;
-  }
-  if (last === 1) {
-    return `${n} ${one}`;
-  }
-  if (last >= 2 && last <= 4) {
-    return `${n} ${few}`;
-  }
-  return `${n} ${many}`;
-}
-
-function words(n: number): string {
-  return plural(n, "riječ", "riječi", "riječi");
-}
-
-function blocks(n: number): string {
-  return plural(n, "blok", "bloka", "blokova");
-}
+/* Croatian number agreement is shared with the conflict panel (@/lib/i18n/hr). */
 
 const CHOICE_LABELS: Record<RecoveryChoice, string> = {
   "salvage-local": "Spasi moju lokalnu verziju",
@@ -122,7 +78,7 @@ function optionDescription(option: RecoveryOption): string {
     return option.blockedBy === null ? "" : BLOCKED_REASONS[option.blockedBy];
   }
   const { nodes, words: count } = option.candidate;
-  return `${blocks(nodes)}, ${words(count)} · revizija ${option.candidate.revision}`;
+  return `${blocksHr(nodes)}, ${wordsHr(count)} · revizija ${option.candidate.revision}`;
 }
 
 export type RecoveryPanelProps = {
@@ -175,12 +131,12 @@ export default function RecoveryPanel({ plan, onChoose, onRetry }: RecoveryPanel
 
       {problem === null ? null : <p style={paragraph}>{problem}</p>}
 
-      <div style={choices}>
+      <div className="row">
         {plan.options.map((option) => (
           <button
             key={option.choice}
             type="button"
-            style={option.available && busy === null ? choiceButton : disabledButton}
+            className="btn"
             disabled={!option.available || busy !== null}
             title={optionDescription(option)}
             data-recovery-choice={option.choice}
@@ -192,7 +148,7 @@ export default function RecoveryPanel({ plan, onChoose, onRetry }: RecoveryPanel
 
         <button
           type="button"
-          style={busy === null ? choiceButton : disabledButton}
+          className="btn"
           disabled={busy !== null}
           onClick={() =>
             void run("retry", async () => {

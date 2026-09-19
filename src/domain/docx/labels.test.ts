@@ -31,6 +31,14 @@ const partial = buildExportManifest({
   ],
 } as unknown as CanonicalDocument);
 
+const partialTwo = buildExportManifest({
+  schemaVersion: DOCUMENT_SCHEMA_VERSION,
+  nodes: [
+    { type: "table", id: ID_A, children: [] },
+    { type: "table", id: ID_B, children: [] },
+  ],
+} as unknown as CanonicalDocument);
+
 describe("exportFidelitySentence", () => {
   it("claims full fidelity only when nothing was non-exact", () => {
     expect(exportFidelitySentence(exact)).toBe(EXPORT_FIDELITY_FULL);
@@ -38,7 +46,14 @@ describe("exportFidelitySentence", () => {
 
   it("names how many parts are approximate or unknown", () => {
     expect(exportFidelitySentence(partial)).toBe(
-      "Izvezeno. Neki dijelovi su približni ili nepoznati (1).",
+      "Izvezeno. 1 dio je približan ili nepoznat.",
+    );
+    expect(exportFidelitySentence(partial)).toContain("1");
+  });
+
+  it("agrees with the count in Croatian rather than bracketing a number", () => {
+    expect(exportFidelitySentence(partialTwo)).toBe(
+      "Izvezeno. 2 dijela su približna ili nepoznata.",
     );
   });
 

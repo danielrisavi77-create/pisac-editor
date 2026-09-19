@@ -25,6 +25,8 @@
  *     request that would change one.
  */
 
+import { formatDateTimeHr } from "@/lib/i18n/hr";
+
 /** Every status `pisac_create_checkpoint` can return, and nothing else. */
 export const CHECKPOINT_STATUSES = [
   "created",
@@ -266,20 +268,12 @@ export function parseCheckpointList(raw: unknown): CheckpointSummary[] {
 /**
  * The date as the list shows it, in Croatian.
  *
- * Falls back to the raw ISO string when the instant cannot be parsed: an
- * unreadable timestamp is shown as it is rather than as "Invalid Date", and
- * never silently replaced by "now".
+ * Delegates to the shared formatter (F1-9b), which builds the string from its
+ * own month table rather than from whatever locale data the host's ICU build
+ * carries — so the checkpoint list reads the same in every runtime. It also
+ * keeps the old promise: an unreadable timestamp is shown as it is rather than
+ * as "Invalid Date", and is never silently replaced by "now".
  */
 export function formatCheckpointDate(createdAt: string): string {
-  const at = new Date(createdAt);
-  if (Number.isNaN(at.getTime())) {
-    return createdAt;
-  }
-  return at.toLocaleString("hr-HR", {
-    day: "numeric",
-    month: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatDateTimeHr(createdAt);
 }

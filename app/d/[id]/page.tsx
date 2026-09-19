@@ -11,12 +11,6 @@ export const dynamic = "force-dynamic";
 
 export const metadata = { title: "Rad — Pisač" };
 
-const page = {
-  maxWidth: "44rem",
-  margin: "0 auto",
-  padding: "3rem 1rem",
-} as const;
-
 type ProjectRow = { id: string; title: string };
 
 export default async function DocumentPage({
@@ -61,7 +55,7 @@ export default async function DocumentPage({
   const server = await ensureDocumentRow(supabase, project.id);
 
   return (
-    <main style={page}>
+    <main className="page page--document">
       <p style={{ margin: "0 0 0.5rem" }}>
         <Link href="/workspace" style={{ color: "var(--muted)" }}>
           ← Radni prostor

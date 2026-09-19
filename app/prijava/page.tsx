@@ -3,16 +3,15 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 
 import { getSiteUrl, resolveAuthOrigin } from "@/lib/supabase/config";
-import { RETURN_PARAM, sanitizeReturnPath } from "@/lib/supabase/guard";
+import {
+  EMAIL_PARAM,
+  RETURN_PARAM,
+  sanitizeEmailParam,
+  sanitizeReturnPath,
+} from "@/lib/supabase/guard";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 
 export const metadata = { title: "Prijava — Pisač" };
-
-const page = {
-  maxWidth: "36rem",
-  margin: "0 auto",
-  padding: "4rem 1rem",
-} as const;
 
 const notice = {
   border: "1px solid var(--muted)",
@@ -21,35 +20,14 @@ const notice = {
   margin: "0 0 1.5rem",
 } as const;
 
-const field = {
-  display: "block",
-  width: "100%",
-  padding: "0.6rem 0.75rem",
-  margin: "0.5rem 0 1rem",
-  borderRadius: "0.5rem",
-  border: "1px solid var(--muted)",
-  background: "transparent",
-  color: "inherit",
-  font: "inherit",
-} as const;
-
-const button = {
-  padding: "0.6rem 1.1rem",
-  borderRadius: "0.5rem",
-  border: "1px solid var(--fg)",
-  background: "var(--fg)",
-  color: "var(--bg)",
-  font: "inherit",
-  cursor: "pointer",
-} as const;
-
 /** `/prijava`, carrying the return target when there is a safe one. */
 function signInUrl(query: string, returnPath: string | null): string {
   const params = new URLSearchParams(query);
   if (returnPath) {
     params.set(RETURN_PARAM, returnPath);
   }
-  return `/prijava?${params.toString()}`;
+  const rendered = params.toString();
+  return rendered === "" ? "/prijava" : `/prijava?${rendered}`;
 }
 
 async function signIn(formData: FormData) {
@@ -96,7 +74,12 @@ async function signIn(formData: FormData) {
     redirect(signInUrl("greska=1", returnPath));
   }
 
-  redirect(signInUrl("poslano=1", returnPath));
+  // The address travels back so the confirmation can name it (F1-9b). It is
+  // re-checked on the way out — "we sent it to X" must be an address, not
+  // whatever a crafted link puts in the query string.
+  const confirmation = new URLSearchParams({ poslano: "1" });
+  confirmation.set(EMAIL_PARAM, email);
+  redirect(signInUrl(confirmation.toString(), returnPath));
 }
 
 export default async function PrijavaPage({
@@ -106,14 +89,16 @@ export default async function PrijavaPage({
     poslano?: string;
     greska?: string;
     dalje?: string | string[];
+    posta?: string | string[];
   }>;
 }) {
   const params = await searchParams;
   const configured = isSupabaseConfigured();
   const returnPath = sanitizeReturnPath(params.dalje);
+  const sentTo = sanitizeEmailParam(params.posta);
 
   return (
-    <main style={page}>
+    <main className="page">
       <h1 style={{ fontSize: "2rem", margin: "0 0 0.5rem" }}>Prijava</h1>
       <p style={{ color: "var(--muted)", margin: "0 0 2rem" }}>
         Prijavi se poveznicom koja stiže na e-poštu.
@@ -127,8 +112,31 @@ export default async function PrijavaPage({
       ) : params.poslano === "1" ? (
         <div style={notice}>
           <p style={{ margin: 0 }}>Provjeri e-poštu.</p>
-          <p style={{ color: "var(--muted)", margin: "0.5rem 0 0" }}>
-            Poslali smo ti poveznicu za prijavu.
+          {/*
+            The address is named, not merely implied: an author who mistyped a
+            character learns it here instead of waiting for mail that will
+            never arrive. When the parameter did not survive sanitisation we
+            say the plainer thing rather than inventing an address.
+          */}
+          <p
+            style={{
+              color: "var(--muted)",
+              margin: "0.5rem 0 0",
+              overflowWrap: "anywhere",
+            }}
+          >
+            {sentTo === null ? (
+              "Poslali smo ti poveznicu za prijavu."
+            ) : (
+              <>
+                Poveznicu za prijavu poslali smo na{" "}
+                <strong style={{ color: "var(--fg)" }}>{sentTo}</strong>.
+              </>
+            )}
+          </p>
+          <p className="hint">
+            Nije stigla? Provjeri neželjenu poštu ili{" "}
+            <Link href={signInUrl("", returnPath)}>pokušaj s drugom adresom</Link>.
           </p>
         </div>
       ) : (
@@ -152,9 +160,10 @@ export default async function PrijavaPage({
               required
               autoComplete="email"
               placeholder="ime@primjer.hr"
-              style={field}
+              className="input"
+              style={{ margin: "0.5rem 0 1rem" }}
             />
-            <button type="submit" style={button}>
+            <button type="submit" className="btn btn-primary">
               Pošalji poveznicu
             </button>
           </form>

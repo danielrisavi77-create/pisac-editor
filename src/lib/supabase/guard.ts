@@ -80,6 +80,46 @@ export function sanitizeReturnPath(
 }
 
 /**
+ * Query parameter carrying the address a sign-in link was mailed to, so the
+ * confirmation can name it (F1-9b). "Provjeri e-poštu" without saying WHICH
+ * one is useless to an author who mistyped a character.
+ */
+export const EMAIL_PARAM = "posta";
+
+/** RFC 5321 caps a forward path at 254 characters; nothing longer is echoed. */
+export const EMAIL_PARAM_MAX_LENGTH = 254;
+
+/**
+ * A conservative address shape, as an allowlist.
+ *
+ * This is NOT the validator that decides whether to send mail — Supabase and
+ * the mail server own that. It only decides whether a value that came back on
+ * a query string is safe and sensible to print as "we sent it to X". An
+ * allowlist rather than a denylist means control characters, whitespace and
+ * markup-ish punctuation cannot reach the page at all.
+ */
+const EMAIL_PARAM_PATTERN = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+
+/**
+ * Narrows an untrusted `?posta=` value to an address worth echoing, or `null`.
+ *
+ * Like every other parameter here it may arrive repeated, in which case Next
+ * hands us an array and only the first entry is considered.
+ */
+export function sanitizeEmailParam(
+  raw: string | string[] | undefined,
+): string | null {
+  const candidate = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof candidate !== "string") {
+    return null;
+  }
+  if (candidate.length === 0 || candidate.length > EMAIL_PARAM_MAX_LENGTH) {
+    return null;
+  }
+  return EMAIL_PARAM_PATTERN.test(candidate) ? candidate : null;
+}
+
+/**
  * Prefixes that require a session. Matching is on a whole path segment, so
  * `/documents` is not `/d` and `/workspaces-public` is not `/workspace`.
  */

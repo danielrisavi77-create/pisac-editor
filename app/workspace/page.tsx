@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { formatDateHr, projectsHr } from "@/lib/i18n/hr";
 import { loadWorkspaceOverview } from "@/lib/workspace/queries";
 import {
   ACTION_ERROR_MESSAGES,
@@ -16,40 +17,6 @@ export const dynamic = "force-dynamic";
 
 export const metadata = { title: "Radni prostor — Pisač" };
 
-const page = {
-  maxWidth: "36rem",
-  margin: "0 auto",
-  padding: "4rem 1rem",
-} as const;
-
-const button = {
-  padding: "0.6rem 1.1rem",
-  borderRadius: "0.5rem",
-  border: "1px solid var(--fg)",
-  background: "transparent",
-  color: "inherit",
-  font: "inherit",
-  cursor: "pointer",
-} as const;
-
-const primaryButton = {
-  ...button,
-  background: "var(--fg)",
-  color: "var(--bg)",
-} as const;
-
-const field = {
-  display: "block",
-  width: "100%",
-  padding: "0.6rem 0.75rem",
-  margin: "0.5rem 0 1rem",
-  borderRadius: "0.5rem",
-  border: "1px solid var(--muted)",
-  background: "transparent",
-  color: "inherit",
-  font: "inherit",
-} as const;
-
 const notice = {
   border: "1px solid var(--muted)",
   borderRadius: "0.5rem",
@@ -59,22 +26,8 @@ const notice = {
 
 const listItem = {
   listStyle: "none",
-  border: "1px solid var(--muted)",
-  borderRadius: "0.5rem",
-  padding: "0.75rem 1rem",
   margin: "0 0 0.75rem",
 } as const;
-
-const dateFormatter = new Intl.DateTimeFormat("hr-HR", {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-});
-
-function formatDate(iso: string): string {
-  const parsed = new Date(iso);
-  return Number.isNaN(parsed.getTime()) ? "" : dateFormatter.format(parsed);
-}
 
 async function signOut() {
   "use server";
@@ -135,11 +88,17 @@ export default async function WorkspacePage({
   const loadError = !workspace.ok ? workspace : !projects.ok ? projects : null;
 
   return (
-    <main style={page}>
+    <main className="page">
       <h1 style={{ fontSize: "2rem", margin: "0 0 0.5rem" }}>
         {workspace.ok ? workspace.value.name : "Radni prostor"}
       </h1>
-      <p style={{ color: "var(--muted)", margin: "0 0 2rem" }}>
+      <p
+        style={{
+          color: "var(--muted)",
+          margin: "0 0 2rem",
+          overflowWrap: "anywhere",
+        }}
+      >
         Prijavljen/a kao <strong style={{ color: "var(--fg)" }}>{user.email}</strong>
       </p>
 
@@ -155,22 +114,42 @@ export default async function WorkspacePage({
         </div>
       ) : null}
 
-      <h2 style={{ fontSize: "1.25rem", margin: "0 0 1rem" }}>Radovi</h2>
+      <h2 style={{ fontSize: "1.25rem", margin: "0 0 1rem" }}>
+        Radovi
+        {projects.ok && projects.value.length > 0 ? (
+          <span
+            style={{
+              color: "var(--muted)",
+              fontSize: "0.9rem",
+              fontWeight: 400,
+              marginLeft: "0.5rem",
+            }}
+          >
+            ({projectsHr(projects.value.length)})
+          </span>
+        ) : null}
+      </h2>
 
       {projects.ok && projects.value.length === 0 ? (
-        <p style={{ color: "var(--muted)", margin: "0 0 2rem" }}>Još nemaš nijedan rad.</p>
+        <p style={{ color: "var(--muted)", margin: "0 0 1.5rem" }}>
+          Još nemaš nijedan rad.
+        </p>
       ) : null}
 
       {projects.ok && projects.value.length > 0 ? (
         <ul style={{ padding: 0, margin: "0 0 2rem" }}>
           {projects.value.map((project) => (
             <li key={project.id} style={listItem}>
-              <Link href={`/d/${project.id}`} style={{ display: "block" }}>
-                {project.title}
+              <Link
+                href={`/d/${project.id}`}
+                className="card"
+                style={{ display: "block" }}
+              >
+                <span className="project-title">{project.title}</span>
+                <small className="project-meta" style={{ display: "block", color: "var(--muted)" }}>
+                  Stvoreno {formatDateHr(project.createdAt)}
+                </small>
               </Link>
-              <small style={{ color: "var(--muted)" }}>
-                Stvoreno {formatDate(project.createdAt)}
-              </small>
             </li>
           ))}
         </ul>
@@ -187,15 +166,28 @@ export default async function WorkspacePage({
           // Plain text, escaped by React on render; the value was already
           // capped and stripped of control characters above.
           defaultValue={submittedTitle}
-          style={field}
+          className="input"
+          style={{ margin: "0.5rem 0 0.5rem" }}
         />
-        <button type="submit" style={primaryButton}>
+        {/*
+          The empty state says there is nothing yet; this says what to do about
+          it, next to the field that does it. One short sentence, and only
+          while there is in fact nothing.
+        */}
+        {projects.ok && projects.value.length === 0 ? (
+          <p className="hint" style={{ margin: "0 0 0.75rem" }}>
+            Upiši naziv i stvori prvi rad.
+          </p>
+        ) : (
+          <div style={{ height: "0.75rem" }} />
+        )}
+        <button type="submit" className="btn btn-primary">
           Novi rad
         </button>
       </form>
 
       <form action={signOut}>
-        <button type="submit" style={button}>
+        <button type="submit" className="btn">
           Odjava
         </button>
       </form>

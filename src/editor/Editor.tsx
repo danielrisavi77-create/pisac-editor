@@ -91,37 +91,6 @@ export type EditorProps = {
   placeholder?: string;
 };
 
-const toolbar = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: "0.4rem",
-  margin: "0 0 0.75rem",
-} as const;
-
-const toolbarButton = {
-  padding: "0.35rem 0.7rem",
-  borderRadius: "0.4rem",
-  border: "1px solid var(--muted)",
-  background: "transparent",
-  color: "inherit",
-  font: "inherit",
-  cursor: "pointer",
-} as const;
-
-const activeToolbarButton = {
-  ...toolbarButton,
-  borderColor: "var(--fg)",
-  background: "var(--fg)",
-  color: "var(--bg)",
-} as const;
-
-const surface = {
-  border: "1px solid var(--muted)",
-  borderRadius: "0.5rem",
-  padding: "1rem",
-  minHeight: "18rem",
-} as const;
-
 type ToolbarState = {
   bold: boolean;
   italic: boolean;
@@ -168,16 +137,10 @@ function ToolbarButton({
   return (
     <button
       type="button"
+      className="btn"
       aria-pressed={pressed}
       disabled={disabled}
       onClick={onPress}
-      style={
-        disabled
-          ? { ...toolbarButton, opacity: 0.5, cursor: "not-allowed" }
-          : pressed
-            ? activeToolbarButton
-            : toolbarButton
-      }
     >
       {label}
     </button>
@@ -377,7 +340,7 @@ export default function DocumentEditor({
 
   return (
     <div>
-      <div style={toolbar} role="toolbar" aria-label="Oblikovanje teksta">
+      <div className="editor-toolbar" role="toolbar" aria-label="Oblikovanje teksta">
         <ToolbarButton
           label="Podebljano"
           pressed={state.bold}
@@ -416,7 +379,7 @@ export default function DocumentEditor({
         />
       </div>
 
-      <EditorContent editor={editor} style={surface} />
+      <EditorContent editor={editor} className="editor-surface" />
     </div>
   );
 }

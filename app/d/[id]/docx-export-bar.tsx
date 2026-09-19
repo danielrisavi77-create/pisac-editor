@@ -28,28 +28,7 @@ import type { CanonicalDocument } from "@/domain/document";
 import { exportSummaryMessage } from "@/domain/docx/labels";
 
 const bar = {
-  display: "flex",
-  flexWrap: "wrap",
-  alignItems: "center",
-  gap: "0.6rem",
   margin: "1.25rem 0 0",
-} as const;
-
-const button = {
-  padding: "0.5rem 0.9rem",
-  borderRadius: "0.4rem",
-  border: "1px solid var(--fg)",
-  background: "transparent",
-  color: "inherit",
-  font: "inherit",
-  cursor: "pointer",
-} as const;
-
-const busyButton = {
-  ...button,
-  borderColor: "var(--muted)",
-  color: "var(--muted)",
-  cursor: "progress",
 } as const;
 
 const message = {
@@ -106,10 +85,11 @@ export default function DocxExportBar({
 
   return (
     <section aria-label="Izvoz" data-docx-export="">
-      <div style={bar}>
+      <div className="row" style={bar}>
         <button
           type="button"
-          style={busy ? busyButton : button}
+          className="btn"
+          data-busy={busy ? "true" : undefined}
           disabled={busy}
           onClick={() => void exportDocx()}
         >

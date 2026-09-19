@@ -106,6 +106,7 @@ import {
   type RecoveryFailureReason,
 } from "@/lib/journal/recovery";
 import { acquireDocumentLock, documentLockName } from "@/lib/journal/lock";
+import { blocksHr, problemsHr, wordsHr } from "@/lib/i18n/hr";
 import { createDrainRunner, type DrainRunner } from "@/lib/sync/drainRunner";
 
 import { commitDocument, createCheckpoint, listCheckpoints, loadDocument } from "./actions";
@@ -130,20 +131,13 @@ const problem = {
   margin: "0.75rem 0 0",
 } as const;
 
-/**
+/*
  * The chip rides above the editor and stays put while the author scrolls: a
  * status claim that can be scrolled out of sight is a status claim the author
- * stops checking.
+ * stops checking. The sticking itself is `.status-bar` in app/globals.css,
+ * which also drops it below 30rem — where a sticky chip would sit on top of
+ * the formatting toolbar instead of above it (F1-9b).
  */
-const statusBar = {
-  position: "sticky",
-  top: 0,
-  zIndex: 2,
-  display: "flex",
-  justifyContent: "flex-end",
-  padding: "0.35rem 0",
-  background: "var(--bg)",
-} as const;
 
 /**
  * Why this tab is not journalling, when it is not. `'multi-tab'` is a UI-level
@@ -411,7 +405,7 @@ export default function EditorClient({
 function LoadFailure() {
   return (
     <div data-sync-state="ERROR">
-      <div style={statusBar}>
+      <div className="status-bar">
         <SyncStatusChip state="ERROR" />
       </div>
       <div style={problem}>
@@ -1075,7 +1069,7 @@ function JournalledEditor({
 
   return (
     <div data-sync-state={syncState} data-sync-blocked={blocked ?? undefined}>
-      <div style={statusBar}>
+      <div className="status-bar">
         <SyncStatusChip state={syncState} blocked={blocked === "multi-tab"} />
       </div>
 
@@ -1137,16 +1131,15 @@ function JournalledEditor({
       {rejected === null ? (
         candidate !== null && candidate.ok ? (
           <p style={statusRow}>
-            <span>Blokova: {countNodes(candidate.doc)}</span>
-            <span>Riječi: {countWords(candidate.doc)}</span>
+            <span>{blocksHr(countNodes(candidate.doc))}</span>
+            <span>{wordsHr(countWords(candidate.doc))}</span>
           </p>
         ) : null
       ) : (
         <div style={problem}>
           <p style={{ margin: 0 }}>
             Tekst sadrži oblikovanje koje ovaj uređivač još ne podržava, pa se ne može
-            pretvoriti u kanonski zapis ({rejected.errors.length}{" "}
-            {rejected.errors.length === 1 ? "problem" : "problema"}).
+            pretvoriti u kanonski zapis ({problemsHr(rejected.errors.length)}).
           </p>
         </div>
       )}

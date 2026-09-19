@@ -37,6 +37,7 @@ import {
   type ConflictRecord,
   type ConflictResolutionOk,
 } from "@/domain/sync";
+import { blocksHr, wordsHr } from "@/lib/i18n/hr";
 
 const panel = {
   border: "1px solid var(--fg)",
@@ -65,56 +66,12 @@ const counts = {
   fontSize: "0.9rem",
 } as const;
 
-const choices = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: "0.6rem",
-} as const;
-
-const choiceButton = {
-  padding: "0.5rem 0.9rem",
-  borderRadius: "0.4rem",
-  border: "1px solid var(--fg)",
-  background: "transparent",
-  color: "inherit",
-  font: "inherit",
-  cursor: "pointer",
-} as const;
-
-const disabledButton = {
-  ...choiceButton,
-  borderColor: "var(--muted)",
-  color: "var(--muted)",
-  cursor: "not-allowed",
-} as const;
-
-/**
- * Croatian number agreement: 1 riječ, 2–4 riječi, 5+ riječi — with the 11–14
- * exception. Worth the six lines: "1 riječi" in a panel that is asking the
- * author to trust it is a small dishonesty about how carefully it was made.
+/*
+ * Croatian number agreement comes from `@/lib/i18n/hr` (F1-9b): one rule, one
+ * set of tests, shared with the recovery panel and the workspace list. "1
+ * riječi" in a panel that is asking the author to trust it is a small
+ * dishonesty about how carefully the thing was made.
  */
-function plural(n: number, one: string, few: string, many: string): string {
-  const lastTwo = Math.abs(n) % 100;
-  const last = Math.abs(n) % 10;
-  if (lastTwo >= 11 && lastTwo <= 14) {
-    return `${n} ${many}`;
-  }
-  if (last === 1) {
-    return `${n} ${one}`;
-  }
-  if (last >= 2 && last <= 4) {
-    return `${n} ${few}`;
-  }
-  return `${n} ${many}`;
-}
-
-function blocks(n: number): string {
-  return plural(n, "blok", "bloka", "blokova");
-}
-
-function words(n: number): string {
-  return plural(n, "riječ", "riječi", "riječi");
-}
 
 type Busy = "rebase" | "discard" | "refresh" | null;
 
@@ -167,10 +124,10 @@ export function DegradedConflictPanel({
 
       {problem === null ? null : <p style={paragraph}>{problem}</p>}
 
-      <div style={choices}>
+      <div className="row">
         <button
           type="button"
-          style={busy === null ? choiceButton : disabledButton}
+          className="btn"
           disabled={busy !== null}
           onClick={() => void run("rebase", onKeepMine)}
         >
@@ -179,7 +136,7 @@ export function DegradedConflictPanel({
 
         <button
           type="button"
-          style={busy === null ? choiceButton : disabledButton}
+          className="btn"
           disabled={busy !== null}
           onClick={() =>
             void run("refresh", async () => {
@@ -273,11 +230,12 @@ export default function ConflictPanel({
 
       <div style={counts}>
         <span>
-          Moja verzija: {blocks(summary.local.nodes)}, {words(summary.local.words)}
+          Moja verzija: {blocksHr(summary.local.nodes)}, {wordsHr(summary.local.words)}
         </span>
         {summary.server ? (
           <span>
-            Novija verzija: {blocks(summary.server.nodes)}, {words(summary.server.words)}
+            Novija verzija: {blocksHr(summary.server.nodes)},{" "}
+            {wordsHr(summary.server.words)}
           </span>
         ) : (
           <span>Novija verzija: nepoznata</span>
@@ -300,10 +258,10 @@ export default function ConflictPanel({
 
       {problem === null ? null : <p style={paragraph}>{problem}</p>}
 
-      <div style={choices}>
+      <div className="row">
         <button
           type="button"
-          style={busy === null ? choiceButton : disabledButton}
+          className="btn"
           disabled={busy !== null}
           onClick={() => void choose("rebase")}
         >
@@ -312,7 +270,7 @@ export default function ConflictPanel({
 
         <button
           type="button"
-          style={summary.serverAvailable && busy === null ? choiceButton : disabledButton}
+          className="btn"
           // Not a preference: without the server's document there is literally
           // nothing to adopt.
           disabled={!summary.serverAvailable || busy !== null}
@@ -329,7 +287,7 @@ export default function ConflictPanel({
         {summary.serverAvailable ? null : (
           <button
             type="button"
-            style={busy === null ? choiceButton : disabledButton}
+            className="btn"
             disabled={busy !== null}
             onClick={() => void refresh()}
           >

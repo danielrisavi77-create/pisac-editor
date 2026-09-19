@@ -14,6 +14,8 @@
  *      version on the server".
  */
 
+import { partsHr, pluralHr } from "@/lib/i18n/hr";
+
 import type { ExportManifest } from "./manifest";
 
 export const EXPORT_FIDELITY_FULL = "Izvezeno. Vjernost: potpuna.";
@@ -21,11 +23,29 @@ export const EXPORT_FIDELITY_FULL = "Izvezeno. Vjernost: potpuna.";
 /** Added whenever the exported text is not provably the server's version. */
 export const EXPORT_LOCAL_CHANGES_NOTE = "Izvoz sadrži lokalne promjene.";
 
+/**
+ * The count and the predicate that agrees with it (F1-9b).
+ *
+ * Croatian makes the verb and the adjective follow the number as well as the
+ * noun — "1 dio je približan", "2 dijela su približna", "5 dijelova je
+ * približno" — so both halves go through the same rule. The alternative, a
+ * bare "(3)" in brackets, was shorter and read like a machine talking.
+ */
+function approximatePartsClause(count: number): string {
+  const predicate = pluralHr(
+    count,
+    "je približan ili nepoznat",
+    "su približna ili nepoznata",
+    "je približno ili nepoznato",
+  );
+  return `${partsHr(count)} ${predicate}`;
+}
+
 export function exportFidelitySentence(manifest: ExportManifest): string {
   if (manifest.overallLabel === "SUPPORTED_EXACT") {
     return EXPORT_FIDELITY_FULL;
   }
-  return `Izvezeno. Neki dijelovi su približni ili nepoznati (${manifest.entries.length}).`;
+  return `Izvezeno. ${approximatePartsClause(manifest.entries.length)}.`;
 }
 
 /** The whole line: fidelity, plus the provenance note when it applies. */

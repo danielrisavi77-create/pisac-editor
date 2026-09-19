@@ -10,9 +10,11 @@ vi.mock("@supabase/ssr", () => ({
 import { NextRequest, NextResponse } from "next/server";
 
 import {
+  EMAIL_PARAM_MAX_LENGTH,
   RETURN_PARAM,
   RETURN_PATH_MAX_LENGTH,
   decideAccess,
+  sanitizeEmailParam,
   sanitizeReturnPath,
 } from "./guard";
 import { carryCookies, refreshSession } from "./middleware";
@@ -352,5 +354,40 @@ describe("carryCookies", () => {
     );
 
     expect(redirect.cookies.getAll()).toHaveLength(0);
+  });
+});
+
+describe("sanitizeEmailParam", () => {
+  it("echoes an ordinary address back", () => {
+    expect(sanitizeEmailParam("ime@primjer.hr")).toBe("ime@primjer.hr");
+    expect(sanitizeEmailParam("ime.prezime+rad@mail.primjer.hr")).toBe(
+      "ime.prezime+rad@mail.primjer.hr",
+    );
+  });
+
+  it("considers only the first entry of a repeated parameter", () => {
+    expect(sanitizeEmailParam(["ime@primjer.hr", "drugo@primjer.hr"])).toBe(
+      "ime@primjer.hr",
+    );
+  });
+
+  it("rejects anything that is not an address", () => {
+    expect(sanitizeEmailParam(undefined)).toBeNull();
+    expect(sanitizeEmailParam("")).toBeNull();
+    expect(sanitizeEmailParam("nije adresa")).toBeNull();
+    expect(sanitizeEmailParam("ime@primjer")).toBeNull();
+    expect(sanitizeEmailParam("@primjer.hr")).toBeNull();
+  });
+
+  it("rejects markup, whitespace and control characters outright", () => {
+    expect(sanitizeEmailParam("<script>@primjer.hr")).toBeNull();
+    expect(sanitizeEmailParam("ime@primjer.hr\u0000")).toBeNull();
+    expect(sanitizeEmailParam("ime @primjer.hr")).toBeNull();
+    expect(sanitizeEmailParam('ime"@primjer.hr')).toBeNull();
+  });
+
+  it("rejects an address longer than the forward path a mail server accepts", () => {
+    const long = `${"a".repeat(EMAIL_PARAM_MAX_LENGTH)}@primjer.hr`;
+    expect(sanitizeEmailParam(long)).toBeNull();
   });
 });

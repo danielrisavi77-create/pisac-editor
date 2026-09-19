@@ -2,12 +2,6 @@ import Link from "next/link";
 
 export const metadata = { title: "Postavljanje — Pisač" };
 
-const page = {
-  maxWidth: "36rem",
-  margin: "0 auto",
-  padding: "4rem 1rem",
-} as const;
-
 const code = {
   display: "block",
   padding: "0.4rem 0.6rem",
@@ -15,11 +9,14 @@ const code = {
   border: "1px solid var(--muted)",
   borderRadius: "0.375rem",
   fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+  // The names are long and unbreakable; at 360px they wrap rather than widen
+  // the page.
+  overflowWrap: "anywhere",
 } as const;
 
 export default function PostavljanjePage() {
   return (
-    <main style={page}>
+    <main className="page">
       <h1 style={{ fontSize: "2rem", margin: "0 0 0.5rem" }}>Postavljanje</h1>
       <p style={{ color: "var(--muted)", margin: "0 0 2rem" }}>
         Supabase još nije konfiguriran. Prijava radi tek kad su postavljene ove
