@@ -16,5 +16,9 @@
     "eval": "node src/cli.mjs eval",
     "validate": "node src/cli.mjs validate",
     "test": "node --test test/*.test.mjs"
+  },
+  "exports": "./src/index.mjs",
+  "bin": {
+    "ai-architect": "./src/cli.mjs"
   }
 }
