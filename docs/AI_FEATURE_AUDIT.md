@@ -1,58 +1,83 @@
-# Pisač — AI feature audit (AI Architect v0.2)
+# Pisač — AI feature audit (AI Architect v0.3)
 
-## Stvarno postoji u repozitoriju
+## Product reality
 
-Pisač je trenutačno statički akademski uređivač s odvojenim Student/Mentor prikazima, citatima i literaturom, komentarima, zapisnikom događaja i provenijencijom teksta. AI doprinosi već imaju posebne događaje i oznake (`ai_query`, `ai_accept`, `ai_inserted`, heuristički `ai_matched`).
+Pisač remains an academic editor prototype with Student/Mentor views, citations/literature, comments, provenance events and AI insertion tracking. The Assistant UI supports purposes such as explanation, brainstorming, language editing, translation, restructuring and generation.
 
-Asistent UI već postoji u desnom railu. Korisnik bira svrhu (`explain`, `brainstorm`, `language`, `translate`, `restructure`, `generate`), upisuje prompt te može odgovor umetnuti ili kopirati.
+The browser never receives provider credentials. Assistant requests use the canonical server-side endpoint `/api/ai`. If live execution is unavailable, the prototype may show the old canned response only as an explicitly labelled **Demo odgovor**.
 
-## UI postoji, ali u v0.1 nije postojao pravi AI backend
-
-Prije v0.2 klik na **Pošalji** nije radio mrežni AI poziv. Odgovor se uzimao iz lokalnog objekta `CANNED`. U repozitoriju nije postojao OpenAI/Anthropic/Gemini/OpenRouter SDK ni `fetch` prema AI servisu.
-
-v0.2 zadržava CANNED odgovore samo kao **jasno označen demo fallback** za lokalni statički preview ili kada live AI infrastruktura nije dostupna. Takav fallback nikad se ne označava kao live uspjeh.
-
-## v0.2 stvarni execution path
+## Canonical v0.3 execution path
 
 ```text
-Asistent UI
+Assistant UI
   -> public/assets/ai-client.js
-  -> /api/ai
+  -> POST /api/ai
   -> AIArchitect.plan()
-  -> classification + risk + complexity
-  -> ProjectProfile + routing policy
-  -> versioned prompt + workflow
-  -> provider/model candidate selection
-  -> provider abstraction
-  -> output validation
-  -> independent verification when required
-  -> privacy-safe outcome record
-  -> response to UI
+  -> ProjectProfile + task/risk/complexity
+  -> versioned prompt/workflow
+  -> context budget
+  -> canonical model registry
+  -> token/cost prediction + aggregate hard budget
+  -> provider execution
+  -> retry / fallback / escalation
+  -> deterministic contract verification
+  -> independent actual-model verification when required
+  -> privacy-safe request/attempt/verification/final telemetry
+  -> durable calibration when OutcomeStore is configured
 ```
 
-API ključevi postoje samo u server-side runtimeu. Browser ne dobiva OpenRouter/OpenAI/Anthropic/Gemini ključ.
+There is no active `/api/ai-router` endpoint or separate AI Router execution product in v0.3.
 
-## Buduće AI funkcije koje v0.2 samo priprema
+## What v0.3 actually implements
 
-Sljedeće nisu lažno predstavljene kao gotove funkcije:
+- repo-aware ProjectProfile;
+- canonical model/provider registry;
+- OpenAI, Anthropic, Gemini, xAI, OpenRouter and local/mock adapters;
+- exact provider token counting where officially available;
+- context dedupe/relevance budgeting with mandatory evidence protection;
+- output/reasoning P50/P90/P95 prediction;
+- predicted vs actual/unknown cost semantics;
+- aggregate request budgets;
+- explicit retry/fallback/escalation;
+- deterministic contract verifier;
+- independent actual-model verifier;
+- request/attempt/verification/final telemetry;
+- Local/Noop/Supabase OutcomeStore adapters;
+- calibration/dashboard metric primitives;
+- UsagePolicy interface;
+- secure prepared Supabase migration;
+- deterministic CI and manual-only live Promptfoo benchmark.
 
-- automatsko web/source retrieval izvršavanje za research;
-- stvarna bibliografska/DOI verifikacija preko vanjskih baza;
-- automatski DOCX/OOXML repair iz editora;
-- trajni production outcome store iz kojeg serverless runtime uči između deployeva;
-- autentifikacija i prava Student/Mentor;
-- trajno spremanje rada;
-- integracije s Lektom, Katedrom i WordReplicom.
+## Explicitly not finished
 
-Architect već može planirati te taskove i za high-risk task ih blokira ako nema potreban dokaz/tooling, umjesto da model nagađa.
+The following must not be presented as production-ready features:
 
-## Granica povjerenja
+- user authentication/identity;
+- per-user subscription/quota enforcement;
+- production-applied Supabase v0.3 migration;
+- automatic web/source retrieval execution from the browser Assistant;
+- external DOI/bibliographic retrieval implementation;
+- DOCX/OOXML repair execution from Pisač;
+- permissioned arbitrary tool broker;
+- production empirical routing dataset large enough to claim model success probabilities;
+- Not Diamond learned routing.
 
-- **Planiranje** može raditi potpuno lokalno.
-- **Live inference** zahtijeva barem jedan server-side provider ključ.
-- **Research/citation verification** zahtijeva retrieval evidence.
-- **High-risk success** zahtijeva neovisnu verifikaciju.
-- **Adaptive learning** koristi samo ishode koji imaju stvarni quality/eval score i poznat trošak; sama niska cijena ne može učiniti neevaluirani ili cost-unknown model pobjednikom.
-- Telemetrija po defaultu čuva hash i duljinu taska/outputa, ne njihov puni sadržaj.
+## Trust boundaries
 
-- **Live endpoint** je po defaultu ugašen i zahtijeva `AI_ARCHITECT_LIVE_ENABLED=true`. Dok Pisač nema autentifikaciju i account-level kvote, merge/deploy v0.2 ne podrazumijeva uključivanje javnog live inferencea.
+- Retrieval-required tasks fail closed without evidence.
+- High-risk configured tasks require independent actual-model verification.
+- Unknown cost is never zero.
+- Numeric success probability is not asserted before sufficient verified production outcomes.
+- Full prompt/output text is not stored in canonical v0.3 telemetry by default.
+- Live endpoint defaults OFF with both `AI_ARCHITECT_LIVE_ENABLED=false` and `AI_ARCHITECT_USAGE_POLICY_READY=false`.
+- Same-origin and rate limiting do not replace authentication.
+
+## Production live readiness
+
+Before enabling public live inference, Pisač still needs:
+
+1. trustworthy user identity/auth;
+2. per-user daily/monthly quotas and spend budgets;
+3. distributed rate limiting tied to identity;
+4. production OutcomeStore migration/configuration;
+5. live-provider smoke/eval evidence after secrets are configured.

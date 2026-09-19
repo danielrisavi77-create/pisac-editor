@@ -9,3 +9,12 @@ node_modules/
 
 # AI Architect local telemetry
 .ai/runtime/*.jsonl
+
+# Playwright
+playwright-report/
+test-results/
+
+# Next.js
+.next/
+*.tsbuildinfo
+next-env.d.ts

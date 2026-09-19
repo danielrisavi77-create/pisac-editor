@@ -1,0 +1,26 @@
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { FlatCompat } from "@eslint/eslintrc";
+
+const compat = new FlatCompat({
+  baseDirectory: dirname(fileURLToPath(import.meta.url)),
+});
+
+const eslintConfig = [
+  {
+    ignores: [
+      ".next/**",
+      "next-env.d.ts",
+      "node_modules/**",
+      "public/**",
+      "playwright-report/**",
+      "test-results/**",
+      "netlify/**",
+      "tools/**",
+      "supabase/**",
+    ],
+  },
+  ...compat.extends("next/core-web-vitals", "next/typescript"),
+];
+
+export default eslintConfig;

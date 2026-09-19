@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "project": {
     "name": "pisac-editor",
     "type": "academic-writing-editor",
@@ -14,9 +14,15 @@
     "determinism": 0.1
   },
   "execution": {
-    "retriesPerCandidate": 1,
+    "defaultProfile": "balanced",
     "defaultMaxCostUsd": 0.08,
-    "defaultMaxLatencyMs": 30000,
+    "defaultMaxInputTokens": 48000,
+    "defaultMaxOutputTokens": 12000,
+    "defaultMaxTotalTokens": 70000,
+    "defaultMaxLatencyMs": 45000,
+    "defaultMaxRetries": 1,
+    "defaultMaxFallbacks": 2,
+    "defaultMaxEscalations": 1,
     "failClosedOnHighRisk": true
   },
   "privacy": {
@@ -39,7 +45,9 @@
     "citationClaimsRequireRetrievedEvidence": true,
     "destructiveCodeChangesRequireReview": true,
     "preferCheapestModelThatPassesQualityGate": true,
-    "qualityGateBeatsCostOptimization": true
+    "qualityGateBeatsCostOptimization": true,
+    "unknownCostIsZero": false,
+    "publicLiveRequiresUsagePolicy": true
   },
   "featurePolicies": {
     "assistant": {

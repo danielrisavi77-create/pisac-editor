@@ -22,11 +22,7 @@ function findRepoRoot() {
 }
 
 const architect = new AIArchitect({
-  repoRoot:findRepoRoot(),
-  outcomeSink:async (record) => {
-    // Privacy-safe telemetry only: sanitizeOutcome strips task/output content.
-    console.log("AI_ARCHITECT_OUTCOME", JSON.stringify(record));
-  }
+  repoRoot:findRepoRoot()
 });
 
 function json(status, body) {
@@ -58,6 +54,13 @@ export function createHandler(architectInstance = architect) {
       message:"Live AI is disabled for this deployment. The client may use its clearly labelled demo fallback."
     });
   }
+  if (process.env.AI_ARCHITECT_USAGE_POLICY_READY !== "true") {
+    return json(503, {
+      ok:false,
+      code:"USAGE_POLICY_NOT_READY",
+      message:"Live AI requires authenticated identity, per-user quotas and distributed rate limiting before public use."
+    });
+  }
 
   let body;
   try { body = await request.json(); }
@@ -83,7 +86,8 @@ export function createHandler(architectInstance = architect) {
 
   if (!result.ok) {
     const status = result.code === "NO_PROVIDER_AVAILABLE" ? 503 :
-      result.code === "RETRIEVAL_REQUIRED" ? 422 : 502;
+      result.code === "RETRIEVAL_REQUIRED" ? 422 :
+      /BUDGET|PREDICTED_COST|ACTUAL_COST/.test(result.code || "") ? 422 : 502;
     return json(status, {
       ok:false,
       status:result.status,
@@ -110,8 +114,11 @@ export function createHandler(architectInstance = architect) {
       workflow:{id:result.plan.workflow.id,version:result.plan.workflow.version},
       prompt:{id:result.plan.prompt.id,version:result.plan.prompt.version},
       reasoning:result.plan.reasoning,
-      validationPassed:Boolean(result.validation?.passed),
-      verificationStatus:result.verification?.status || "not-required"
+      verificationStatus:result.verification?.status || "not-required",
+      retryCount:result.retries || 0,
+      fallbackCount:result.fallbacks || 0,
+      escalationCount:result.escalations || 0,
+      costStatus:result.costStatus || "unknown"
     }
   });
   };

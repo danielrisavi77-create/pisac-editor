@@ -1,12 +1,11 @@
 [build]
-  publish = "public"
+  command = "npm run build"
+  publish = ".next"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
 
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
   included_files = [".ai/**", "README.md", "netlify.toml", "public/**", "tools/ai-architect/**"]
-
-[[redirects]]
-  from = "/api/ai-router"
-  to = "/.netlify/functions/ai-router"
-  status = 200

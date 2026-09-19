@@ -1,73 +1,49 @@
-# Pisač — akademski uređivač (prototip)
+# Pisač
 
-Kod preuzet s https://prototipeditor.netlify.app/ 19. rujna 2026.
-HTML, CSS i JavaScript razdvojeni su radi održavanja; logika prototipa je sačuvana.
-Ovo je početni kod za novi repozitorij, a ne izvorna povijest projekta.
+Pisač je akademski uređivač u razvoju kao F1 Authoring Kernel: Next.js 15 (App Router) + Supabase + Tiptap + Dexie, s eksplicitnim stanjima sinkronizacije i modelom dokumenta koji čuva razliku između identiteta i autorstva.
+Ovo je javni demo/prototip repozitorij — dio funkcionalnosti (autentifikacija, serversko spremanje) radi tek uz vlastiti Supabase projekt.
+
+Kod je izvorno preuzet s https://prototipeditor.netlify.app/ 19. rujna 2026. i otad postupno zamijenjen F1 jezgrom; vanilla prototip je i dalje dostupan na `/legacy/`.
 
 ## Pokretanje
 
-Potreban je Python 3. Iz korijena projekta pokreni:
+Potreban je Node 24 (vidi `.nvmrc`).
 
 ```sh
-python -m http.server 8080 --directory public
+npm ci
+npm run dev
 ```
 
-Otvori http://localhost:8080. Nema npm ovisnosti ni build koraka.
-Google Fonts zahtijeva internetsku vezu; preglednik može koristiti zamjenske fontove.
+Otvori http://localhost:3000.
+
+- `/demo` radi bez ikakve konfiguracije — lokalni uređivač bez prijave i bez servera.
+- Puna aplikacija (prijava, `/workspace`, `/d/[id]`) traži `NEXT_PUBLIC_SUPABASE_URL` i `NEXT_PUBLIC_SUPABASE_ANON_KEY` (+ opcionalno `NEXT_PUBLIC_SITE_URL` za magic-link redirect). Bez njih aplikacija poštenu obavještava korisnika umjesto da tiho pukne — vidi `.env.example` za sve varijable i objašnjenja (uključujući granice rate limitinga).
+
+## Testovi
+
+```sh
+npm test          # Vitest (root) + AI Architect (tools/ai-architect) — 1082 + 86 testova
+npm run test:e2e  # Playwright — 30 E2E testova
+npm run check:bundle
+```
+
+`npm test` mora biti zelen prije svakog commita (pravilo iz `CLAUDE.md`).
 
 ## Struktura
 
-- `public/index.html`: sučelje
-- `public/assets/styles.css`: izgled
-- `public/assets/app.js`: logika uređivača, provenijencije i Asistent UI
-- `public/assets/ai-client.js`: browser klijent bez API ključeva
-- `netlify/functions/ai-execute.mjs`: server-side AI Architect endpoint
-- `.ai/`: routing, prompt, workflow, model i eval konfiguracija
-- `tools/ai-architect/`: reusable AI Architect core + CLI + testovi
-- `netlify.toml`: objava `public` direktorija i Functions konfiguracija
+- `app/` — rute: `/`, `/prijava`, `/workspace` (+ `/postavljanje` za neispravnu konfiguraciju), `/d/[id]`, `/demo`, `/legacy` (statični vanilla prototip)
+- `src/domain/` — čista domenska logika bez frameworka: `document/`, `sync/`, `workspace/`, `docx/`, `serverSync/`
+- `src/lib/` — `journal/` (Dexie), `sync/` (drain runner), `supabase/`, `i18n/`, `rate/`
+- `src/editor/` — Tiptap shema i interop s kanonskim modelom dokumenta
+- `supabase/migrations/` — pripremljene, **nisu primijenjene** na produkciju
+- `tools/ai-architect/` — AI Architect, zamrznut tijekom F1 (dossier §30)
+- `docs/` — arhitekturni dossier, F1 plan, stanje petlje (`F1_STATE.md`), performance budžet
+- `e2e/` — Playwright specovi + `EVIDENCE.md`
 
-## Repozitorij i objava
+## Stanje projekta
 
-Repozitorij: https://github.com/danielrisavi77-create/pisac-editor
+F1 Authoring Kernel je implementiran i testiran (kanonski model dokumenta, Tiptap uređivač, Dexie journal + sync reducer, server document store s CAS-om, eksplicitno razrješavanje konflikata, recovery flow, checkpointi, DOCX izvoz, E2E pokrivenost). Supabase migracije su pripremljene, ali čekaju aktivaciju Supabase projekta prije primjene. AI Architect je zamrznut po `docs/ARCHITECTURE_DOSSIER_2026-09-19.md` §30 — samo se održavaju njegovi testovi, bez proširenja. PR #7 je aktivna grana ovog rada.
 
-Za automatsku objavu poveži postojeći Netlify projekt s ovim repozitorijem.
-Konfiguracija `netlify.toml` objavljuje direktorij `public`, bez build koraka.
-Prijenos na GitHub sam po sebi ne mijenja postojeću Netlify stranicu.
+## Deploy
 
-## Stvarni status i ograničenja
-
-- Prototip s uređivanjem teksta, citatima, literaturom, komentarima i prikazima Student/Mentor.
-- U preuzetom kodu nema localStorage/IndexedDB pohrane ni serverskog spremanja. Oznaka „zapisano” nije potvrda trajne pohrane. Ponovno učitavanje može izgubiti izmjene.
-- Prikazi Student/Mentor nisu autentifikacija ni sustav ovlasti.
-- Evidencija podrijetla teksta u pregledniku nije dokaz autorstva niti pouzdan detektor AI-ja.
-- Demonstracijski tekst, izvori i brojčani podaci nisu provjereni akademski sadržaj.
-- Uređivanje koristi document.execCommand; prije produkcije treba provjeriti ponašanje u ciljanim preglednicima.
-- Paket je provjeren na sintaksu JavaScripta i identičnost izdvojenih CSS/JS blokova. Funkcionalni pregled u pregledniku nije proveden.
-- Nije dodijeljena open-source licenca.
-
-## Sljedeći razvoj
-
-1. Trajno lokalno spremanje, oporavak dokumenta i izvoz sigurnosne kopije.
-2. Jasna oznaka demo sadržaja i precizan status spremanja.
-3. Provjera undo/redo, lijepljenja, citiranja i komentara u pregledniku.
-4. Model dokumenta i pouzdan DOCX izvoz.
-5. Autentifikacija i mentorska suradnja ako su potrebne.
-6. Integracije s Lektom, Katedrom i WordReplicom kao zasebne, naknadne funkcionalnosti.
-
-## AI Architect v0.2
-
-Repo sada sadrži centralni AI planning/execution sloj u `.ai/` i `tools/ai-architect/`, te server-side Netlify funkciju za postojeći Asistent UI. Architect zasebno bira workflow, verzionirani prompt, capability/model/provider strategiju, reasoning, retrieval/verification policy, alate i budžete; high-risk taskovi failaju zatvoreno ako nedostaje dokaz ili neovisna verifikacija.
-
-Statički Python preview i dalje radi bez API ključeva. U tom načinu Asistent koristi jasno označeni demo fallback. Za live AI deployment ključevi se postavljaju samo u Netlify server environment.
-
-Detalji: [AI_ARCHITECT.md](AI_ARCHITECT.md) i [docs/AI_FEATURE_AUDIT.md](docs/AI_FEATURE_AUDIT.md).
-
-
-## AI Router
-
-AI model calls are centralized behind a provider-neutral AI Router. V2 adds context optimization, provider-aware token/cost accounting, explicit budgets, deterministic verification, retry/fallback/escalation separation and privacy-first calibration telemetry.
-
-- V1: `docs/AI_ROUTER_V1.md`
-- V2: `docs/AI_ROUTER_V2.md`
-
-Provider keys and Supabase service-role credentials remain server-side.
+Netlify (`netlify.toml`, `@netlify/plugin-nextjs`) gradi i poslužuje Next.js izlaz. Iz ove grane još nije objavljeno.

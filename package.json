@@ -2,12 +2,52 @@
   "name": "pisac-editor",
   "private": true,
   "type": "module",
-  "scripts": {
-    "test": "node --test tests/*.test.mjs",
-    "test:router": "node --test tests/ai-router*.test.mjs",
-    "benchmark": "node scripts/ai-router-benchmark.mjs"
-  },
   "engines": {
     "node": ">=24"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "check:bundle": "node scripts/check-bundle-budget.mjs",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run",
+    "test:ai": "npm --prefix tools/ai-architect test",
+    "test": "npm run test:unit && npm run test:ai",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.116.0",
+    "@tiptap/core": "^3.31.3",
+    "@tiptap/extension-bold": "^3.31.3",
+    "@tiptap/extension-document": "^3.31.3",
+    "@tiptap/extension-heading": "^3.31.3",
+    "@tiptap/extension-history": "^3.31.3",
+    "@tiptap/extension-italic": "^3.31.3",
+    "@tiptap/extension-paragraph": "^3.31.3",
+    "@tiptap/extension-placeholder": "^3.31.3",
+    "@tiptap/extension-text": "^3.31.3",
+    "@tiptap/pm": "^3.31.3",
+    "@tiptap/react": "^3.31.3",
+    "dexie": "^4.4.6",
+    "docx": "^9.7.1",
+    "next": "15.5.25",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
+    "@netlify/plugin-nextjs": "^5.16.0",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^24.10.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "15.5.25",
+    "fake-indexeddb": "^6.2.5",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.1"
   }
 }

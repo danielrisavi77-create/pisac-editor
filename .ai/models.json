@@ -1,169 +1,90 @@
 {
-  "schemaVersion": 2,
-  "strategy": "adaptive",
+  "schemaVersion": 3,
+  "registry": {
+    "source": "tools/ai-architect/src/model-registry.mjs",
+    "version": "2026-09-19"
+  },
+  "strategy": "verified-cost-routing",
   "learning": {
-    "minEvaluatedSamples": 3,
-    "qualityGateRequired": true,
-    "notDiamondMinOutcomes": 50
+    "minVerifiedSamples": 30,
+    "minTokenCalibrationSamples": 20,
+    "requireKnownCostForPromotion": true,
+    "requireQualityGate": true
   },
   "providers": {
     "openrouter": {
       "enabled": true,
-      "keyEnv": "OPENROUTER_API_KEY",
-      "defaultModel": "openrouter/auto"
+      "keyEnv": "OPENROUTER_API_KEY"
     },
     "openai": {
       "enabled": true,
-      "keyEnv": "OPENAI_API_KEY",
-      "defaultModel": "gpt-5.6-terra"
+      "keyEnv": "OPENAI_API_KEY"
     },
     "anthropic": {
       "enabled": true,
       "keyEnv": "ANTHROPIC_API_KEY",
-      "defaultModel": "claude-sonnet-5",
       "apiVersion": "2023-06-01"
     },
     "gemini": {
       "enabled": true,
-      "keyEnv": "GEMINI_API_KEY",
-      "defaultModel": "gemini-3.8-flash"
+      "keyEnv": "GEMINI_API_KEY"
+    },
+    "xai": {
+      "enabled": true,
+      "keyEnv": "XAI_API_KEY"
     },
     "local": {
       "enabled": true,
-      "defaultModel": "local/mock",
       "testOnly": true
     },
     "notdiamond": {
       "enabled": false,
       "keyEnv": "NOTDIAMOND_API_KEY",
-      "minOutcomes": 50,
-      "minPerTask": 8
+      "minOutcomes": 100,
+      "minPerTask": 30
     }
   },
-  "capabilityCandidates": {
+  "productionTiers": {
     "low": [
-      {
-        "provider": "openrouter",
-        "model": "openrouter/auto"
-      },
-      {
-        "provider": "openrouter",
-        "model": "google/gemini-3.8-flash"
-      },
-      {
-        "provider": "openrouter",
-        "model": "deepseek/deepseek-v3.2"
-      },
-      {
-        "provider": "openai",
-        "model": "gpt-5.6-luna"
-      },
-      {
-        "provider": "gemini",
-        "model": "gemini-3.8-flash"
-      },
-      {
-        "provider": "local",
-        "model": "local/mock"
-      }
+      "gemini:gemini-3.5-flash-lite",
+      "openai:gpt-5.6-luna",
+      "anthropic:claude-haiku-4-5-20251001",
+      "local:local/mock"
     ],
     "medium": [
-      {
-        "provider": "openrouter",
-        "model": "openrouter/auto"
-      },
-      {
-        "provider": "openrouter",
-        "model": "google/gemini-3.8-flash"
-      },
-      {
-        "provider": "openrouter",
-        "model": "openai/gpt-5.6-sol"
-      },
-      {
-        "provider": "openai",
-        "model": "gpt-5.6-terra"
-      },
-      {
-        "provider": "anthropic",
-        "model": "claude-sonnet-5"
-      },
-      {
-        "provider": "gemini",
-        "model": "gemini-3.8-flash"
-      },
-      {
-        "provider": "local",
-        "model": "local/mock"
-      }
+      "gemini:gemini-3.8-flash",
+      "openai:gpt-5.6-terra",
+      "anthropic:claude-sonnet-5",
+      "xai:grok-4.6",
+      "local:local/mock"
     ],
     "high": [
-      {
-        "provider": "openrouter",
-        "model": "openrouter/auto"
-      },
-      {
-        "provider": "openrouter",
-        "model": "openai/gpt-5.6-sol"
-      },
-      {
-        "provider": "openrouter",
-        "model": "anthropic/claude-opus-5"
-      },
-      {
-        "provider": "openrouter",
-        "model": "google/gemini-3.8-flash"
-      },
-      {
-        "provider": "openai",
-        "model": "gpt-5.6-sol"
-      },
-      {
-        "provider": "anthropic",
-        "model": "claude-opus-5"
-      },
-      {
-        "provider": "gemini",
-        "model": "gemini-3.8-flash"
-      },
-      {
-        "provider": "local",
-        "model": "local/mock"
-      }
+      "openai:gpt-5.6-sol",
+      "anthropic:claude-opus-5",
+      "xai:grok-4.6",
+      "gemini:gemini-3.8-flash",
+      "local:local/mock"
     ],
     "critical": [
-      {
-        "provider": "openrouter",
-        "model": "openai/gpt-5.6-sol"
-      },
-      {
-        "provider": "openrouter",
-        "model": "anthropic/claude-opus-5"
-      },
-      {
-        "provider": "openrouter",
-        "model": "google/gemini-3.8-flash"
-      },
-      {
-        "provider": "openrouter",
-        "model": "openrouter/auto"
-      },
-      {
-        "provider": "openai",
-        "model": "gpt-5.6-sol"
-      },
-      {
-        "provider": "anthropic",
-        "model": "claude-opus-5"
-      },
-      {
-        "provider": "gemini",
-        "model": "gemini-3.8-flash"
-      },
-      {
-        "provider": "local",
-        "model": "local/mock"
-      }
+      "openai:gpt-6-astra",
+      "anthropic:claude-fable-5-1",
+      "openai:gpt-5.6-sol",
+      "anthropic:claude-opus-5",
+      "xai:grok-4.6",
+      "local:local/mock"
     ]
-  }
+  },
+  "autoRouter": {
+    "enabled": true,
+    "ref": "openrouter:openrouter/auto",
+    "allowedTiers": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "requiresExplicitDynamicCostOptIn": true
+  },
+  "benchmarkOnlyRefs": [
+    "gemini:gemini-3.1-pro-preview"
+  ]
 }

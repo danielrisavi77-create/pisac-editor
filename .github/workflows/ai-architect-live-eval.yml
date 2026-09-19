@@ -2,6 +2,11 @@ name: AI Architect Live Eval
 
 on:
   workflow_dispatch:
+    inputs:
+      confirm_paid_calls:
+        description: "Type YES to confirm this manual workflow may spend provider credits."
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -15,6 +20,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
+
+      - name: Require explicit paid-call confirmation
+        env:
+          CONFIRM_PAID_CALLS: ${{ inputs.confirm_paid_calls }}
+        run: |
+          if [ "$CONFIRM_PAID_CALLS" != "YES" ]; then
+            echo "Paid live benchmark cancelled: set confirm_paid_calls=YES."
+            exit 1
+          fi
 
       - name: Require OpenRouter key
         env:
@@ -31,7 +45,10 @@ jobs:
           PROMPTFOO_DISABLE_TELEMETRY: "1"
         run: |
           mkdir -p .ai/runtime
-          npx --yes promptfoo@latest eval             -c .ai/evals/promptfooconfig.yaml             --no-table             --output .ai/runtime/promptfoo-results.json
+          npx --yes promptfoo@latest eval \
+            -c .ai/evals/promptfooconfig.yaml \
+            --no-table \
+            --output .ai/runtime/promptfoo-results.json
 
       - name: Upload live eval artifact
         if: always()
