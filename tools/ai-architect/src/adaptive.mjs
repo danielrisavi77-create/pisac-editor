@@ -6,15 +6,39 @@ export function candidateKey(candidate) {
   return `${candidate.provider}|${candidate.model}`;
 }
 
+function sameTools(a = [], b = []) {
+  return [...a].sort().join(",") === [...b].sort().join(",");
+}
+
+function matchesDecisionContext(row, ctx = {}) {
+  if (ctx.taskClass && row.taskClass !== ctx.taskClass) return false;
+  if (ctx.workflow?.id && row.workflow?.id !== ctx.workflow.id) return false;
+  if (ctx.workflow?.version && row.workflow?.version !== ctx.workflow.version) return false;
+  if (ctx.prompt?.id && row.prompt?.id !== ctx.prompt.id) return false;
+  if (ctx.prompt?.version && row.prompt?.version !== ctx.prompt.version) return false;
+  if (ctx.reasoningLevel && row.reasoningLevel !== ctx.reasoningLevel) return false;
+  if (ctx.tools && !sameTools(row.tools || [], ctx.tools)) return false;
+  return true;
+}
+
 export function selectAdaptiveCandidate(candidates = [], stats = [], {
   qualityGate = 0,
-  minSamples = 3
+  minSamples = 3,
+  taskClass = null,
+  workflow = null,
+  prompt = null,
+  reasoningLevel = null,
+  tools = null
 } = {}) {
   const byCandidate = new Map();
   for (const row of stats || []) {
     if (!row?.provider || !row?.actualModel) continue;
+    if (!matchesDecisionContext(row, { taskClass, workflow, prompt, reasoningLevel, tools })) continue;
     const key = `${row.provider}|${row.actualModel}`;
-    byCandidate.set(key, row);
+    const prev = byCandidate.get(key);
+    if (!prev || (row.evaluatedCount || 0) > (prev.evaluatedCount || 0)) {
+      byCandidate.set(key, row);
+    }
   }
 
   const eligible = candidates
@@ -26,7 +50,8 @@ export function selectAdaptiveCandidate(candidates = [], stats = [], {
       stat &&
       stat.evaluatedCount >= minSamples &&
       finite(stat.meanQuality) &&
-      stat.meanQuality >= qualityGate
+      stat.meanQuality >= qualityGate &&
+      finite(stat.meanUtility)
     )
     .sort((a, b) =>
       (b.stat.meanUtility - a.stat.meanUtility) ||
@@ -41,7 +66,8 @@ export function selectAdaptiveCandidate(candidates = [], stats = [], {
       evidence: {
         evaluatedCount: eligible[0].stat.evaluatedCount,
         meanQuality: eligible[0].stat.meanQuality,
-        meanUtility: eligible[0].stat.meanUtility
+        meanUtility: eligible[0].stat.meanUtility,
+        matchedDecisionContext: true
       }
     };
   }
