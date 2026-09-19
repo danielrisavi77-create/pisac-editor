@@ -13,7 +13,8 @@ function clamp01(v) {
 }
 
 export function normalizedUtility(record = {}, baselines = DEFAULT_BASELINES, weights = {}) {
-  const quality = Number.isFinite(Number(record.qualityScore)) ? clamp01(record.qualityScore) : null;
+  const hasQuality = record.qualityScore !== null && record.qualityScore !== undefined && record.qualityScore !== "";
+  const quality = hasQuality && Number.isFinite(Number(record.qualityScore)) ? clamp01(record.qualityScore) : null;
   if (quality == null) return null;
   const cost = clamp01((Number(record.costUsd) || 0) / baselines.costUsd);
   const latency = clamp01((Number(record.latencyMs) || 0) / baselines.latencyMs);
@@ -59,7 +60,9 @@ export function sanitizeOutcome(record = {}) {
     fallbacks: Array.isArray(record.fallbacks) ? record.fallbacks : [],
     validation: record.validation || null,
     verification: record.verification || null,
-    qualityScore: Number.isFinite(Number(record.qualityScore)) ? Number(record.qualityScore) : null,
+    qualityScore: record.qualityScore !== null && record.qualityScore !== undefined && record.qualityScore !== "" && Number.isFinite(Number(record.qualityScore))
+      ? Number(record.qualityScore)
+      : null,
     success: record.success !== false,
     failureReason: record.failureReason || null,
     timestamp: record.timestamp || new Date().toISOString(),
