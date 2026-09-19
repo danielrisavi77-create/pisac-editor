@@ -40,10 +40,14 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 
 - DONE 7588080 F1-10 security hardening: legacy XSS fixed, CSP+XFO+Referrer headers (E2E canary green), auth-first in 3 actions, best-effort OTP rate limit + 100-project cap, demo storage isolated (pisac-journal-demo), resolved-conflict trim 20, interop prototype check.
 
+- DONE 4eae4fe F1-11 perf: bundle budget + CI gate (check:bundle, gzip-accurate), lazy conflict/recovery panels (own 1.3kB chunk), latency tripwires (round-trip p50 1.2ms vs 25ms ceiling), journal throughput guard. docs/PERF_BUDGET.md.
+
 ## Queue (top = next). Tags: [review] = reviewer pass required.
 - BLOCKED(owner) F1-8 Activate: restore Supabase project Pisac (needs a free active slot or Pro), apply migrations 2026091904-06 via MCP, set NEXT_PUBLIC_* env in Netlify, run authenticated E2E, flip fixture statuses toward PASS with evidence (SHA+env+result).
-- IN_PROGRESS F1-11 Perf: bundle budget check (first-load JS per route recorded in docs/F1_STATE.md Notes), lazy-load conflict/recovery panels, measure editor keystroke→projection latency with a unit benchmark.
 
+
+- TODO F1-12 README + docs refresh: rewrite README.md for the Next.js app (HR: pokretanje, demo, struktura, testovi, deploy noti), remove stale prototype instructions; verify docs/ index links. (sonnet)
+- TODO F1-13 Quality pass: run the /simplify recipe over the branch diff (reuse, dead code, duplication); apply safe cleanups only; tests stay green. (opus)
 
 ## Blocked / questions for owner
 - Q1 ANSWERED by owner 19.9.: pisac-editor gets its OWN Supabase project (option b). Migration numbering stays 2026MMDDNN.
