@@ -178,7 +178,7 @@ export async function recommend(taskText,repoRoot=process.cwd(),context={}){
     contextBudget:{maxTokens:budget.maxInputTokens,optimized:optimized.stats},
     optimizedContext:optimized.text,
     outputBudgetTokens:Math.min(route.generation?.maxOutputTokens||4096,budget.maxOutputTokens||Infinity),
-    qualityGate:route.qualityGate||0,budget,
+    qualityGate:route.qualityGate||0,budget,budgets:budget,
     modelSelection:{
       strategy:cfg.models.strategy||"verified-cost-routing",
       method:selectionMethod,candidates:accepted,rejected,
