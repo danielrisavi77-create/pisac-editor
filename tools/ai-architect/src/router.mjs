@@ -144,7 +144,9 @@ export async function recommend(taskText,repoRoot=process.cwd(),context={}){
   const refs=[...(cfg.models.productionTiers?.[tier]||[])];
   const auto=cfg.models.autoRouter;
   if(auto?.enabled&&auto.allowedTiers?.includes(tier)&&budget.allowDynamicPricing)refs.push(auto.ref);
-  const models=resolveModelRefs(refs);
+  const models=resolveModelRefs(refs).filter(model =>
+    model.stability !== "test-only" || context.allowMock === true || Boolean(context.mockResponse)
+  );
   const calibration=context.calibrationStats||{};
   const accepted=[],rejected=[];
 
