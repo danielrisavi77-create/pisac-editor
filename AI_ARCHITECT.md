@@ -1,192 +1,190 @@
-# AI Architect v0.2
+# AI Architect v0.3
 
-AI Architect is the central AI decision and execution layer for Pisač. It separates **what a task needs** from **which provider/model happens to execute it**.
+AI Architect is the single canonical AI planning, execution, verification and measurement system for Pisač.
 
-## Architecture
-
-```text
-User action
-  -> task/context extraction
-  -> AIArchitect.plan()
-  -> task classification
-  -> risk + complexity
-  -> ProjectProfile
-  -> versioned workflow
-  -> versioned prompt
-  -> tool/retrieval/verification policy
-  -> capability tier
-  -> adaptive provider/model candidate selection
-  -> AIArchitect.execute()
-  -> retry/fallback
-  -> output validation
-  -> independent verification when required
-  -> privacy-safe outcome telemetry
-  -> evaluated outcomes feed later routing
-```
-
-A stronger model is never used as a substitute for missing retrieval, testing, document-fidelity checks or independent verification.
-
-## Stable API
+## Public API
 
 ```js
-import { AIArchitect } from "./tools/ai-architect/src/index.mjs";
-
-const architect = new AIArchitect({ repoRoot: process.cwd() });
-
-const plan = await architect.plan(task, context);
-const explanation = await architect.explain(task, context);
-const result = await architect.execute(task, context);
-await architect.recordOutcome(outcome);
-const stats = await architect.stats();
+architect.plan(task, context)
+architect.execute(task, context)
+architect.explain(task, context)
+architect.evaluate({ output, taskClass, verification, externalChecks })
+architect.recordOutcome(record) // v0.2 compatibility API
+architect.stats()
 ```
 
-For a production persistent store, inject `outcomeSink` and `statsSource`. The core does not require a particular database.
+There is no separate public AI Router product. Routing is an internal AI Architect subsystem.
 
-## ProjectProfile
+## Execution architecture
 
-`scanRepo()` inspects repository structure instead of routing only from user text. The profile includes:
+```text
+user action
+  -> task/context extraction
+  -> ProjectProfile
+  -> task/risk/complexity
+  -> versioned workflow + prompt
+  -> context dedupe/relevance budget
+  -> canonical model registry
+  -> provider-exact token count when available
+  -> token/output/reasoning prediction
+  -> predicted cost + cold-cache budget ceiling
+  -> aggregate request budget
+  -> model/provider selection
+  -> execute
+       transient operational error -> retry same route
+       operational route failure   -> fallback different provider/model
+       quality/verifier failure    -> escalation stronger model/effort
+  -> deterministic contract verifier
+  -> independent actual-model verifier when required
+  -> request/attempt/verification/final telemetry
+  -> durable calibration
+  -> empirical expected cost per successful verified task
+```
 
-- README/manifests/configuration;
-- languages and directory structure;
-- current AI UI/provider/server-call signals;
-- tests and GitHub Actions;
-- persistence/storage signals;
-- Netlify/Vercel/Docker deployment signals;
-- security/env/auth signals;
-- AGENTS/CLAUDE/CODEX/Copilot/Cursor instruction files when present;
-- Pisač product signals such as Student/Mentor views, citations, comments and DOCX references.
+A stronger model is never used as a substitute for retrieval evidence, deterministic tests, document-fidelity checks or independent verification.
 
-## Routing decisions
+## Canonical model/provider registry
 
-Every plan can independently specify:
+The only capability/pricing source of truth is:
 
-- task class;
-- complexity and risk;
-- workflow + version;
-- prompt + version;
-- capability tier;
-- model/provider candidates;
-- reasoning level;
-- tools;
-- whether retrieval is mandatory;
-- whether independent verification is mandatory;
-- context budget;
-- temperature and output-token budget;
-- quality gate;
-- max cost and max latency policy;
-- fallback policy.
+`tools/ai-architect/src/model-registry.mjs`
 
-## Provider abstraction
+`.ai/models.json` is policy-only and references canonical registry IDs.
 
-Prepared adapters:
+Provider adapters:
 
-- OpenRouter;
-- OpenAI;
-- Anthropic;
-- Google Gemini;
-- local/mock provider for deterministic tests;
-- Not Diamond selector adapter, disabled until project-specific eval readiness is satisfied.
+- OpenAI
+- Anthropic
+- Google Gemini
+- xAI / Grok
+- OpenRouter Auto
+- explicit local/mock provider for deterministic tests
 
-Feature code never calls those providers directly. All live calls should go through `AIArchitect.execute()`.
+Exact provider token counting is used for OpenAI, Anthropic and Gemini where their official count endpoints are available. xAI and OpenRouter preflight counting remain explicitly heuristic unless the provider exposes exact count data.
 
-## Fail-closed behavior
+## Cost semantics
 
-The execution layer:
+AI Architect differentiates:
 
-1. blocks retrieval-required tasks when evidence is absent;
-2. tries the preferred candidate;
-3. retries according to policy;
-4. tries alternative provider/model candidates;
-5. validates the output;
-6. requires a distinct verifier for high-risk tasks;
-7. returns a clearly labelled degraded result only when explicitly allowed;
-8. otherwise returns an explicit failure.
+- **predicted cost** — catalog-based preflight estimate;
+- **budget ceiling** — conservative preflight cost used by hard budget checks;
+- **provider-reported billed cost** — authoritative when returned by the provider;
+- **usage-derived actual token cost** — derived from actual token usage and canonical rates;
+- **unknown cost** — never treated as zero.
 
-A degraded or unverified response is never reported as a successful live result.
+Hard budget policy is aggregate across the request: initial attempt, retries, fallbacks, escalations and independent verifier calls.
 
-The current `maxCostUsd` check is a **post-response policy gate**, not a provider-side billing hard cap: a request may already have incurred cost before its reported cost is compared with the budget. OpenRouter Auto is additionally constrained with the router cost tier, but v0.2 does not claim strict per-request spend enforcement.
+A provider-side request can still incur cost before the post-response actual budget check runs; v0.3 therefore combines conservative preflight checks with fail-closed post-response accounting rather than claiming a billing-provider hard stop.
 
-## Outcome learning and privacy
+## Quality and adaptive routing
 
-Outcome records can contain:
+Registry capability ranks are not quality percentages.
 
-- project and feature;
-- task class;
-- versioned workflow and prompt;
-- provider;
-- requested and actual model;
-- reasoning level and tools;
-- input/output token usage;
-- cost and latency;
-- retries and fallbacks;
-- validation and verification result;
-- quality/eval score;
-- success/failure and reason;
-- timestamp.
+Before enough verified production outcomes exist, routing uses transparent capability/cost/latency policy. After the configured verified-sample threshold, the calibration layer may expose empirical:
 
-Full task and output text are not stored by default. The local record contains SHA-256 hashes and lengths.
+- first-pass success;
+- final verified success;
+- retry/fallback/escalation probability;
+- token P50/P90/P95;
+- latency;
+- cost per successful verified task.
 
-Adaptive selection only uses outcomes with a real quality/eval score **and known measured cost**. A cheaper candidate that does not meet the route quality gate cannot outrank a qualifying candidate, and an outcome with unknown cost is not eligible for utility-based promotion.
+Expected cost per successful verified task is only used when empirical success probability and measurable cost exist. A model below an empirically measurable hard quality gate cannot win because it is cheaper.
+
+## Verification
+
+Two independent gates are combined:
+
+1. **Deterministic contract verifier** — non-empty/schema/format/citation/external-check rules. It does not output a fake quality probability.
+2. **Independent actual-model verifier** — for configured high-risk tasks. A second route resolving to the same actual model as the primary response does not count as independent.
+
+Retrieval-required tasks fail closed before model execution if evidence is missing.
+
+## Context budget
+
+The context optimizer performs exact duplicate removal and deterministic relevance selection. Evidence/security/policy/citation/verification segments are mandatory. If mandatory evidence itself cannot fit, execution fails explicitly instead of dropping it to save cost.
+
+## Durable outcomes
+
+Canonical records distinguish:
+
+- request;
+- execution attempt;
+- independent verification attempt;
+- final result.
+
+Full prompt/output bodies are not stored by default. Request text is represented by a SHA-256 fingerprint and structural telemetry.
+
+Outcome stores:
+
+- local JSONL for development/CLI;
+- Supabase adapter when server-side credentials exist;
+- Noop store in serverless environments where durable storage is not configured.
+
+Prepared migration:
+
+`supabase/migrations/2026091903_ai_architect_v03.sql`
+
+The migration is intentionally **not applied automatically**.
+
+## Security
+
+Canonical public endpoint:
+
+`POST /api/ai`
+
+Safe deployment defaults:
+
+```env
+AI_ARCHITECT_LIVE_ENABLED=false
+AI_ARCHITECT_USAGE_POLICY_READY=false
+```
+
+Provider keys alone cannot enable public live inference.
+
+The endpoint also enforces same-origin browser requests, input length limits and Netlify rate limiting. Those controls are defense in depth, not authentication.
+
+Public live inference remains blocked until all three exist:
+
+1. trustworthy user identity/authentication;
+2. per-user quotas/budgets;
+3. distributed rate limiting.
+
+`UsagePolicy` defines the future tier/user/feature quota interface without pretending Pisač already has authentication.
+
+## Not Diamond
+
+Not Diamond is not an active router in v0.3. The adapter exposes readiness only. Readiness requires:
+
+- enough total verified outcomes;
+- enough verified samples per task;
+- sufficient label coverage;
+- multiple challengers;
+- explicit enablement and key.
+
+Activation belongs in a later PR after the evidence threshold is actually satisfied.
 
 ## CLI
 
-Requires Node 20+; CI uses Node 24.
-
 ```bash
 cd tools/ai-architect
-
 npm test
 npm run validate
 npm run scan
 npm run recommend -- "Provjeri citate i DOI-jeve u radu"
-npm run explain -- "Jezično doradi ovaj akademski odlomak"
-npm run execute -- "Jezično doradi ovaj akademski odlomak" --context='{"purpose":"language"}'
+npm run explain -- "Jezično doradi akademski odlomak"
+npm run execute -- "Jezično doradi akademski odlomak" --context='{"purpose":"language"}'
+npm run evaluate -- '{"ok":true}' --context='{"taskClass":"generic","verification":{"jsonSchema":{"type":"object"}}}'
 npm run stats
 npm run eval
 ```
 
-`explain` exposes a short decision rationale (task mapping, risk/complexity, workflow/prompt, verification and routing basis), not private chain-of-thought.
+## Evaluation and CI
 
-## Pisač browser integration
+Default CI uses no provider secrets and performs no paid model calls. It covers deterministic tests, config/registry validation, golden evals, ProjectProfile smoke tests, migration security checks and browser/server syntax.
 
-`public/assets/ai-client.js` sends Assistant requests to `/api/ai`. The Netlify function runs AI Architect server-side, enforces same-origin browser requests, and has a code-based per-IP/domain rate limit.
+The live Promptfoo benchmark is manual-only and requires explicit paid-call confirmation plus `OPENROUTER_API_KEY`.
 
-The static Python preview still works. Because Python does not serve Netlify Functions, Assistant calls fall back to the old canned response **with an explicit “Demo odgovor” label**. This preserves the prototype without pretending the response came from a live model.
+## Reconciliation history
 
-## Required secrets
-
-For the manual Promptfoo benchmark, GitHub Actions needs:
-
-- `OPENROUTER_API_KEY`
-
-For deployed live inference, first explicitly enable the endpoint in the Netlify environment:
-
-- `AI_ARCHITECT_LIVE_ENABLED=true`
-
-Then configure one or more provider keys:
-
-- `OPENROUTER_API_KEY`
-- `OPENAI_API_KEY`
-- `ANTHROPIC_API_KEY`
-- `GEMINI_API_KEY`
-
-`NOTDIAMOND_API_KEY` is reserved for a future learned-router phase and is not currently required.
-
-Because Pisač does not yet have authentication, live inference is opt-in rather than activated by the presence of a provider key. The endpoint requires same-origin browser requests and is rate-limited, but these controls do **not** replace authentication or account-level usage quotas. Keep `AI_ARCHITECT_LIVE_ENABLED=false` for the public rollout until that stronger usage-control layer exists.
-
-## Evaluation
-
-Default CI is deterministic, has no provider secrets and incurs no model cost. It runs:
-
-- unit/regression tests;
-- config/schema cross-reference validation;
-- golden routing evals;
-- ProjectProfile scan;
-- recommend/explain smoke tests;
-- browser/server syntax checks.
-
-Live Promptfoo evaluation is a separate manual workflow and uploads the JSON result as an Actions artifact.
-
-## Current product boundary
-
-See [docs/AI_FEATURE_AUDIT.md](docs/AI_FEATURE_AUDIT.md) for the distinction between what Pisač already implements, what was previously UI-only, and what remains future work.
+See [docs/AI_ARCHITECT_V03_RECONCILIATION.md](docs/AI_ARCHITECT_V03_RECONCILIATION.md) for the component-by-component decision record explaining what was kept from AI Architect v0.2, adopted/reworked from AI Router V2 and dropped as duplicate infrastructure.
