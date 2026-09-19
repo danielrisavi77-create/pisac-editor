@@ -49,3 +49,7 @@ Prijenos na GitHub sam po sebi ne mijenja postojeću Netlify stranicu.
 4. Model dokumenta i pouzdan DOCX izvoz.
 5. Autentifikacija i mentorska suradnja ako su potrebne.
 6. Integracije s Lektom, Katedrom i WordReplicom kao zasebne, naknadne funkcionalnosti.
+
+## AI Architect pilot
+
+Ovaj repo sadrži pilot repo-native AI orkestratora u `.ai/` i `tools/ai-architect/`. On lokalno preporučuje vrstu zadatka, workflow, prompt policy, reasoning razinu i model-selection strategiju. Detalji i naredbe su u [AI_ARCHITECT.md](AI_ARCHITECT.md).
