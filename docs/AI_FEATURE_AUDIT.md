@@ -17,7 +17,7 @@ v0.2 zadržava CANNED odgovore samo kao **jasno označen demo fallback** za loka
 ```text
 Asistent UI
   -> public/assets/ai-client.js
-  -> /.netlify/functions/ai-execute
+  -> /api/ai
   -> AIArchitect.plan()
   -> classification + risk + complexity
   -> ProjectProfile + routing policy
@@ -52,5 +52,7 @@ Architect već može planirati te taskove i za high-risk task ih blokira ako nem
 - **Live inference** zahtijeva barem jedan server-side provider ključ.
 - **Research/citation verification** zahtijeva retrieval evidence.
 - **High-risk success** zahtijeva neovisnu verifikaciju.
-- **Adaptive learning** koristi samo ishode koji imaju stvarni quality/eval score; sama niska cijena ne može učiniti neevaluirani model pobjednikom.
+- **Adaptive learning** koristi samo ishode koji imaju stvarni quality/eval score i poznat trošak; sama niska cijena ne može učiniti neevaluirani ili cost-unknown model pobjednikom.
 - Telemetrija po defaultu čuva hash i duljinu taska/outputa, ne njihov puni sadržaj.
+
+- **Live endpoint** je po defaultu ugašen i zahtijeva `AI_ARCHITECT_LIVE_ENABLED=true`. Dok Pisač nema autentifikaciju i account-level kvote, merge/deploy v0.2 ne podrazumijeva uključivanje javnog live inferencea.
