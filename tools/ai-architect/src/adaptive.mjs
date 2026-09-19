@@ -32,9 +32,9 @@ export function selectAdaptiveCandidate(candidates = [], stats = [], {
 } = {}) {
   const byCandidate = new Map();
   for (const row of stats || []) {
-    if (!row?.provider || !row?.actualModel) continue;
+    if (!row?.provider || !row?.requestedModel) continue;
     if (!matchesDecisionContext(row, { taskClass, workflow, prompt, reasoningLevel, tools })) continue;
-    const key = `${row.provider}|${row.actualModel}`;
+    const key = `${row.provider}|${row.requestedModel}`;
     const prev = byCandidate.get(key);
     if (!prev || (row.evaluatedCount || 0) > (prev.evaluatedCount || 0)) {
       byCandidate.set(key, row);
