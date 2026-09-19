@@ -147,7 +147,14 @@ export async function listProjects(): Promise<ActionResult<Project[]>> {
 
 /** Create one project from the workspace form. */
 export async function createProject(formData: FormData): Promise<ActionResult<Project>> {
-  const title = validateProjectTitle(String(formData.get("naziv") ?? ""));
+  // `FormData.get` yields a File for a file input, so a forged multipart body
+  // must never be coerced to a string like "[object File]".
+  const raw = formData.get("naziv");
+  if (typeof raw !== "string") {
+    return fail("naziv-neispravan");
+  }
+
+  const title = validateProjectTitle(raw);
   if (!title.ok) {
     return fail(title.reason === "empty" ? "naziv-prazan" : "naziv-dug");
   }

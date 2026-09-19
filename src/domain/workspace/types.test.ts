@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ACTION_ERROR_MESSAGES,
   DEFAULT_WORKSPACE_NAME,
   PROJECT_TITLE_MAX_LENGTH,
   WORKSPACE_NAME_MAX_LENGTH,
   validateProjectTitle,
+  parseActionErrorCode,
   validateWorkspaceName,
 } from "./types";
 
@@ -124,5 +126,43 @@ describe("validateProjectTitle", () => {
   it("accepts unicode at the limit", () => {
     const title = "ž".repeat(PROJECT_TITLE_MAX_LENGTH);
     expect(validateProjectTitle(title)).toEqual({ ok: true, value: title });
+  });
+});
+
+describe("parseActionErrorCode", () => {
+  it("accepts every known code", () => {
+    for (const code of Object.keys(ACTION_ERROR_MESSAGES)) {
+      expect(parseActionErrorCode(code)).toBe(code);
+    }
+  });
+
+  it("returns null for an undefined or unknown value", () => {
+    expect(parseActionErrorCode(undefined)).toBeNull();
+    expect(parseActionErrorCode("")).toBeNull();
+    expect(parseActionErrorCode("nepoznato")).toBeNull();
+  });
+
+  it("rejects inherited Object.prototype keys", () => {
+    expect(parseActionErrorCode("constructor")).toBeNull();
+    expect(parseActionErrorCode("__proto__")).toBeNull();
+    expect(parseActionErrorCode("toString")).toBeNull();
+    expect(parseActionErrorCode("hasOwnProperty")).toBeNull();
+    expect(parseActionErrorCode("valueOf")).toBeNull();
+  });
+
+  it("takes the first entry when the query parameter repeats", () => {
+    expect(parseActionErrorCode(["spremanje", "citanje"])).toBe("spremanje");
+  });
+
+  it("rejects an array whose first entry is not a known code", () => {
+    expect(parseActionErrorCode(["constructor"])).toBeNull();
+    expect(parseActionErrorCode([])).toBeNull();
+  });
+
+  it("has a Croatian message for every code it accepts", () => {
+    for (const [code, message] of Object.entries(ACTION_ERROR_MESSAGES)) {
+      expect(parseActionErrorCode(code)).toBe(code);
+      expect(message.length).toBeGreaterThan(0);
+    }
   });
 });

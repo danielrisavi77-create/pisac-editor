@@ -58,16 +58,37 @@ export function validateProjectTitle(input: string): ValidationResult {
 }
 
 /** Codes carried through `?greska=` so the page can render one Croatian message. */
-export type ActionErrorCode = "naziv-prazan" | "naziv-dug" | "spremanje" | "citanje";
+export type ActionErrorCode =
+  | "naziv-prazan"
+  | "naziv-dug"
+  | "naziv-neispravan"
+  | "spremanje"
+  | "citanje";
 
 export const ACTION_ERROR_MESSAGES: Record<ActionErrorCode, string> = {
   "naziv-prazan": "Upiši naziv rada.",
   "naziv-dug": `Naziv rada je predug (najviše ${PROJECT_TITLE_MAX_LENGTH} znakova).`,
+  "naziv-neispravan": "Naziv rada nije ispravno poslan. Pokušaj ponovno.",
   spremanje: "Rad nije spremljen. Pokušaj ponovno.",
   citanje: "Radove trenutačno nije moguće dohvatiti.",
 };
 
-/** Narrows an untrusted `?greska=` value to a known code. */
-export function parseActionErrorCode(raw: string | undefined): ActionErrorCode | null {
-  return raw !== undefined && raw in ACTION_ERROR_MESSAGES ? (raw as ActionErrorCode) : null;
+/**
+ * Narrows an untrusted `?greska=` value to a known code.
+ *
+ * `in` would walk the prototype chain, so `?greska=constructor` or
+ * `?greska=__proto__` would pass; only own keys are accepted. Next may also
+ * hand us a repeated query parameter as an array, in which case the first
+ * entry is considered and everything else rejected.
+ */
+export function parseActionErrorCode(
+  raw: string | string[] | undefined,
+): ActionErrorCode | null {
+  const candidate = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof candidate !== "string") {
+    return null;
+  }
+  return Object.prototype.hasOwnProperty.call(ACTION_ERROR_MESSAGES, candidate)
+    ? (candidate as ActionErrorCode)
+    : null;
 }

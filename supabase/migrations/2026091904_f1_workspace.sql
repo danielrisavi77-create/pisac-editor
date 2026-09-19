@@ -29,6 +29,27 @@ create table if not exists public.pisac_projects (
 create index if not exists pisac_projects_workspace_id_idx
   on public.pisac_projects (workspace_id);
 
+-- Keeps updated_at truthful; without it the column would only ever hold the
+-- insert time. Plain function (no security definer needed) with an empty
+-- search_path, so every referenced object is schema-qualified.
+create or replace function public.pisac_set_updated_at()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  new.updated_at = pg_catalog.now();
+  return new;
+end;
+$$;
+
+drop trigger if exists pisac_projects_set_updated_at on public.pisac_projects;
+
+create trigger pisac_projects_set_updated_at
+  before update on public.pisac_projects
+  for each row
+  execute function public.pisac_set_updated_at();
+
 comment on table public.pisac_workspaces is
   'Personal workspace owned by exactly one authenticated user. F1: prepared, do not auto-apply to production.';
 comment on table public.pisac_projects is
@@ -109,3 +130,8 @@ create policy pisac_projects_delete_own
       select w.id from public.pisac_workspaces w where w.owner_id = auth.uid()
     )
   );
+
+-- Belt and braces: the policies above already gate access, but these revokes
+-- make the "no anonymous access" rule explicit rather than assumed.
+revoke all on table public.pisac_workspaces from anon;
+revoke all on table public.pisac_projects from anon;

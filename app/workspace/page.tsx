@@ -90,7 +90,7 @@ async function submitProject(formData: FormData) {
 export default async function WorkspacePage({
   searchParams,
 }: {
-  searchParams: Promise<{ greska?: string }>;
+  searchParams: Promise<{ greska?: string | string[] }>;
 }) {
   const params = await searchParams;
   const supabase = await createClient();
