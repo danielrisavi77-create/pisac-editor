@@ -2,9 +2,8 @@ import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { loadCalibrationStats } from "../../src/ai-router/calibration.mjs";
 import { safeErrorPayload } from "../../src/ai-router/errors.mjs";
 import { countAiRequest, executeAiRequest, previewAiRequest } from "../../src/ai-router/service.mjs";
+import { enforceRateLimit, rateLimitHeaders } from "../../src/ai-router/rate-limit.mjs";
 import { buildTelemetryBundle, persistTelemetryBundle } from "../../src/ai-router/telemetry.mjs";
-
-const rateBuckets = new Map();
 const MAX_BODY_BYTES = 2600000;
 
 export default async function handler(request) {
@@ -32,15 +31,50 @@ export default async function handler(request) {
     return json({ requestId, error: { code: "INVALID_MODE", message: "mode must be preview, count, or execute." } }, 400);
   }
 
-  if (mode !== "preview") {
-    if (!authorized(request, process.env)) {
-      return json({ requestId, error: { code: "UNAUTHORIZED", message: "Protected AI Router mode requires server authorization." } }, 401);
-    }
-    if (!withinRateLimit(request, process.env)) {
-      return json({ requestId, error: { code: "RATE_LIMITED", message: "AI Router request rate limit exceeded." } }, 429);
-    }
+  if (mode !== "preview" && !authorized(request, process.env)) {
+    return json({ requestId, error: { code: "UNAUTHORIZED", message: "Protected AI Router mode requires server authorization." } }, 401);
   }
 
+  let rateLimit;
+  try {
+    rateLimit = await enforceRateLimit({
+      request,
+      mode,
+      requestId,
+      env: process.env
+    });
+  } catch (error) {
+    console.error("AI router rate limiter failed", {
+      requestId,
+      mode,
+      code: error?.code || "RATE_LIMIT_UNAVAILABLE",
+      status: error?.status || 503
+    });
+    const status = Number.isInteger(error?.status) ? error.status : 503;
+    return json({ requestId, mode, error: safeErrorPayload(error) }, status, rateHeaders);
+  }
+
+  if (!rateLimit.allowed) {
+    return json(
+      {
+        requestId,
+        mode,
+        error: {
+          code: "RATE_LIMITED",
+          message: "AI Router request rate limit exceeded.",
+          details: {
+            scope: mode,
+            limit: rateLimit.limit,
+            retryAfterSeconds: rateLimit.retryAfterSeconds
+          }
+        }
+      },
+      429,
+      rateLimitHeaders(rateLimit)
+    );
+  }
+
+  const rateHeaders = rateLimitHeaders(rateLimit);
   const promptFingerprint = fingerprint(body.prompt || "");
   let result = null;
   try {
@@ -62,7 +96,7 @@ export default async function handler(request) {
         process.env
       );
     }
-    return json({ requestId, mode, ...sanitizeResult(result), telemetry }, 200);
+    return json({ requestId, mode, ...sanitizeResult(result), telemetry }, 200, rateHeaders);
   } catch (error) {
     console.error("AI router request failed", {
       requestId,
@@ -96,22 +130,6 @@ function authorized(request, env) {
   return timingSafeEqual(expectedBuffer, providedBuffer);
 }
 
-function withinRateLimit(request, env) {
-  const limit = Math.max(1, Number(env.AI_ROUTER_RATE_LIMIT_PER_MINUTE || 60));
-  const minute = Math.floor(Date.now() / 60000);
-  const identity = [
-    request.headers.get("x-nf-client-connection-ip") || request.headers.get("x-forwarded-for") || "unknown",
-    request.headers.get("authorization") || "no-auth"
-  ].join("|");
-  const key = fingerprint(identity) + ":" + minute;
-  const current = (rateBuckets.get(key) || 0) + 1;
-  rateBuckets.set(key, current);
-  if (rateBuckets.size > 5000) {
-    for (const storedKey of rateBuckets.keys()) if (!storedKey.endsWith(":" + minute)) rateBuckets.delete(storedKey);
-  }
-  return current <= limit;
-}
-
 function sanitizeResult(result) {
   if (!result) return result;
   const { optimizedContext: _privateContext, ...safe } = result;
@@ -120,13 +138,14 @@ function sanitizeResult(result) {
 function fingerprint(value) {
   return createHash("sha256").update(String(value)).digest("hex").slice(0, 32);
 }
-function json(payload, status) {
+function json(payload, status, extraHeaders = {}) {
   return new Response(JSON.stringify(payload), {
     status,
     headers: {
       "content-type": "application/json; charset=utf-8",
       "cache-control": "no-store",
-      "x-content-type-options": "nosniff"
+      "x-content-type-options": "nosniff",
+      ...extraHeaders
     }
   });
 }
