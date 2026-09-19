@@ -15,6 +15,17 @@
  * Nothing here talks to the server. Local durability is not canonical server
  * state, and no function in this file advances a revision — only a server ACK
  * does (F1-4a).
+ *
+ * KNOWN LIMITATION (multi-tab). IndexedDB is shared by every tab on the
+ * origin, and `saveLocal` replaces the snapshot row outright. Two tabs editing
+ * the same document would therefore overwrite each other's snapshot with no
+ * conflict ever being raised — a silent last-write-wins, which the
+ * constitution forbids. The callers guard this with a single-writer Web Lock
+ * (`acquireDocumentLock`, `lock.ts`): only the tab holding the lock journals.
+ * Where the Web Locks API is missing the guard degrades to "write anyway",
+ * because refusing to save would lose the author's text outright; that
+ * fallback is the residual gap and it closes properly in F1-4b, when the
+ * server CAS gives the second tab a real stale-base conflict instead.
  */
 
 import type { CanonicalDocument } from "@/domain/document";
@@ -43,6 +54,21 @@ export type ClearPendingResult =
 export type MarkStateResult =
   | { ok: true; meta: SyncMeta }
   | { ok: false; reason: LocalSaveFailureReason };
+
+/**
+ * How many pending rows one document may keep.
+ *
+ * Without a server there is nothing to acknowledge, so the queue would grow
+ * once per debounce interval for as long as the author writes and eventually
+ * exhaust the origin's quota — turning every later save into a 'quota' ERROR.
+ * `saveLocal` therefore trims the oldest rows inside the same transaction, so
+ * the trim is as atomic as the write it belongs to.
+ *
+ * Dropping the oldest entries is safe precisely because F1-3a has no sync:
+ * nothing downstream reads them yet. From F1-4b the queue is cleared by ACK
+ * (`clearPending`) and this cap becomes a backstop rather than the mechanism.
+ */
+export const PENDING_LIMIT = 50;
 
 function defaultUuid(): string {
   return crypto.randomUUID();
@@ -128,6 +154,19 @@ export async function saveLocal(
           state: "LOCAL_DURABLE" satisfies SyncState,
           localSeq: nextSeq,
         });
+
+        // Same transaction as the append: the queue is never observed over
+        // its cap, and a failed trim rolls the whole save back rather than
+        // leaving a snapshot whose queue was half-pruned.
+        const keys = await db.pending.where("documentId").equals(documentId).primaryKeys();
+        if (keys.length > PENDING_LIMIT) {
+          // Index order follows `documentId`, not the sequence, so sort before
+          // deciding which rows are the oldest.
+          const oldest = [...keys]
+            .sort((a, b) => a[1] - b[1])
+            .slice(0, keys.length - PENDING_LIMIT);
+          await db.pending.bulkDelete(oldest);
+        }
 
         return nextSeq;
       },

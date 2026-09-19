@@ -119,9 +119,13 @@ export type SyncTransitionRow = Readonly<Partial<Record<SyncEventType, SyncTrans
  *     SYNC_STARTED) or by a new edit; a failure that repeats simply re-enters
  *     ERROR through SAVING_LOCAL. Only CONFLICT and RECOVERY_REQUIRED are
  *     sticky, and each has exactly one exit.
- *   - `LOCAL_SAVE_FAILED` with 'corrupt' or 'unavailable' means the local
- *     store itself cannot be trusted → RECOVERY_REQUIRED. 'quota' and
- *     'unknown' are ordinary, retryable failures → ERROR.
+ *   - `LOCAL_SAVE_FAILED` escalates to RECOVERY_REQUIRED for 'corrupt' ONLY.
+ *     A corrupt store means the bytes on disk can no longer be trusted and a
+ *     checkpoint restore is the only way out. 'unavailable' is deliberately an
+ *     ordinary ERROR: a browser that refuses IndexedDB (private window, site
+ *     data blocked) is not damaged, and RECOVERY_REQUIRED there would be a
+ *     trap — the recovery flow itself needs a working store to leave it.
+ *     'quota' and 'unknown' are likewise ordinary, retryable failures.
  */
 export const SYNC_TRANSITIONS: Readonly<Record<SyncState, SyncTransitionRow>> = {
   EDITING: {
@@ -135,7 +139,7 @@ export const SYNC_TRANSITIONS: Readonly<Record<SyncState, SyncTransitionRow>> = 
       cases: {
         quota: "ERROR",
         unknown: "ERROR",
-        unavailable: "RECOVERY_REQUIRED",
+        unavailable: "ERROR",
         corrupt: "RECOVERY_REQUIRED",
       },
     },
@@ -154,7 +158,22 @@ export const SYNC_TRANSITIONS: Readonly<Record<SyncState, SyncTransitionRow>> = 
     EDIT: { to: "EDITING" },
   },
   CONFLICT: {
-    CONFLICT_RESOLVED: { cases: { rebase: "SYNCING", discard: "LOCAL_DURABLE" } },
+    /*
+     * A rebase produces NEW content (the local change replayed on the server's
+     * base), and new content goes through the journal before it goes to the
+     * server — hence SAVING_LOCAL, not straight back to SYNCING. Resubmitting
+     * something that was never made durable would mean a crash mid-rebase
+     * loses work the author already saw resolved.
+     *
+     * A discard drops the local change, so what remains is exactly the
+     * server's canonical revision: SYNCED.
+     *
+     * OBLIGATION for F1-5a: the discard path must `clearPending` the queued
+     * rows it just abandoned (and record the original conflict) before the
+     * SYNCED claim is honest. That is not implemented here — F1-3a has no
+     * server sync at all, so no document can reach CONFLICT yet.
+     */
+    CONFLICT_RESOLVED: { cases: { rebase: "SAVING_LOCAL", discard: "SYNCED" } },
   },
   ERROR: {
     EDIT: { to: "EDITING" },
@@ -195,35 +214,52 @@ export function transitionVariant(event: SyncEvent): string | null {
  * Shaped as `(state, event) => state` so it can be handed straight to React's
  * `useReducer` without an adapter.
  */
-export function syncReducer(state: SyncState, event: SyncEvent): SyncState {
-  const transition = SYNC_TRANSITIONS[state][event.type];
-  if (!transition) {
-    return state;
+/**
+ * Table lookup that only ever sees the table's OWN entries.
+ *
+ * Plain property access would walk the prototype chain, so an event carrying
+ * `type: "toString"` or `reason: "constructor"` — a string that reaches the
+ * machine from stored JSON or a future message channel — would find an
+ * inherited `Object.prototype` member and be treated as a transition. Every
+ * lookup here is therefore an own-property lookup.
+ */
+function ownTransition(state: SyncState, event: SyncEvent): SyncTransition | null {
+  if (!Object.hasOwn(SYNC_TRANSITIONS, state)) {
+    return null;
   }
+  const row = SYNC_TRANSITIONS[state];
+  if (!Object.hasOwn(row, event.type)) {
+    return null;
+  }
+  return row[event.type] ?? null;
+}
 
+function ownVariantTarget(
+  transition: SyncTransition,
+  event: SyncEvent,
+): SyncState | null {
   if ("to" in transition) {
     return transition.to;
   }
-
   const variant = transitionVariant(event);
-  if (variant === null) {
+  if (variant === null || !Object.hasOwn(transition.cases, variant)) {
+    return null;
+  }
+  return transition.cases[variant];
+}
+
+export function syncReducer(state: SyncState, event: SyncEvent): SyncState {
+  const transition = ownTransition(state, event);
+  if (!transition) {
     return state;
   }
-
-  return transition.cases[variant] ?? state;
+  return ownVariantTarget(transition, event) ?? state;
 }
 
 /** True when `event` moves `state` at all (a self-transition counts as legal). */
 export function isLegalTransition(state: SyncState, event: SyncEvent): boolean {
-  const transition = SYNC_TRANSITIONS[state][event.type];
-  if (!transition) {
-    return false;
-  }
-  if ("to" in transition) {
-    return true;
-  }
-  const variant = transitionVariant(event);
-  return variant !== null && variant in transition.cases;
+  const transition = ownTransition(state, event);
+  return transition !== null && ownVariantTarget(transition, event) !== null;
 }
 
 /** The state a fresh editor session starts in: nothing is claimed yet. */

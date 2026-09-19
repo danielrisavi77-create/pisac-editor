@@ -3,33 +3,48 @@
 /**
  * Client wrapper around the editor for one project.
  *
- * F1-3a adds the local durable journal: every canonical candidate the editor
- * produces is written to IndexedDB in one atomic transaction, and the sync
- * state machine (`syncReducer`) is driven from the result. There is still no
- * server sync — that is F1-4 — so this view can reach LOCAL_DURABLE and never
- * SYNCED, and it says so rather than implying a generic "saved".
+ * F1-3a gives this view the local durable journal: every debounced canonical
+ * candidate is written to IndexedDB in one atomic transaction and the sync
+ * state machine is driven from the result. There is still no server sync
+ * (F1-4), so a document here can reach LOCAL_DURABLE and never SYNCED — and
+ * it says exactly that, rather than a generic "saved".
  *
- * On mount the journal is read first: a snapshot found there wins over the
- * empty document handed down by the server page, because it is the author's
- * most recent durable text. The real server document arrives in F1-4.
+ * Three honesty rules shape the wiring:
  *
- * The status chip is F1-3b. Until then the raw state constant is exposed in
- * `data-sync-state` (for the E2E fixtures) plus one unobtrusive text node; the
- * Croatian labels come with the chip.
+ *   1. The persisted `meta.state` wins on reload. CONFLICT and
+ *      RECOVERY_REQUIRED may only be left by an explicit decision, and
+ *      re-opening a tab is not one; a session that synthesised its own state
+ *      from the snapshot would quietly clear them.
+ *   2. The chip never claims durability for text that is not written. The
+ *      editor reports `onDirty` synchronously on every change — a bare signal,
+ *      no content — so the state leaves LOCAL_DURABLE the instant the author
+ *      types, not when the debounce expires. On unmount and on `pagehide` the
+ *      pending projection is flushed, so the last window is not dropped.
+ *   3. One writer per document. A second tab on the same document does not
+ *      journal at all (see `acquireDocumentLock`), because replacing the
+ *      snapshot behind another tab's back is a silent last-write-wins.
+ *
+ * The status chip itself is F1-3b: until then the raw state constant lives in
+ * `data-sync-state` plus one unobtrusive text node, and only the multi-tab
+ * notice is written out in Croatian.
  */
 
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
-import DocumentEditor from "@/editor/Editor";
+import DocumentEditor, { type EditorFlushHandle } from "@/editor/Editor";
 import { countNodes, countWords, type CanonicalCandidate } from "@/editor/interop";
 import type { CanonicalDocument } from "@/domain/document";
 import {
   INITIAL_SYNC_STATE,
+  restoreSyncState,
   syncReducer,
+  type JournalContents,
   type LocalSaveFailureReason,
+  type SyncState,
 } from "@/domain/sync";
 import { openJournal, type JournalDatabase } from "@/lib/journal/db";
-import { loadJournal, saveLocal } from "@/lib/journal/journal";
+import { loadJournal, markState, saveLocal } from "@/lib/journal/journal";
+import { acquireDocumentLock, documentLockName } from "@/lib/journal/lock";
 
 const statusRow = {
   display: "flex",
@@ -47,92 +62,204 @@ const problem = {
   margin: "0.75rem 0 0",
 } as const;
 
+/**
+ * Why this tab is not journalling, when it is not. `'multi-tab'` is a UI-level
+ * reason only: it is never written to the journal, because the tab that is
+ * locked out must not touch the store the writer tab owns — a persisted
+ * 'multi-tab' error would also reappear on the next, perfectly healthy reload.
+ */
+type BlockedReason = LocalSaveFailureReason | "multi-tab";
+
 export type EditorClientProps = {
   documentId: string;
   initialDocument: CanonicalDocument;
 };
 
-type Bootstrap = {
-  /** What the editor starts from: the journal snapshot, or the page's document. */
-  document: CanonicalDocument;
-  /** The revision that document is based on. Only a server ACK advances it. */
-  baseRevision: number;
-};
+type Boot =
+  | { status: "loading" }
+  | {
+      status: "ready";
+      db: JournalDatabase;
+      contents: JournalContents;
+      /** False when another tab holds the writer lock. */
+      writable: boolean;
+    }
+  | { status: "failed"; reason: LocalSaveFailureReason };
+
+/** The state a failed local probe lands in, derived from the machine itself. */
+function stateAfterLocalFailure(reason: LocalSaveFailureReason): SyncState {
+  return syncReducer(syncReducer(INITIAL_SYNC_STATE, { type: "LOCAL_SAVE_STARTED" }), {
+    type: "LOCAL_SAVE_FAILED",
+    reason,
+  });
+}
 
 export default function EditorClient({
   documentId,
   initialDocument,
 }: EditorClientProps) {
-  const [syncState, dispatch] = useReducer(syncReducer, INITIAL_SYNC_STATE);
-  const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
-  const [candidate, setCandidate] = useState<CanonicalCandidate | null>(null);
+  const [boot, setBoot] = useState<Boot>({ status: "loading" });
 
-  const dbRef = useRef<JournalDatabase | null>(null);
-  const baseRevision = useRef(0);
-  // The page's document is only the fallback, and it is read once: keeping it
-  // in a ref stops a new object identity from re-running the bootstrap.
-  const fallbackDocument = useRef(initialDocument);
-
-  // Open the journal and read it before the editor mounts: the editor reads
-  // its initial content once, so handing it the empty document first would
-  // silently discard whatever the author had saved locally.
+  // Open the journal, claim the writer lock and read the journal before the
+  // editor mounts: the editor takes its initial content once, so starting it
+  // on the empty document would discard whatever was saved locally.
   useEffect(() => {
     let cancelled = false;
-
-    /**
-     * A journal that cannot be opened or read is a failed local write as far
-     * as the machine is concerned — the pair is dispatched so the failure
-     * reaches ERROR / RECOVERY_REQUIRED instead of being swallowed as an
-     * illegal transition out of EDITING.
-     */
-    const reportLocalFailure = (reason: LocalSaveFailureReason) => {
-      dispatch({ type: "LOCAL_SAVE_STARTED" });
-      dispatch({ type: "LOCAL_SAVE_FAILED", reason });
-    };
+    let release = () => {};
 
     void (async () => {
       const opened = await openJournal();
       if (cancelled) {
         return;
       }
-
       if (!opened.ok) {
-        reportLocalFailure(opened.reason);
-        setBootstrap({ document: fallbackDocument.current, baseRevision: 0 });
+        setBoot({ status: "failed", reason: opened.reason });
         return;
       }
 
-      dbRef.current = opened.db;
+      const lock = await acquireDocumentLock(documentLockName(documentId));
+      release = lock.release;
+      if (cancelled) {
+        release();
+        return;
+      }
+
       const loaded = await loadJournal(opened.db, documentId);
       if (cancelled) {
         return;
       }
-
       if (!loaded.ok) {
-        reportLocalFailure(loaded.reason);
-        setBootstrap({ document: fallbackDocument.current, baseRevision: 0 });
+        setBoot({ status: "failed", reason: loaded.reason });
         return;
       }
 
-      const snapshot = loaded.contents.snapshot;
-      setBootstrap(
-        snapshot
-          ? { document: snapshot.document, baseRevision: snapshot.revision }
-          : { document: initialDocument, baseRevision: 0 },
-      );
-      baseRevision.current = snapshot?.revision ?? 0;
-      if (snapshot) {
-        // Recovered text that still owes the server is locally durable, not
-        // synced; the pending queue is drained in F1-4b.
-        dispatch({ type: "LOCAL_SAVE_STARTED" });
-        dispatch({ type: "LOCAL_SAVE_OK" });
-      }
+      setBoot({
+        status: "ready",
+        db: opened.db,
+        contents: loaded.contents,
+        writable: lock.held,
+      });
     })();
 
     return () => {
       cancelled = true;
+      release();
     };
-  }, [documentId, initialDocument]);
+  }, [documentId]);
+
+  if (boot.status === "loading") {
+    return (
+      <div data-sync-state={INITIAL_SYNC_STATE}>
+        <p style={statusRow}>Učitavanje…</p>
+      </div>
+    );
+  }
+
+  if (boot.status === "failed") {
+    // No journal: the page still has to be editable, but nothing about this
+    // session is durable and the state says so.
+    return (
+      <JournalledEditor
+        key={`${documentId}:no-journal`}
+        db={null}
+        documentId={documentId}
+        document={initialDocument}
+        baseRevision={0}
+        initialSyncState={stateAfterLocalFailure(boot.reason)}
+        blocked={boot.reason}
+      />
+    );
+  }
+
+  const snapshot = boot.contents.snapshot;
+
+  return (
+    <JournalledEditor
+      key={documentId}
+      db={boot.writable ? boot.db : null}
+      documentId={documentId}
+      document={snapshot?.document ?? initialDocument}
+      baseRevision={snapshot?.revision ?? 0}
+      initialSyncState={
+        boot.writable
+          ? restoreSyncState(boot.contents)
+          : stateAfterLocalFailure("unavailable")
+      }
+      blocked={boot.writable ? null : "multi-tab"}
+    />
+  );
+}
+
+type JournalledEditorProps = {
+  /** `null` when this session must not write: no journal, or not the writer. */
+  db: JournalDatabase | null;
+  documentId: string;
+  document: CanonicalDocument;
+  baseRevision: number;
+  initialSyncState: SyncState;
+  blocked: BlockedReason | null;
+};
+
+/**
+ * Mounted only once the journal has been read, so the reducer can *start* in
+ * the restored state instead of being nudged into it afterwards.
+ */
+function JournalledEditor({
+  db,
+  documentId,
+  document,
+  baseRevision,
+  initialSyncState,
+  blocked,
+}: JournalledEditorProps) {
+  const [syncState, dispatch] = useReducer(syncReducer, initialSyncState);
+  const [candidate, setCandidate] = useState<CanonicalCandidate | null>(null);
+
+  const base = useRef(baseRevision);
+  const lastError = useRef<LocalSaveFailureReason | undefined>(undefined);
+  const flushRef = useMemo<EditorFlushHandle>(() => ({ current: null }), []);
+
+  // Persist the states that must survive a reload. Fire-and-forget: this is a
+  // best-effort record, and a store that cannot take it is already reflected
+  // in the state being written. Only the writer tab records anything.
+  useEffect(() => {
+    if (!db) {
+      return;
+    }
+    if (
+      syncState !== "CONFLICT" &&
+      syncState !== "ERROR" &&
+      syncState !== "RECOVERY_REQUIRED"
+    ) {
+      return;
+    }
+    void markState(db, documentId, syncState, lastError.current);
+  }, [db, documentId, syncState]);
+
+  // Flush the pending projection when the session ends. Best effort by
+  // nature: `saveLocal` is asynchronous, so a hard kill (tab crash, power
+  // loss) can still end between the projection and the commit — and EDITING,
+  // which is what the state says at that moment, is then the honest claim.
+  useEffect(() => {
+    const flush = () => {
+      flushRef.current?.();
+    };
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("beforeunload", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("beforeunload", flush);
+      flush();
+    };
+  }, [flushRef]);
+
+  const handleDirty = useCallback(() => {
+    if (!db) {
+      return;
+    }
+    // Payload-free: the document moved, so stop claiming the text is durable.
+    dispatch({ type: "EDIT" });
+  }, [db]);
 
   const handleChange = useCallback(
     (next: CanonicalCandidate) => {
@@ -140,45 +267,41 @@ export default function EditorClient({
 
       // A candidate the canonical model cannot express is never journalled:
       // storing it would make the snapshot unreadable on the next visit.
-      if (!next.ok) {
+      if (!next.ok || !db) {
         return;
       }
 
-      const db = dbRef.current;
       dispatch({ type: "EDIT" });
       dispatch({ type: "LOCAL_SAVE_STARTED" });
-      if (!db) {
-        dispatch({ type: "LOCAL_SAVE_FAILED", reason: "unavailable" });
-        return;
-      }
-
-      void saveLocal(db, documentId, next.doc, baseRevision.current).then((result) => {
-        dispatch(
-          result.ok
-            ? { type: "LOCAL_SAVE_OK" }
-            : { type: "LOCAL_SAVE_FAILED", reason: result.reason },
-        );
+      void saveLocal(db, documentId, next.doc, base.current).then((result) => {
+        if (result.ok) {
+          lastError.current = undefined;
+          dispatch({ type: "LOCAL_SAVE_OK" });
+          return;
+        }
+        lastError.current = result.reason;
+        dispatch({ type: "LOCAL_SAVE_FAILED", reason: result.reason });
       });
     },
-    [documentId],
+    [db, documentId],
   );
-
-  if (!bootstrap) {
-    return (
-      <div data-sync-state={syncState}>
-        <p style={statusRow}>Učitavanje…</p>
-      </div>
-    );
-  }
 
   const rejected = candidate !== null && !candidate.ok ? candidate : null;
 
   return (
-    <div data-sync-state={syncState}>
+    <div data-sync-state={syncState} data-sync-blocked={blocked ?? undefined}>
       <DocumentEditor
-        initialDocument={bootstrap.document}
+        initialDocument={document}
         onCanonicalChange={handleChange}
+        onDirty={handleDirty}
+        flushRef={flushRef}
       />
+
+      {blocked === "multi-tab" ? (
+        <div style={problem}>
+          <p style={{ margin: 0 }}>Dokument je otvoren u drugoj kartici.</p>
+        </div>
+      ) : null}
 
       {rejected === null ? (
         <p style={statusRow}>

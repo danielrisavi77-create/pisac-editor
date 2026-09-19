@@ -17,7 +17,8 @@ import {
   openJournal,
   type JournalDb,
 } from "./db";
-import { clearPending, loadJournal, markState, saveLocal } from "./journal";
+import { PENDING_LIMIT, clearPending, loadJournal, markState, saveLocal } from "./journal";
+import { restoreSyncState } from "@/domain/sync";
 
 const DOC_A = "11111111-1111-4111-8111-111111111111";
 const DOC_B = "22222222-2222-4222-8222-222222222222";
@@ -269,6 +270,51 @@ describe("saveLocal", () => {
     expect(await db.meta.count()).toBe(0);
   });
 
+  it("caps the pending queue at the newest PENDING_LIMIT rows", async () => {
+    const doc = emptyDocument(uuidSeq());
+    const uuid = uuidSeq("b");
+    const overflow = 5;
+    for (let i = 0; i < PENDING_LIMIT + overflow; i += 1) {
+      await saveLocal(db, DOC_A, doc, 0, uuid);
+    }
+
+    const rows = await db.pending.where("documentId").equals(DOC_A).sortBy("localSeq");
+    expect(rows).toHaveLength(PENDING_LIMIT);
+    // The oldest rows go; the newest — the ones closest to what the author
+    // sees — stay.
+    expect(rows[0].localSeq).toBe(overflow + 1);
+    expect(rows[rows.length - 1].localSeq).toBe(PENDING_LIMIT + overflow);
+  });
+
+  it("keeps the local sequence advancing past the cap", async () => {
+    const doc = emptyDocument(uuidSeq());
+    const uuid = uuidSeq("b");
+    for (let i = 0; i < PENDING_LIMIT + 2; i += 1) {
+      await saveLocal(db, DOC_A, doc, 0, uuid);
+    }
+    const meta = await db.meta.get(DOC_A);
+    expect(meta?.localSeq).toBe(PENDING_LIMIT + 2);
+  });
+
+  it("trims only the document being written", async () => {
+    const doc = emptyDocument(uuidSeq());
+    await saveLocal(db, DOC_B, doc, 0, uuidSeq("c"));
+    const uuid = uuidSeq("b");
+    for (let i = 0; i < PENDING_LIMIT + 3; i += 1) {
+      await saveLocal(db, DOC_A, doc, 0, uuid);
+    }
+    expect(await db.pending.where("documentId").equals(DOC_B).count()).toBe(1);
+  });
+
+  it("leaves a queue under the cap alone", async () => {
+    const doc = emptyDocument(uuidSeq());
+    const uuid = uuidSeq("b");
+    for (let i = 0; i < 4; i += 1) {
+      await saveLocal(db, DOC_A, doc, 0, uuid);
+    }
+    expect(await db.pending.where("documentId").equals(DOC_A).count()).toBe(4);
+  });
+
   it("leaves the previous durable state intact when a later write aborts", async () => {
     const uuid = uuidSeq();
     await saveLocal(db, DOC_A, docWithText("sigurna", uuid), 0, uuidSeq("b"));
@@ -447,5 +493,67 @@ describe("markState", () => {
       ok: false,
       reason: "corrupt",
     });
+  });
+});
+
+describe("reload restores the sticky states", () => {
+  it.each(["CONFLICT", "RECOVERY_REQUIRED"] as const)(
+    "brings %s back after the tab is closed and re-opened",
+    async (state) => {
+      await saveLocal(db, DOC_A, docWithText("rad", uuidSeq()), 0, uuidSeq("b"));
+      await markState(db, DOC_A, state, "corrupt");
+
+      // A "reload": a brand new handle on the same database name.
+      await db.close();
+      const reopened = new JournalDatabase(db.name);
+      await reopened.open();
+      const loaded = await loadJournal(reopened, DOC_A);
+      if (!loaded.ok) {
+        throw new Error("expected a successful load");
+      }
+
+      expect(restoreSyncState(loaded.contents)).toBe(state);
+      expect(loaded.contents.meta?.lastError).toBe("corrupt");
+      expect(loaded.contents.snapshot?.document.nodes[0].children[0]?.text).toBe("rad");
+      await reopened.close();
+      await db.open();
+    },
+  );
+
+  it("does not downgrade a recorded conflict to LOCAL_DURABLE", async () => {
+    await saveLocal(db, DOC_A, emptyDocument(uuidSeq()), 0, uuidSeq("b"));
+    await markState(db, DOC_A, "CONFLICT");
+    const loaded = await loadJournal(db, DOC_A);
+    if (!loaded.ok) {
+      throw new Error("expected a successful load");
+    }
+    expect(restoreSyncState(loaded.contents)).not.toBe("LOCAL_DURABLE");
+  });
+
+  it("resumes LOCAL_DURABLE after an ordinary save", async () => {
+    await saveLocal(db, DOC_A, emptyDocument(uuidSeq()), 0, uuidSeq("b"));
+    const loaded = await loadJournal(db, DOC_A);
+    if (!loaded.ok) {
+      throw new Error("expected a successful load");
+    }
+    expect(restoreSyncState(loaded.contents)).toBe("LOCAL_DURABLE");
+  });
+
+  it("starts a never-saved document in EDITING", async () => {
+    const loaded = await loadJournal(db, DOC_B);
+    if (!loaded.ok) {
+      throw new Error("expected a successful load");
+    }
+    expect(restoreSyncState(loaded.contents)).toBe("EDITING");
+  });
+
+  it("lets a successful save clear a recorded ERROR", async () => {
+    await markState(db, DOC_A, "ERROR", "quota");
+    await saveLocal(db, DOC_A, emptyDocument(uuidSeq()), 0, uuidSeq("b"));
+    const loaded = await loadJournal(db, DOC_A);
+    if (!loaded.ok) {
+      throw new Error("expected a successful load");
+    }
+    expect(restoreSyncState(loaded.contents)).toBe("LOCAL_DURABLE");
   });
 });

@@ -31,6 +31,13 @@ import { createEditorExtensions, DEFAULT_PLACEHOLDER } from "./schema";
 /** Debounce for the editor → canonical projection, in milliseconds. */
 export const DEFAULT_DEBOUNCE_MS = 500;
 
+/**
+ * Handle through which the owner can force the pending projection out early.
+ * A plain mutable box rather than a React ref type, so the caller may keep it
+ * anywhere (a ref, a closure) without importing React's ref generics.
+ */
+export type EditorFlushHandle = { current: (() => void) | null };
+
 export type EditorProps = {
   /** The document the session starts from. Read once, on mount. */
   initialDocument: CanonicalDocument;
@@ -39,6 +46,20 @@ export type EditorProps = {
    * this is a document-level projection, never a per-keystroke record.
    */
   onCanonicalChange?: (candidate: CanonicalCandidate) => void;
+  /**
+   * Called synchronously on every change, before the debounce — with no
+   * payload at all. It carries the single bit "the document moved", so the
+   * owner can stop claiming durability for text that is not written yet.
+   * Passing no content is what keeps this a state signal and not the
+   * per-keystroke log the constitution forbids.
+   */
+  onDirty?: () => void;
+  /**
+   * Filled with a function that projects the pending candidate immediately.
+   * The owner calls it when the session is about to end (unmount, `pagehide`)
+   * so the last debounce window is not simply dropped.
+   */
+  flushRef?: EditorFlushHandle;
   debounceMs?: number;
   placeholder?: string;
 };
@@ -130,6 +151,8 @@ function ToolbarButton({
 export default function DocumentEditor({
   initialDocument,
   onCanonicalChange,
+  onDirty,
+  flushRef,
   debounceMs = DEFAULT_DEBOUNCE_MS,
   placeholder = DEFAULT_PLACEHOLDER,
 }: EditorProps) {
@@ -138,19 +161,56 @@ export default function DocumentEditor({
   const [initialContent] = useState(() => canonicalToTiptap(initialDocument));
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The editor whose change is still waiting out the debounce, so `flush` can
+  // project it without reaching for a React-rendered value.
+  const pendingEditor = useRef<Editor | null>(null);
   // Kept in refs so a changing callback or delay never re-creates the editor
   // (which would throw away the undo history and the caret).
   const notify = useRef(onCanonicalChange);
+  const notifyDirty = useRef(onDirty);
   const delay = useRef(debounceMs);
 
   useEffect(() => {
     notify.current = onCanonicalChange;
+    notifyDirty.current = onDirty;
     delay.current = debounceMs;
-  }, [onCanonicalChange, debounceMs]);
+  }, [onCanonicalChange, onDirty, debounceMs]);
 
   const project = useCallback((editor: Editor) => {
     notify.current?.(tiptapToCanonical(editor.getJSON()));
   }, []);
+
+  /**
+   * Projects the waiting candidate now. A no-op when nothing is pending, and
+   * defensive about a destroyed editor: the owner flushes while the session is
+   * being torn down, and reading a destroyed ProseMirror view would throw on
+   * the way out.
+   */
+  const flush = useCallback(() => {
+    if (timer.current === null) {
+      return;
+    }
+    clearTimeout(timer.current);
+    timer.current = null;
+
+    const waiting = pendingEditor.current;
+    pendingEditor.current = null;
+    if (!waiting || waiting.isDestroyed) {
+      return;
+    }
+    project(waiting);
+  }, [project]);
+
+  useEffect(() => {
+    if (!flushRef) {
+      return;
+    }
+    flushRef.current = flush;
+    // Deliberately not cleared on cleanup: React tears an unmounting subtree
+    // down from the top, so the owner's cleanup — the one that flushes — runs
+    // after this effect is registered and possibly after its sibling teardown.
+    // A handle nulled here would silently drop the author's last candidate.
+  }, [flush, flushRef]);
 
   const editor = useEditor({
     immediatelyRender: false, // The page is server-rendered; hydrate first.
@@ -164,11 +224,18 @@ export default function DocumentEditor({
       },
     },
     onUpdate: ({ editor: updated }) => {
+      // Synchronous, payload-free: the owner learns *that* the document moved
+      // the moment it moves, so nothing keeps claiming the text is durable
+      // while the debounce window runs. No content crosses this call.
+      notifyDirty.current?.();
+
+      pendingEditor.current = updated;
       if (timer.current !== null) {
         clearTimeout(timer.current);
       }
       timer.current = setTimeout(() => {
         timer.current = null;
+        pendingEditor.current = null;
         project(updated);
       }, delay.current);
     },
@@ -180,6 +247,7 @@ export default function DocumentEditor({
         clearTimeout(timer.current);
         timer.current = null;
       }
+      pendingEditor.current = null;
     },
     [],
   );

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import type { JournalContents } from "./journal-types";
+import { restoreSyncState } from "./restore";
 import {
   CONFLICT_RESOLUTIONS,
   INITIAL_SYNC_STATE,
@@ -123,12 +125,23 @@ describe("local save failure reasons", () => {
   it.each([
     ["quota", "ERROR"],
     ["unknown", "ERROR"],
-    ["unavailable", "RECOVERY_REQUIRED"],
+    ["unavailable", "ERROR"],
     ["corrupt", "RECOVERY_REQUIRED"],
   ] as const)("maps %s to %s", (reason, expected) => {
     expect(syncReducer("SAVING_LOCAL", { type: "LOCAL_SAVE_FAILED", reason })).toBe(
       expected,
     );
+  });
+
+  it("reserves RECOVERY_REQUIRED for a corrupt store", () => {
+    // A browser that refuses IndexedDB is not damaged, and RECOVERY_REQUIRED
+    // would be a trap: the recovery flow needs a working store to leave it.
+    const recovery = LOCAL_SAVE_FAILURE_REASONS.filter(
+      (reason) =>
+        syncReducer("SAVING_LOCAL", { type: "LOCAL_SAVE_FAILED", reason }) ===
+        "RECOVERY_REQUIRED",
+    );
+    expect(recovery).toEqual(["corrupt"]);
   });
 
   it("covers every declared reason", () => {
@@ -160,16 +173,24 @@ describe("conflict handling", () => {
     expect(syncReducer("CONFLICT", event)).toBe("CONFLICT");
   });
 
-  it("leaves CONFLICT only through an explicit rebase", () => {
+  it("journals the rebased content before resubmitting it", () => {
+    // Rebasing produces new content, and new content is made durable before
+    // it is sent — a crash mid-rebase must not lose work already resolved.
     expect(syncReducer("CONFLICT", { type: "CONFLICT_RESOLVED", via: "rebase" })).toBe(
-      "SYNCING",
+      "SAVING_LOCAL",
     );
   });
 
-  it("leaves CONFLICT only through an explicit discard", () => {
+  it("returns to the server's revision on an explicit discard", () => {
     expect(syncReducer("CONFLICT", { type: "CONFLICT_RESOLVED", via: "discard" })).toBe(
-      "LOCAL_DURABLE",
+      "SYNCED",
     );
+  });
+
+  it("never resubmits rebased content straight to the server", () => {
+    expect(
+      syncReducer("CONFLICT", { type: "CONFLICT_RESOLVED", via: "rebase" }),
+    ).not.toBe("SYNCING");
   });
 
   it("does not let typing paper over a conflict", () => {
@@ -275,7 +296,82 @@ describe("whole pipeline", () => {
     state = syncReducer(state, { type: "SYNC_STALE_BASE" });
     expect(state).toBe("CONFLICT");
     state = syncReducer(state, { type: "CONFLICT_RESOLVED", via: "discard" });
+    expect(state).toBe("SYNCED");
+  });
+
+  it("walks a rebase back through the journal before the server", () => {
+    let state: SyncState = "CONFLICT";
+    state = syncReducer(state, { type: "CONFLICT_RESOLVED", via: "rebase" });
+    expect(state).toBe("SAVING_LOCAL");
+    state = syncReducer(state, { type: "LOCAL_SAVE_OK" });
     expect(state).toBe("LOCAL_DURABLE");
+    state = syncReducer(state, { type: "SYNC_STARTED" });
+    expect(state).toBe("SYNCING");
+  });
+
+  it("keeps an unavailable store out of the recovery trap", () => {
+    let state: SyncState = "EDITING";
+    state = syncReducer(state, { type: "LOCAL_SAVE_STARTED" });
+    state = syncReducer(state, { type: "LOCAL_SAVE_FAILED", reason: "unavailable" });
+    expect(state).toBe("ERROR");
+    // ERROR can be retried; RECOVERY_REQUIRED could not be, without a store.
+    expect(syncReducer(state, { type: "LOCAL_SAVE_STARTED" })).toBe("SAVING_LOCAL");
+  });
+});
+
+describe("restoreSyncState", () => {
+  const snapshot = {
+    documentId: "doc",
+    revision: 0,
+    document: { schemaVersion: 1, nodes: [] },
+    savedAt: "2026-09-19T10:00:00.000Z",
+  } as unknown as JournalContents["snapshot"];
+
+  it("starts in EDITING when the journal is empty", () => {
+    expect(restoreSyncState({ snapshot: null, pending: [], meta: null })).toBe("EDITING");
+  });
+
+  it.each(SYNC_STATES)("restores the recorded state %s across a reload", (state) => {
+    expect(
+      restoreSyncState({
+        snapshot,
+        pending: [],
+        meta: { documentId: "doc", state, localSeq: 3 },
+      }),
+    ).toBe(state);
+  });
+
+  it("does not let a reload clear a conflict", () => {
+    const restored = restoreSyncState({
+      snapshot,
+      pending: [],
+      meta: { documentId: "doc", state: "CONFLICT", localSeq: 1 },
+    });
+    expect(restored).toBe("CONFLICT");
+    expect(restored).not.toBe("LOCAL_DURABLE");
+  });
+
+  it("does not let a reload clear a required recovery", () => {
+    expect(
+      restoreSyncState({
+        snapshot,
+        pending: [],
+        meta: { documentId: "doc", state: "RECOVERY_REQUIRED", localSeq: 1 },
+      }),
+    ).toBe("RECOVERY_REQUIRED");
+  });
+
+  it("treats a snapshot without meta as locally durable", () => {
+    expect(restoreSyncState({ snapshot, pending: [], meta: null })).toBe("LOCAL_DURABLE");
+  });
+
+  it("ignores a stored state the machine does not know", () => {
+    const meta = {
+      documentId: "doc",
+      state: "SAVED",
+      localSeq: 1,
+    } as unknown as NonNullable<JournalContents["meta"]>;
+    expect(restoreSyncState({ snapshot, pending: [], meta })).toBe("LOCAL_DURABLE");
   });
 });
 
@@ -293,6 +389,31 @@ describe("robustness", () => {
       reason: "meteor",
     } as unknown as SyncEvent;
     expect(syncReducer("SAVING_LOCAL", rogue)).toBe("SAVING_LOCAL");
+  });
+
+  it.each(["toString", "constructor", "hasOwnProperty", "__proto__"])(
+    "does not read %s off the table's prototype as an event",
+    (type) => {
+      const rogue = { type } as unknown as SyncEvent;
+      for (const state of SYNC_STATES) {
+        expect(syncReducer(state, rogue)).toBe(state);
+        expect(isLegalTransition(state, rogue)).toBe(false);
+      }
+    },
+  );
+
+  it.each(["toString", "constructor", "valueOf"])(
+    "does not read %s off a case table's prototype as a variant",
+    (reason) => {
+      const rogue = { type: "LOCAL_SAVE_FAILED", reason } as unknown as SyncEvent;
+      expect(syncReducer("SAVING_LOCAL", rogue)).toBe("SAVING_LOCAL");
+      expect(isLegalTransition("SAVING_LOCAL", rogue)).toBe(false);
+    },
+  );
+
+  it("survives a state the machine does not know", () => {
+    const rogue = "toString" as unknown as SyncState;
+    expect(syncReducer(rogue, { type: "EDIT" })).toBe(rogue);
   });
 
   it("agrees with isLegalTransition on every pair", () => {
