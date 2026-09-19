@@ -64,10 +64,11 @@ export default async function DocumentPage({
       <h1 style={{ fontSize: "1.75rem", margin: "0 0 1.5rem" }}>{project.title}</h1>
 
       {/*
-        F1-2b has no persistence yet: every visit starts from the canonical
-        empty document. F1-3a loads the journalled snapshot here instead.
+        There is no server document yet (F1-4a). The empty document is only a
+        fallback: the client reads the local durable journal first and starts
+        from its snapshot when there is one.
       */}
-      <EditorClient initialDocument={emptyDocument()} />
+      <EditorClient documentId={project.id} initialDocument={emptyDocument()} />
     </main>
   );
 }
