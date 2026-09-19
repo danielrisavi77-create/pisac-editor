@@ -4,9 +4,10 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
-    "test:router": "node --test tests/ai-router.test.mjs"
+    "test:router": "node --test tests/ai-router*.test.mjs",
+    "benchmark": "node scripts/ai-router-benchmark.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   }
 }

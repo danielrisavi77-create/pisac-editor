@@ -4,13 +4,16 @@ on:
   push:
     branches:
       - main
-      - feature/ai-router-v1
-      - feature/ai-router-v1-rebased
+      - feature/ai-router-v2
+      - feature/ai-router-v2-rebased
   pull_request:
     paths:
       - 'src/ai-router/**'
       - 'netlify/functions/ai-router.mjs'
-      - 'tests/ai-router.test.mjs'
+      - 'tests/**'
+      - 'benchmarks/**'
+      - 'scripts/ai-router-benchmark.mjs'
+      - 'supabase/migrations/*ai_router*'
       - 'package.json'
       - '.github/workflows/ai-router.yml'
 
@@ -26,3 +29,4 @@ jobs:
         with:
           node-version: '24'
       - run: npm test
+      - run: npm run benchmark
