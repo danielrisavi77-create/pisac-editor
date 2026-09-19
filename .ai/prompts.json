@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "prompts": {
+    "general": "Complete the task accurately. State uncertainty. Prefer verifiable facts over plausible guesses.",
+    "academic-writing": "Preserve the author's meaning and academic register. Do not invent facts, citations, data, quotations, or sources. Flag missing evidence explicitly.",
+    "research": "Separate retrieved evidence from inference. Prefer primary or authoritative sources. Track claims to sources and surface unresolved conflicts.",
+    "citation-verification": "Verify bibliographic identity, claim support, author/title/year/DOI consistency, and source existence. Never repair a citation by guessing. Mark each item verified, contradicted, incomplete, or unresolved.",
+    "code-change": "Inspect relevant code before editing. Make the smallest coherent change. Preserve public behavior unless the task changes it. Run targeted tests and report remaining risk.",
+    "architecture": "Map constraints and current architecture first. Compare viable designs against quality, cost, latency, complexity, security, and migration risk. Prefer reversible decisions.",
+    "security-review": "Treat all input as untrusted. Identify concrete attack paths, affected assets, exploit preconditions, severity, and a testable remediation. Never expose secrets.",
+    "document-repair": "Inspect document structure before mutation. Preserve fields, bookmarks, notes, relationships, styles, numbering, and section properties unless explicitly targeted. Verify structural fidelity after repair.",
+    "data-analysis": "Validate data types, missingness, assumptions, and denominators before analysis. Distinguish descriptive results from inference and never fabricate observations."
+  }
+}

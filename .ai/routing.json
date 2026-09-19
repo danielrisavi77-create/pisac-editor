@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "default": {
+    "workflow": "direct",
+    "prompt": "general",
+    "modelStrategy": "openrouter-auto",
+    "reasoning": "medium"
+  },
+  "routes": {
+    "grammar": {
+      "workflow": "direct",
+      "prompt": "academic-writing",
+      "reasoning": "low",
+      "qualityGate": 0.86
+    },
+    "rewrite": {
+      "workflow": "draft-review",
+      "prompt": "academic-writing",
+      "reasoning": "medium",
+      "qualityGate": 0.9
+    },
+    "research": {
+      "workflow": "retrieve-synthesize-verify",
+      "prompt": "research",
+      "reasoning": "high",
+      "qualityGate": 0.93
+    },
+    "citation_verification": {
+      "workflow": "retrieve-verify-judge",
+      "prompt": "citation-verification",
+      "reasoning": "high",
+      "qualityGate": 0.97
+    },
+    "source_synthesis": {
+      "workflow": "retrieve-synthesize-verify",
+      "prompt": "research",
+      "reasoning": "high",
+      "qualityGate": 0.95
+    },
+    "coding": {
+      "workflow": "plan-execute-test-review",
+      "prompt": "code-change",
+      "reasoning": "high",
+      "qualityGate": 0.92
+    },
+    "architecture": {
+      "workflow": "analyze-options-decide-review",
+      "prompt": "architecture",
+      "reasoning": "high",
+      "qualityGate": 0.94
+    },
+    "security_review": {
+      "workflow": "inspect-threat-model-test-review",
+      "prompt": "security-review",
+      "reasoning": "high",
+      "qualityGate": 0.98
+    },
+    "document_repair": {
+      "workflow": "inspect-plan-repair-verify",
+      "prompt": "document-repair",
+      "reasoning": "high",
+      "qualityGate": 0.98
+    },
+    "data_analysis": {
+      "workflow": "inspect-analyze-validate",
+      "prompt": "data-analysis",
+      "reasoning": "high",
+      "qualityGate": 0.95
+    },
+    "generic": {
+      "workflow": "direct",
+      "prompt": "general",
+      "reasoning": "medium",
+      "qualityGate": 0.88
+    }
+  }
+}

@@ -6,3 +6,6 @@ node_modules/
 !.env.example
 .netlify/
 .firecrawl/
+
+# AI Architect local telemetry
+.ai/runtime/*.jsonl

@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "workflows": {
+    "direct": [
+      "prepare",
+      "execute",
+      "validate-output"
+    ],
+    "draft-review": [
+      "draft",
+      "self-review",
+      "revise",
+      "validate-output"
+    ],
+    "retrieve-synthesize-verify": [
+      "retrieve",
+      "rank-evidence",
+      "synthesize",
+      "independent-verify",
+      "finalize"
+    ],
+    "retrieve-verify-judge": [
+      "retrieve",
+      "verify-source-identity",
+      "verify-claim-support",
+      "judge-status",
+      "finalize"
+    ],
+    "plan-execute-test-review": [
+      "inspect",
+      "plan",
+      "execute",
+      "targeted-tests",
+      "review-diff",
+      "finalize"
+    ],
+    "analyze-options-decide-review": [
+      "inspect",
+      "constraints",
+      "generate-options",
+      "tradeoff-analysis",
+      "select-provisional-design",
+      "review"
+    ],
+    "inspect-threat-model-test-review": [
+      "inspect",
+      "threat-model",
+      "findings",
+      "reproduce-or-test",
+      "remediate",
+      "review"
+    ],
+    "inspect-plan-repair-verify": [
+      "inspect-structure",
+      "find-first-divergence",
+      "repair-minimally",
+      "verify-fidelity",
+      "regression-check"
+    ],
+    "inspect-analyze-validate": [
+      "inspect-data",
+      "validate-inputs",
+      "analyze",
+      "assumption-checks",
+      "interpret",
+      "validate-output"
+    ]
+  }
+}
