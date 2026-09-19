@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "selectors": [
+    {
+      "id": "openrouter-auto",
+      "type": "openrouter",
+      "enabled": true,
+      "requiresEnv": "OPENROUTER_API_KEY",
+      "model": "openrouter/auto-beta",
+      "purpose": "Dynamic exact-model selection at request time."
+    },
+    {
+      "id": "notdiamond",
+      "type": "notdiamond",
+      "enabled": false,
+      "requiresEnv": "NOTDIAMOND_API_KEY",
+      "tradeoff": "quality",
+      "purpose": "Optional custom router once project-specific eval data exists."
+    },
+    {
+      "id": "local-policy",
+      "type": "local",
+      "enabled": true,
+      "purpose": "Offline fallback: recommends capability tier and workflow without external calls."
+    }
+  ],
+  "localCapabilityTiers": {
+    "low": [
+      "fast",
+      "cheap",
+      "structured-output"
+    ],
+    "medium": [
+      "balanced",
+      "tool-use",
+      "long-context"
+    ],
+    "high": [
+      "reasoning",
+      "tool-use",
+      "verification",
+      "long-context"
+    ],
+    "critical": [
+      "frontier-reasoning",
+      "independent-verifier",
+      "tool-use"
+    ]
+  }
+}
