@@ -5,8 +5,9 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 - R0 AI Architect v0.3 reconciliation merged into this branch; router surfaces removed; tests green. (see git log)
 - R1 PRs #1–#5 closed with rationale; PR #6 superseded by PR #7 (this branch). Loop routine active: hourly.
 
+- DONE 5f51deb F1-0a Next.js 15 App Router + TS + Vitest + ESLint flat + CI; prototype served at /legacy/ (redirect in next.config.ts); Netlify targets Next.
+
 ## Queue (top = next). Tags: [review] = reviewer pass required.
-- IN_PROGRESS F1-0a Tooling: Next.js App Router + TypeScript scaffold in repo root (`app/`, `package.json` scripts: dev/build/test/lint), Vitest, ESLint, `.nvmrc`; move `public/index.html` + `public/assets/*` to `legacy/` and keep `netlify.toml` publishing a working site (Next on Netlify). Root `npm test` must still run `tools/ai-architect` tests plus Vitest. CI: `.github/workflows/ci.yml` (install, lint, typecheck, unit tests).
 - TODO F1-0b Governance: `docs/F1_PLAN.md` mapping the 7 F1 PRs to concrete steps in this file; fixture ID list FX-FR-001-001…FX-X-SEC-001 with owner test file names (definition only, marked NOT PASS).
 - TODO F1-1a [review] Supabase auth: magic-link sign-in, session refresh, protected `/workspace` route, `src/lib/supabase/{client,server}.ts`, env template. No service role in client bundle.
 - TODO F1-1b [review] Personal workspace + academic project: migration `supabase/migrations/<next>_f1_workspace.sql` (workspaces, academic_projects, RLS owner-only), server actions create/list. Migration prepared, not applied.
@@ -22,7 +23,7 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 - TODO F1-7 Fixtures + Playwright E2E for the F1 fixture IDs; evidence record fixture→test→SHA.
 
 ## Blocked / questions for owner
-- (none)
+- Local Node is v22 while .nvmrc/engines say 24 (EBADENGINE warnings only; CI uses .nvmrc). Consider a SessionStart hook or environment Node 24.
 
 ## Notes
 - AI Architect frozen during F1. Only keep its 81+ tests green.
