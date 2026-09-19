@@ -19,8 +19,12 @@ Google Fonts zahtijeva internetsku vezu; preglednik može koristiti zamjenske fo
 
 - `public/index.html`: sučelje
 - `public/assets/styles.css`: izgled
-- `public/assets/app.js`: izvorna logika uređivača i demonstracijski sadržaj
-- `netlify.toml`: objava direktorija public
+- `public/assets/app.js`: logika uređivača, provenijencije i Asistent UI
+- `public/assets/ai-client.js`: browser klijent bez API ključeva
+- `netlify/functions/ai-execute.mjs`: server-side AI Architect endpoint
+- `.ai/`: routing, prompt, workflow, model i eval konfiguracija
+- `tools/ai-architect/`: reusable AI Architect core + CLI + testovi
+- `netlify.toml`: objava `public` direktorija i Functions konfiguracija
 
 ## Repozitorij i objava
 
@@ -50,6 +54,10 @@ Prijenos na GitHub sam po sebi ne mijenja postojeću Netlify stranicu.
 5. Autentifikacija i mentorska suradnja ako su potrebne.
 6. Integracije s Lektom, Katedrom i WordReplicom kao zasebne, naknadne funkcionalnosti.
 
-## AI Architect pilot
+## AI Architect v0.2
 
-Ovaj repo sadrži pilot repo-native AI orkestratora u `.ai/` i `tools/ai-architect/`. On lokalno preporučuje vrstu zadatka, workflow, prompt policy, reasoning razinu i model-selection strategiju. Detalji i naredbe su u [AI_ARCHITECT.md](AI_ARCHITECT.md).
+Repo sada sadrži centralni AI planning/execution sloj u `.ai/` i `tools/ai-architect/`, te server-side Netlify funkciju za postojeći Asistent UI. Architect zasebno bira workflow, verzionirani prompt, capability/model/provider strategiju, reasoning, retrieval/verification policy, alate i budžete; high-risk taskovi failaju zatvoreno ako nedostaje dokaz ili neovisna verifikacija.
+
+Statički Python preview i dalje radi bez API ključeva. U tom načinu Asistent koristi jasno označeni demo fallback. Za live AI deployment ključevi se postavljaju samo u Netlify server environment.
+
+Detalji: [AI_ARCHITECT.md](AI_ARCHITECT.md) i [docs/AI_FEATURE_AUDIT.md](docs/AI_FEATURE_AUDIT.md).
