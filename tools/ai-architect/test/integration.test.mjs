@@ -24,9 +24,12 @@ test("assistant uses central server execution and labels demo fallback explicitl
   assert.ok(app.includes("window.PisacAI.ask"));
   assert.ok(app.includes('status:"demo_fallback"'));
   assert.ok(app.includes("Demo odgovor"));
-  assert.ok(client.includes("/.netlify/functions/ai-execute"));
+  assert.ok(client.includes("/api/ai"));
   assert.ok(fn.includes("new AIArchitect"));
   assert.ok(fn.includes('feature:"assistant"'));
+  assert.ok(fn.includes("AI_ARCHITECT_LIVE_ENABLED"));
+  assert.ok(fn.includes('path:"/api/ai"'));
+  assert.ok(fn.includes("rateLimit"));
 });
 
 test("Netlify function bundle explicitly includes dynamic Architect config files", async () => {
