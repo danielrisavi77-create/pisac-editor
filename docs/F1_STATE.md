@@ -57,5 +57,6 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 - Local Node is v22 while .nvmrc/engines say 24 (EBADENGINE warnings only; CI uses .nvmrc). Consider a SessionStart hook or environment Node 24.
 
 ## Notes
+- Deploy: workflow deploy-netlify.yml on main is live; dispatch run #2 (23:14 UTC) SKIPPED in 7s — NETLIFY_AUTH_TOKEN secret still absent. Do NOT re-dispatch hourly; wait for owner to add the secret (or link repo in Netlify UI), then dispatch once and verify pisac-demo.netlify.app.
 - AI Architect frozen during F1. Only keep its 81+ tests green.
 - Public live AI endpoint stays disabled (AI_ARCHITECT_LIVE_ENABLED=false).
