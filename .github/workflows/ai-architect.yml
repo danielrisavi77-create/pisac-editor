@@ -1,0 +1,35 @@
+name: AI Architect
+
+on:
+  pull_request:
+    paths:
+      - ".ai/**"
+      - "tools/ai-architect/**"
+      - ".github/workflows/ai-architect.yml"
+  push:
+    branches: [main]
+    paths:
+      - ".ai/**"
+      - "tools/ai-architect/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic-router-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run AI Architect tests
+        working-directory: tools/ai-architect
+        run: npm test
+      - name: Smoke-test repo scan
+        working-directory: tools/ai-architect
+        run: npm run scan
+      - name: Smoke-test recommendation
+        working-directory: tools/ai-architect
+        run: npm run recommend -- "Provjeri sve citate i DOI-jeve u akademskom radu"
