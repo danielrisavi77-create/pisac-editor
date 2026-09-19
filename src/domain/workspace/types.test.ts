@@ -7,6 +7,7 @@ import {
   WORKSPACE_NAME_MAX_LENGTH,
   validateProjectTitle,
   parseActionErrorCode,
+  sanitizeProjectTitleParam,
   validateWorkspaceName,
 } from "./types";
 
@@ -164,5 +165,69 @@ describe("parseActionErrorCode", () => {
       expect(parseActionErrorCode(code)).toBe(code);
       expect(message.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("sanitizeProjectTitleParam", () => {
+  it("returns an ordinary title unchanged", () => {
+    expect(sanitizeProjectTitleParam("Utjecaj mora na klimu")).toBe(
+      "Utjecaj mora na klimu",
+    );
+  });
+
+  it("keeps Croatian diacritics and punctuation the author typed", () => {
+    expect(sanitizeProjectTitleParam("Šećer & čokolada: đaci žive")).toBe(
+      "Šećer & čokolada: đaci žive",
+    );
+  });
+
+  it("does not pre-escape markup (React escapes it at render time)", () => {
+    expect(sanitizeProjectTitleParam('<script>"x"</script>')).toBe(
+      '<script>"x"</script>',
+    );
+  });
+
+  it("preserves inner whitespace, like the validator does", () => {
+    expect(sanitizeProjectTitleParam("  dva   razmaka  ")).toBe("  dva   razmaka  ");
+  });
+
+  it("strips control characters, including newlines and NUL", () => {
+    expect(sanitizeProjectTitleParam("a\nb\r\tc\u0000d\u007Fe\u009Ff")).toBe(
+      "abcdef",
+    );
+  });
+
+  it("caps the length at the project title limit", () => {
+    const long = "a".repeat(PROJECT_TITLE_MAX_LENGTH + 50);
+    expect(sanitizeProjectTitleParam(long)).toHaveLength(PROJECT_TITLE_MAX_LENGTH);
+    const exact = "b".repeat(PROJECT_TITLE_MAX_LENGTH);
+    expect(sanitizeProjectTitleParam(exact)).toBe(exact);
+  });
+
+  it("counts by code point, so a surrogate pair is never cut in half", () => {
+    const kept = sanitizeProjectTitleParam("🧪".repeat(PROJECT_TITLE_MAX_LENGTH + 10));
+    expect([...kept]).toHaveLength(PROJECT_TITLE_MAX_LENGTH);
+    expect(kept.includes("�")).toBe(false);
+    expect(kept).toBe("🧪".repeat(PROJECT_TITLE_MAX_LENGTH));
+  });
+
+  it("returns an empty string for missing or non-string input", () => {
+    expect(sanitizeProjectTitleParam(undefined)).toBe("");
+    expect(sanitizeProjectTitleParam("")).toBe("");
+    expect(sanitizeProjectTitleParam([])).toBe("");
+    expect(sanitizeProjectTitleParam(42 as unknown as string)).toBe("");
+    expect(sanitizeProjectTitleParam({} as unknown as string)).toBe("");
+  });
+
+  it("takes the first entry when the query parameter repeats", () => {
+    expect(sanitizeProjectTitleParam(["prvi", "drugi"])).toBe("prvi");
+  });
+
+  it("survives a round trip through a query string", () => {
+    const title = "Rad & rasprava — 1/2";
+    const url = new URL(`https://pisac.test/workspace?naziv=${encodeURIComponent(title)}`);
+    expect(sanitizeProjectTitleParam(url.searchParams.get("naziv") ?? undefined)).toBe(
+      title,
+    );
   });
 });

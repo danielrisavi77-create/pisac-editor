@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { ensureDocumentRow } from "@/lib/document/queries";
 import { createClient } from "@/lib/supabase/server";
 
-import { ensureDocument } from "./actions";
 import EditorClient from "./editor-client";
 
 // Auth state must never be cached at build time.
@@ -31,6 +31,8 @@ export default async function DocumentPage({
     redirect("/postavljanje");
   }
 
+  // The one and only session round trip of this request: both queries below
+  // take this client, rather than each resolving the session again.
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -56,7 +58,7 @@ export default async function DocumentPage({
 
   // Get-or-create the canonical server document, so a first visit already has
   // a row at revision 0 to compare-and-set against (F1-4a).
-  const server = await ensureDocument(project.id);
+  const server = await ensureDocumentRow(supabase, project.id);
 
   return (
     <main style={page}>

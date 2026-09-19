@@ -92,3 +92,32 @@ export function parseActionErrorCode(
     ? (candidate as ActionErrorCode)
     : null;
 }
+
+/** Control characters: C0, DEL and C1. Never part of a title an author typed. */
+const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F-\u009F]/gu;
+
+/**
+ * Narrows an untrusted `?naziv=` value back into a title the create form can
+ * pre-fill after a failed attempt.
+ *
+ * The point is only to hand the author their own words back, so this never
+ * rejects: it strips control characters (which a title cannot contain and
+ * which would otherwise travel through a redirect into the DOM), caps the
+ * length at the same limit the validator enforces, and returns `""` when
+ * there is nothing usable. Counting is by code point, like
+ * `validateProjectTitle`, so a surrogate pair is never cut in half.
+ *
+ * It does NOT escape anything: the value is rendered as a React text
+ * attribute, which escapes it, and pre-escaping here would show the author
+ * `&amp;` where they typed `&`.
+ */
+export function sanitizeProjectTitleParam(
+  raw: string | string[] | undefined,
+): string {
+  const candidate = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof candidate !== "string") {
+    return "";
+  }
+  const stripped = candidate.replace(CONTROL_CHARACTERS, "");
+  return [...stripped].slice(0, PROJECT_TITLE_MAX_LENGTH).join("");
+}

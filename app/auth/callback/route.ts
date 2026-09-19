@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { getSiteUrl, resolveAuthOrigin } from "@/lib/supabase/config";
+import { RETURN_PARAM, sanitizeReturnPath } from "@/lib/supabase/guard";
 import { createClient } from "@/lib/supabase/server";
 
 export async function GET(request: NextRequest) {
@@ -30,5 +31,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(failure);
   }
 
-  return NextResponse.redirect(`${origin ?? requestUrl.origin}/workspace`);
+  // The link we mailed carried the path the author was headed for. It is
+  // sanitized AGAIN here: the mailbox is not a trusted channel, and this
+  // value is about to be concatenated onto our own origin. Anything that
+  // does not survive the allowlist simply lands on /workspace.
+  const returnPath =
+    sanitizeReturnPath(requestUrl.searchParams.getAll(RETURN_PARAM)) ?? "/workspace";
+
+  return NextResponse.redirect(`${origin ?? requestUrl.origin}${returnPath}`);
 }

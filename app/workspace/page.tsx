@@ -2,9 +2,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
-import { ACTION_ERROR_MESSAGES, parseActionErrorCode } from "@/domain/workspace/types";
+import { loadWorkspaceOverview } from "@/lib/workspace/queries";
+import {
+  ACTION_ERROR_MESSAGES,
+  parseActionErrorCode,
+  sanitizeProjectTitleParam,
+} from "@/domain/workspace/types";
 
-import { createProject, ensureWorkspace, listProjects } from "./actions";
+import { createProject } from "./actions";
 
 // Auth state must never be cached at build time.
 export const dynamic = "force-dynamic";
@@ -85,13 +90,28 @@ async function submitProject(formData: FormData) {
   "use server";
 
   const result = await createProject(formData);
-  redirect(result.ok ? "/workspace" : `/workspace?greska=${result.code}`);
+  if (result.ok) {
+    redirect("/workspace");
+  }
+
+  // A failed attempt must not cost the author their title: it travels back on
+  // the redirect so the form can be re-rendered with what they typed.
+  const params = new URLSearchParams({ greska: result.code });
+  const submitted = formData.get("naziv");
+  const kept = sanitizeProjectTitleParam(
+    typeof submitted === "string" ? submitted : undefined,
+  );
+  if (kept !== "") {
+    params.set("naziv", kept);
+  }
+
+  redirect(`/workspace?${params.toString()}`);
 }
 
 export default async function WorkspacePage({
   searchParams,
 }: {
-  searchParams: Promise<{ greska?: string | string[] }>;
+  searchParams: Promise<{ greska?: string | string[]; naziv?: string | string[] }>;
 }) {
   const params = await searchParams;
   const supabase = await createClient();
@@ -99,6 +119,8 @@ export default async function WorkspacePage({
     redirect("/postavljanje");
   }
 
+  // The one and only session round trip of this request: the queries below
+  // take this client and this user id rather than resolving them again.
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -107,9 +129,9 @@ export default async function WorkspacePage({
     redirect("/prijava");
   }
 
-  const workspace = await ensureWorkspace();
-  const projects = await listProjects();
+  const { workspace, projects } = await loadWorkspaceOverview(supabase, user.id);
   const errorCode = parseActionErrorCode(params.greska);
+  const submittedTitle = sanitizeProjectTitleParam(params.naziv);
   const loadError = !workspace.ok ? workspace : !projects.ok ? projects : null;
 
   return (
@@ -162,6 +184,9 @@ export default async function WorkspacePage({
           type="text"
           maxLength={200}
           required
+          // Plain text, escaped by React on render; the value was already
+          // capped and stripped of control characters above.
+          defaultValue={submittedTitle}
           style={field}
         />
         <button type="submit" style={primaryButton}>

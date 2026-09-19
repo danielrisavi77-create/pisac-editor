@@ -33,6 +33,9 @@ test.describe("auth guard, unconfigured deployment", () => {
     await page.goto("/workspace?next=%2Fd%2Fsecret");
 
     await expect(page).toHaveURL("http://localhost:3000/postavljanje");
+    // Unconfigured wins over the return-to path: no `dalje` is minted here,
+    // because there is no sign-in to come back from yet.
+    expect(new URL(page.url()).searchParams.get("dalje")).toBeNull();
   });
 
   test("/prijava stays reachable and states the unconfigured truth", async ({

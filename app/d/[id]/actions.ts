@@ -5,10 +5,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
 import {
-  validateDocument,
-  type CanonicalDocument,
-  type DocumentTransaction,
-} from "@/domain/document";
+  ensureDocumentRow,
+  fail,
+  type LoadedDocument,
+  type ServerSyncError,
+  type ServerSyncResult,
+} from "@/lib/document/queries";
+import { validateDocument, type DocumentTransaction } from "@/domain/document";
 import {
   CHECKPOINT_ERROR_MESSAGES,
   checkpointNameErrorCode,
@@ -20,13 +23,10 @@ import {
   type CheckpointSummary,
 } from "@/domain/serverSync/checkpoints";
 import {
-  SERVER_SYNC_ERROR_MESSAGES,
   commitRequestFromTransaction,
   exceedsDocumentSizeLimit,
   parseCommitOutcome,
-  parseEnsureOutcome,
   type CommitOutcome,
-  type ServerSyncErrorCode,
 } from "@/domain/serverSync/contract";
 
 /**
@@ -50,24 +50,7 @@ import {
  * the pending queue and turning an ACK into SYNCED is F1-4b; this step only
  * provides the single round trip.
  */
-export type ServerSyncError = {
-  ok: false;
-  code: ServerSyncErrorCode;
-  message: string;
-};
-
-export type ServerSyncResult<T> = { ok: true; value: T } | ServerSyncError;
-
-export type LoadedDocument = {
-  /** The server-side document row id, which the commit RPC takes. */
-  documentId: string;
-  document: CanonicalDocument;
-  revision: number;
-};
-
-function fail(code: ServerSyncErrorCode): ServerSyncError {
-  return { ok: false, code, message: SERVER_SYNC_ERROR_MESSAGES[code] };
-}
+export type { LoadedDocument, ServerSyncError, ServerSyncResult };
 
 /** Authenticated Supabase client. Redirects when there is no session. */
 async function requireSession(): Promise<SupabaseClient> {
@@ -96,69 +79,14 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Get-or-create the single F1 document of a project, through
- * `pisac_ensure_document`.
+ * The canonical document and its revision, for the editor client.
  *
- * The function proves ownership against `auth.uid()` in its own body, so a
- * project that is not the caller's comes back as `not_found` — the same
- * answer as one that does not exist, which is what the page already relies on
- * so the id cannot be probed.
- *
- * What comes back is untrusted too: it may have been written by an older
- * client or a future schema version. An unreadable canonical document is
- * reported rather than repaired or silently replaced by an empty one.
+ * Get-or-create: a first visit already has a row at revision 0 to
+ * compare-and-set against (F1-4a). The page does not call this — it holds an
+ * authenticated client already and calls `ensureDocumentRow` directly, so a
+ * page load does one `getUser()` instead of two. An action is a POST endpoint
+ * anyone can invoke, so this one authenticates itself.
  */
-async function ensureDocumentRow(
-  supabase: SupabaseClient,
-  projectId: string,
-): Promise<ServerSyncResult<LoadedDocument>> {
-  if (typeof projectId !== "string" || projectId === "") {
-    return fail("rad-nepoznat");
-  }
-
-  const { data, error } = await supabase.rpc("pisac_ensure_document", {
-    p_project_id: projectId,
-  });
-
-  if (error) {
-    return fail("citanje");
-  }
-
-  const outcome = parseEnsureOutcome(data);
-
-  if (outcome.status === "invalid") {
-    return fail("odgovor-neispravan");
-  }
-  if (outcome.status === "unauthenticated") {
-    redirect("/prijava");
-  }
-  if (outcome.status === "not_found") {
-    return fail("rad-nepoznat");
-  }
-
-  const validated = validateDocument(outcome.document);
-  if (!validated.ok) {
-    return fail("zapis-neispravan");
-  }
-
-  return {
-    ok: true,
-    value: {
-      documentId: outcome.documentId,
-      document: validated.doc,
-      revision: outcome.revision,
-    },
-  };
-}
-
-/** Get-or-create, for the page so a first visit already has a document row. */
-export async function ensureDocument(
-  projectId: string,
-): Promise<ServerSyncResult<LoadedDocument>> {
-  return ensureDocumentRow(await requireSession(), projectId);
-}
-
-/** The canonical document and its revision, for page load. */
 export async function loadDocument(
   projectId: string,
 ): Promise<ServerSyncResult<LoadedDocument>> {

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 
 import { getSiteUrl, resolveAuthOrigin } from "@/lib/supabase/config";
+import { RETURN_PARAM, sanitizeReturnPath } from "@/lib/supabase/guard";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 
 export const metadata = { title: "Prijava — Pisač" };
@@ -42,12 +43,26 @@ const button = {
   cursor: "pointer",
 } as const;
 
+/** `/prijava`, carrying the return target when there is a safe one. */
+function signInUrl(query: string, returnPath: string | null): string {
+  const params = new URLSearchParams(query);
+  if (returnPath) {
+    params.set(RETURN_PARAM, returnPath);
+  }
+  return `/prijava?${params.toString()}`;
+}
+
 async function signIn(formData: FormData) {
   "use server";
 
+  // The hidden field is as untrusted as the query parameter it came from: a
+  // posted form can say anything, so it is sanitized again here.
+  const posted = formData.get(RETURN_PARAM);
+  const returnPath = sanitizeReturnPath(typeof posted === "string" ? posted : undefined);
+
   const email = String(formData.get("email") ?? "").trim();
   if (email === "") {
-    redirect("/prijava?greska=1");
+    redirect(signInUrl("greska=1", returnPath));
   }
 
   const supabase = await createClient();
@@ -65,25 +80,37 @@ async function signIn(formData: FormData) {
     redirect("/postavljanje");
   }
 
+  // The return target travels on the mailed link, so the callback can land
+  // the author where they were headed. It is a path from our own allowlist,
+  // appended to an origin we pinned above — never a URL from the request.
+  const callback = returnPath
+    ? `${origin}/auth/callback?${RETURN_PARAM}=${encodeURIComponent(returnPath)}`
+    : `${origin}/auth/callback`;
+
   const { error } = await supabase.auth.signInWithOtp({
     email,
-    options: { emailRedirectTo: `${origin}/auth/callback` },
+    options: { emailRedirectTo: callback },
   });
 
   if (error) {
-    redirect("/prijava?greska=1");
+    redirect(signInUrl("greska=1", returnPath));
   }
 
-  redirect("/prijava?poslano=1");
+  redirect(signInUrl("poslano=1", returnPath));
 }
 
 export default async function PrijavaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ poslano?: string; greska?: string }>;
+  searchParams: Promise<{
+    poslano?: string;
+    greska?: string;
+    dalje?: string | string[];
+  }>;
 }) {
   const params = await searchParams;
   const configured = isSupabaseConfigured();
+  const returnPath = sanitizeReturnPath(params.dalje);
 
   return (
     <main style={page}>
@@ -114,6 +141,9 @@ export default async function PrijavaPage({
             </div>
           ) : null}
           <form action={signIn}>
+            {returnPath ? (
+              <input type="hidden" name={RETURN_PARAM} value={returnPath} />
+            ) : null}
             <label htmlFor="email">E-pošta</label>
             <input
               id="email"
