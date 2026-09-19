@@ -80,6 +80,11 @@ import {
   resolveInitialDocument,
   type RevisionedDocument,
 } from "@/domain/serverSync/bootstrap";
+import {
+  UNSYNCED_CHANGES_NOTE,
+  checkpointCreatedMessage,
+  type CheckpointSummary,
+} from "@/domain/serverSync/checkpoints";
 import { openJournal, type JournalDatabase } from "@/lib/journal/db";
 import {
   JOURNAL_FROZEN,
@@ -103,7 +108,8 @@ import {
 import { acquireDocumentLock, documentLockName } from "@/lib/journal/lock";
 import { createDrainRunner, type DrainRunner } from "@/lib/sync/drainRunner";
 
-import { commitDocument, loadDocument } from "./actions";
+import { commitDocument, createCheckpoint, listCheckpoints, loadDocument } from "./actions";
+import CheckpointBar, { type CheckpointCreation } from "./checkpoint-bar";
 import ConflictPanel, { DegradedConflictPanel } from "./conflict-panel";
 import RecoveryPanel from "./recovery-panel";
 
@@ -462,6 +468,8 @@ function JournalledEditor({
    * something that has not been checked.
    */
   const [recovery, setRecovery] = useState<JournalRecoveryReport | null>(null);
+  /** The checkpoints this document already has, newest first (F1-5b). */
+  const [checkpoints, setCheckpoints] = useState<readonly CheckpointSummary[]>([]);
 
   /**
    * True while the journal must not take ordinary candidates: the document is
@@ -966,6 +974,63 @@ function JournalledEditor({
     setRecovery(await readRecovery());
   }, [readRecovery]);
 
+  /* ----------------------------------------------- checkpoints (F1-5b) */
+
+  const refreshCheckpoints = useCallback(async () => {
+    const listed = await listCheckpoints(projectId);
+    setCheckpoints(listed.ok ? listed.value : []);
+  }, [projectId]);
+
+  useEffect(() => {
+    void refreshCheckpoints();
+  }, [refreshCheckpoints]);
+
+  /**
+   * True unless the queue can be PROVEN empty.
+   *
+   * A journal that cannot be read, or a session that does not hold one, has
+   * no way to show that everything is on the server — and the note it decides
+   * ("unsent changes are not included") is the safe half of the claim. Saying
+   * nothing would let the author believe a checkpoint covers work the server
+   * has never seen.
+   */
+  const unsyncedChangesRemain = useCallback(async (): Promise<boolean> => {
+    if (!db) {
+      return syncState !== "SYNCED";
+    }
+    const loaded = await loadJournal(db, documentId);
+    if (!loaded.ok) {
+      return true;
+    }
+    return loaded.contents.pending.length > 0;
+  }, [db, documentId, syncState]);
+
+  /**
+   * Names the server's current revision.
+   *
+   * The message names the revision, never "spremljeno", and the note below it
+   * is added whenever the local queue is not demonstrably empty — a checkpoint
+   * is of canonical server state, and local durable state is not that.
+   */
+  const handleCreateCheckpoint = useCallback(
+    async (name: string): Promise<CheckpointCreation> => {
+      const created = await createCheckpoint(projectId, name);
+      if (!created.ok) {
+        return { ok: false, message: created.message };
+      }
+
+      const pending = await unsyncedChangesRemain();
+      void refreshCheckpoints();
+
+      return {
+        ok: true,
+        message: checkpointCreatedMessage(name, created.value.revision),
+        note: pending ? UNSYNCED_CHANGES_NOTE : null,
+      };
+    },
+    [projectId, refreshCheckpoints, unsyncedChangesRemain],
+  );
+
   const rejected = candidate !== null && !candidate.ok ? candidate : null;
 
   return (
@@ -1045,6 +1110,14 @@ function JournalledEditor({
           </p>
         </div>
       )}
+
+      {/*
+        Below the text, not above it: a checkpoint is something the author
+        reaches for deliberately, and it must never compete with the status
+        claim at the top of the page. Restoring one is F2+, so there is no
+        restore button here on purpose.
+      */}
+      <CheckpointBar checkpoints={checkpoints} onCreate={handleCreateCheckpoint} />
     </div>
   );
 }

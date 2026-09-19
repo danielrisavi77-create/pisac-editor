@@ -10,6 +10,16 @@ import {
   type DocumentTransaction,
 } from "@/domain/document";
 import {
+  CHECKPOINT_ERROR_MESSAGES,
+  checkpointNameErrorCode,
+  parseCheckpointList,
+  parseCheckpointOutcome,
+  validateCheckpointName,
+  type CheckpointErrorCode,
+  type CheckpointOutcome,
+  type CheckpointSummary,
+} from "@/domain/serverSync/checkpoints";
+import {
   SERVER_SYNC_ERROR_MESSAGES,
   commitRequestFromTransaction,
   exceedsDocumentSizeLimit,
@@ -256,4 +266,119 @@ export async function commitDocument(
   }
 
   return { ok: true, value: outcome };
+}
+
+/* ----------------------------------------------------- checkpoints (F1-5b) */
+
+export type CheckpointError = {
+  ok: false;
+  code: CheckpointErrorCode;
+  message: string;
+};
+
+export type CheckpointResult<T> = { ok: true; value: T } | CheckpointError;
+
+/**
+ * The only outcome a successful `createCheckpoint` can carry. The other three
+ * statuses are failures with a Croatian message, so the caller never has to
+ * narrow a union to find the revision it must show the author.
+ */
+export type CreatedCheckpoint = Extract<CheckpointOutcome, { status: "created" }>;
+
+function checkpointFail(code: CheckpointErrorCode): CheckpointError {
+  return { ok: false, code, message: CHECKPOINT_ERROR_MESSAGES[code] };
+}
+
+/**
+ * Names the CURRENT server revision of this project's document.
+ *
+ * What is checkpointed is SERVER truth and only server truth: no document is
+ * sent from here, and `pisac_create_checkpoint` reads the content from
+ * `pisac_documents` itself. Anything still sitting in the local pending queue
+ * is therefore not in the checkpoint — the caller shows
+ * `UNSYNCED_CHANGES_NOTE` when that is the case, because a checkpoint the
+ * author believes covers unsent work would be exactly the false claim of
+ * durability the eight sync states exist to prevent.
+ *
+ * The name is validated by the same pure rule the RPC applies, before the
+ * round trip, so an empty or over-long name never becomes a call that can
+ * only fail.
+ */
+export async function createCheckpoint(
+  projectId: string,
+  name: string,
+): Promise<CheckpointResult<CreatedCheckpoint>> {
+  const validated = validateCheckpointName(name);
+  if (!validated.ok) {
+    return checkpointFail(checkpointNameErrorCode(validated.reason));
+  }
+
+  const supabase = await requireSession();
+
+  // The checkpoint is of the server's document row, so that row has to exist
+  // (and be the caller's) before there is anything to name.
+  const row = await ensureDocumentRow(supabase, projectId);
+  if (!row.ok) {
+    return checkpointFail(row.code === "rad-nepoznat" ? "rad-nepoznat" : "citanje");
+  }
+
+  const { data, error } = await supabase.rpc("pisac_create_checkpoint", {
+    p_document_id: row.value.documentId,
+    p_name: validated.value,
+  });
+
+  if (error) {
+    return checkpointFail("spremanje");
+  }
+
+  const outcome = parseCheckpointOutcome(data);
+  if (outcome.status === "invalid") {
+    return checkpointFail("odgovor-neispravan");
+  }
+  if (outcome.status === "unauthenticated") {
+    redirect("/prijava");
+  }
+  if (outcome.status === "not_found") {
+    return checkpointFail("rad-nepoznat");
+  }
+  if (outcome.status === "invalid_name") {
+    // The RPC applies the same rule, so this is a belt-and-braces path rather
+    // than an expected one.
+    return checkpointFail("naziv-prazan");
+  }
+
+  return { ok: true, value: outcome };
+}
+
+/**
+ * The checkpoints of this project's document, newest first.
+ *
+ * Read through RLS with a plain select — there is no definer function here
+ * because there is nothing to protect beyond the owner-only select policy,
+ * and the documents themselves are deliberately NOT selected: the list is a
+ * list of bookmarks, and shipping a copy of every checkpointed document to
+ * render four lines of text would be a lot of an author's work on the wire
+ * for no reason. Restoring one is F2+, and has no client here to feed.
+ */
+export async function listCheckpoints(
+  projectId: string,
+): Promise<CheckpointResult<CheckpointSummary[]>> {
+  const supabase = await requireSession();
+
+  const row = await ensureDocumentRow(supabase, projectId);
+  if (!row.ok) {
+    return checkpointFail(row.code === "rad-nepoznat" ? "rad-nepoznat" : "citanje");
+  }
+
+  const { data, error } = await supabase
+    .from("pisac_checkpoints")
+    .select("id, name, revision, created_at")
+    .eq("document_id", row.value.documentId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    return checkpointFail("citanje");
+  }
+
+  return { ok: true, value: parseCheckpointList(data) };
 }
