@@ -121,9 +121,8 @@ export async function scanRepo(root = process.cwd()) {
     security: {
       envUsage: /process\.env|import\.meta\.env/i.test(corpus),
       clientSecretRiskSignal: containsAny(corpus, [
-        /sk-[A-Za-z0-9_-]{20,}/,
-        /OPENAI_API_KEY\s*[:=]\s*["'][^"']+["']/,
-        /ANTHROPIC_API_KEY\s*[:=]\s*["'][^"']+["']/
+        /\bsk-(?:proj-|ant-|or-v1-)?[A-Za-z0-9_-]{20,}/,
+        /\bAIza[0-9A-Za-z_-]{20,}/
       ]),
       authSignals: /auth|login|session|jwt|oauth/i.test(corpus)
     },
