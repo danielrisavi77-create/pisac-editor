@@ -34,9 +34,10 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 
 - DONE 8f52c2e F1-9a return-to after login (sanitizeReturnPath allowlist), authed /prijava→/workspace, title retained on error, getUser 5→1 per page. F1-8 note: Supabase redirect allowlist must permit /auth/callback with query (dalje).
 
+- DONE e60bb73 F1-9b HR plurals/dates (pluralHr+countHr, 25 tests), empty states, shared .btn/.input, mobile-first 360px (4 new E2E, 21 total); /workspace i /d mobile pass CSS-reviewed only (auth-gated).
+
 ## Queue (top = next). Tags: [review] = reviewer pass required.
 - BLOCKED(owner) F1-8 Activate: restore Supabase project Pisac (needs a free active slot or Pro), apply migrations 2026091904-06 via MCP, set NEXT_PUBLIC_* env in Netlify, run authenticated E2E, flip fixture statuses toward PASS with evidence (SHA+env+result).
-- IN_PROGRESS F1-9b Croatian date/plural polish + empty states pass over /workspace and /d pages; mobile-first layout check at 360px.
 - TODO F1-10 [review] Security pass: run /security-review skill over the branch diff; fix findings.
 - TODO F1-11 Perf: bundle budget check (first-load JS per route recorded in docs/F1_STATE.md Notes), lazy-load conflict/recovery panels, measure editor keystroke→projection latency with a unit benchmark.
 
