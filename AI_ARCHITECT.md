@@ -147,7 +147,7 @@ npm run eval
 
 ## Pisač browser integration
 
-`public/assets/ai-client.js` sends Assistant requests to `/.netlify/functions/ai-execute`. The Netlify function runs AI Architect server-side.
+`public/assets/ai-client.js` sends Assistant requests to `/api/ai`. The Netlify function runs AI Architect server-side, enforces same-origin browser requests, and has a code-based per-IP/domain rate limit.
 
 The static Python preview still works. Because Python does not serve Netlify Functions, Assistant calls fall back to the old canned response **with an explicit “Demo odgovor” label**. This preserves the prototype without pretending the response came from a live model.
 
@@ -157,7 +157,11 @@ For the manual Promptfoo benchmark, GitHub Actions needs:
 
 - `OPENROUTER_API_KEY`
 
-For deployed live inference, configure one or more provider keys in the Netlify environment:
+For deployed live inference, first explicitly enable the endpoint in the Netlify environment:
+
+- `AI_ARCHITECT_LIVE_ENABLED=true`
+
+Then configure one or more provider keys:
 
 - `OPENROUTER_API_KEY`
 - `OPENAI_API_KEY`
@@ -165,6 +169,8 @@ For deployed live inference, configure one or more provider keys in the Netlify 
 - `GEMINI_API_KEY`
 
 `NOTDIAMOND_API_KEY` is reserved for a future learned-router phase and is not currently required.
+
+Because Pisač does not yet have authentication, live inference is opt-in rather than activated by the presence of a provider key. Rate limiting reduces abuse risk but does not replace user authentication or account-level usage quotas.
 
 ## Evaluation
 
