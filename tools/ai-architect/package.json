@@ -1,6 +1,6 @@
 {
   "name": "@ris/ai-architect",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -15,7 +15,8 @@
     "stats": "node src/cli.mjs stats",
     "eval": "node src/cli.mjs eval",
     "validate": "node src/cli.mjs validate",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "evaluate": "node src/cli.mjs evaluate"
   },
   "exports": "./src/index.mjs",
   "bin": {
