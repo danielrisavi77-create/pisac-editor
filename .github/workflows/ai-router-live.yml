@@ -1,0 +1,34 @@
+name: AI Router Live Benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: 'Provider to exercise (openai, anthropic, google, xai)'
+        required: true
+        default: 'openai'
+      confirm_paid_calls:
+        description: 'Type YES to allow paid provider calls'
+        required: true
+        default: 'NO'
+
+permissions:
+  contents: read
+
+jobs:
+  live-smoke:
+    if: ${{ inputs.confirm_paid_calls == 'YES' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Run opt-in live smoke
+        env:
+          AI_ROUTER_LIVE_PROVIDER: ${{ inputs.provider }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+        run: node scripts/ai-router-live-smoke.mjs

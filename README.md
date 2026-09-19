@@ -61,3 +61,13 @@ Repo sada sadrži centralni AI planning/execution sloj u `.ai/` i `tools/ai-arch
 Statički Python preview i dalje radi bez API ključeva. U tom načinu Asistent koristi jasno označeni demo fallback. Za live AI deployment ključevi se postavljaju samo u Netlify server environment.
 
 Detalji: [AI_ARCHITECT.md](AI_ARCHITECT.md) i [docs/AI_FEATURE_AUDIT.md](docs/AI_FEATURE_AUDIT.md).
+
+
+## AI Router
+
+AI model calls are centralized behind a provider-neutral AI Router. V2 adds context optimization, provider-aware token/cost accounting, explicit budgets, deterministic verification, retry/fallback/escalation separation and privacy-first calibration telemetry.
+
+- V1: `docs/AI_ROUTER_V1.md`
+- V2: `docs/AI_ROUTER_V2.md`
+
+Provider keys and Supabase service-role credentials remain server-side.
