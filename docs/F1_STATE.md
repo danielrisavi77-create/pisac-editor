@@ -8,8 +8,10 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 - DONE 5f51deb F1-0a Next.js 15 App Router + TS + Vitest + ESLint flat + CI; prototype served at /legacy/ (redirect in next.config.ts); Netlify targets Next.
 - DONE 2f42736 F1-0b docs/F1_PLAN.md: PR→step map, sync state machine (HR labels), 15-fixture register (NOT PASS).
 
+- DONE e49ea40 F1-1a Supabase magic-link auth (env-driven, /prijava, /workspace guard, HR UI); security review round applied (cookie carry-through on redirects, NEXT_PUBLIC_SITE_URL-pinned origin). Deferred nits: return-to after login, authed-user redirect from /prijava.
+
 ## Queue (top = next). Tags: [review] = reviewer pass required.
-- IN_PROGRESS F1-1a [review] Supabase auth (code only, no migration, env-driven): `@supabase/ssr` client/server helpers `src/lib/supabase/{client,server,middleware}.ts`, magic-link sign-in page `/prijava`, session refresh in `middleware.ts`, protected `/workspace` route with sign-out, `.env.example` (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY only). No service role in client bundle. Unit-test the auth guard logic with a mocked client.
+
 - TODO F1-1b [review] Personal workspace + academic project: migration `supabase/migrations/<next>_f1_workspace.sql` (workspaces, academic_projects, RLS owner-only), server actions create/list. Migration prepared, not applied.
 - TODO F1-2a Canonical document model: `src/domain/document/*` — DocumentNode with opaque UUID ids, schema (paragraph, heading 1–3, text, bold, italic), REPLACE_DOCUMENT transaction type, pure validators + unit tests.
 - TODO F1-2b Tiptap editor bound to the canonical model: `app/(workspace)/d/[id]/page.tsx`, editor extension set limited to F1 schema, projection editor→canonical candidate, no execCommand.
