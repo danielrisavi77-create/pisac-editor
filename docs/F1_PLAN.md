@@ -59,23 +59,29 @@ Invariants (dossier §7, verbatim-ish):
 Definition ≠ PASS. Evidence must bind fixture → executable test → exact SHA
 → environment → result → artifact.
 
-| Fixture ID | Intended area | Owner test file (planned) | Status |
+Owner files below are the ones that now exist (F1-7). The per-fixture record
+with environment, commands and blocked legs is `e2e/EVIDENCE.md`.
+
+| Fixture ID | Intended area | Owner test file(s) (real) | Status |
 |---|---|---|---|
-| FX-FR-001-001 | Project basics (assumed) | `src/domain/project/project.test.ts` | DEFINED — NOT PASS |
-| FX-FR-002-001 | Document basics (assumed) | `src/domain/document/document.test.ts` | DEFINED — NOT PASS |
-| FX-FR-004-001 | Project/document basics (assumed) | `src/domain/document/document.test.ts` | DEFINED — NOT PASS |
-| FX-FR-020-001 | Save/local durability (assumed) | `src/domain/sync/reducer.test.ts` | DEFINED — NOT PASS |
-| FX-FR-021-001 | Save/sync (assumed) | `src/domain/sync/reducer.test.ts` | DEFINED — NOT PASS |
-| FX-FR-022-001 | Sync (assumed) | `src/lib/sync/server-sync.test.ts` | DEFINED — NOT PASS |
-| FX-FR-023-001 | Conflict (assumed) | `src/domain/sync/conflict.test.ts` | DEFINED — NOT PASS |
-| FX-FR-024-001 | Recovery (assumed) | `src/domain/sync/recovery.test.ts` | DEFINED — NOT PASS |
-| FX-FR-025-001 | Checkpoint (assumed) | `src/domain/sync/checkpoint.test.ts` | DEFINED — NOT PASS |
-| FX-FR-075-001 | DOCX export | `src/lib/export/docx.test.ts` | DEFINED — NOT PASS |
-| FX-X-A11Y-001 | Accessibility | `e2e/f1-a11y.spec.ts` | DEFINED — NOT PASS |
-| FX-X-REL-001 | Reliability | `e2e/f1-reliability.spec.ts` | DEFINED — NOT PASS |
-| FX-X-CLIENT-001 | Offline/client (assumed) | `e2e/f1-offline.spec.ts` | DEFINED — NOT PASS |
-| FX-X-DG-001 | Data governance (assumed) | `e2e/f1-data-governance.spec.ts` | DEFINED — NOT PASS |
-| FX-X-SEC-001 | Security | `e2e/f1-security.spec.ts` | DEFINED — NOT PASS |
+| FX-FR-001-001 | Project basics | `e2e/auth-guard.spec.ts`, `src/lib/supabase/guard.test.ts`, `src/domain/workspace/types.test.ts` | E2E-PARTIAL (create/list BLOCKED: Supabase project paused) |
+| FX-FR-002-001 | Document basics | `src/domain/document/{schema,validate,normalize,equality}.test.ts` | UNIT-COVERED (E2E pending Supabase project) |
+| FX-FR-004-001 | Project/document basics | `src/domain/document/transaction.test.ts`, `src/editor/{schema,interop}.test.ts` | UNIT-COVERED (E2E pending Supabase project) |
+| FX-FR-020-001 | Save/local durability | `src/lib/journal/journal.test.ts`, `src/domain/sync/states.test.ts` | UNIT-COVERED (E2E pending Supabase project) |
+| FX-FR-021-001 | Save/sync | `src/domain/sync/drain.test.ts`, `src/lib/sync/drainRunner.test.ts` | UNIT-COVERED (E2E pending Supabase project) |
+| FX-FR-022-001 | Sync | `src/domain/serverSync/{contract,bootstrap,migration}.test.ts` | UNIT-COVERED (E2E pending Supabase project) |
+| FX-FR-023-001 | Conflict | `src/domain/sync/conflict.test.ts` | UNIT-COVERED (E2E pending Supabase project) |
+| FX-FR-024-001 | Recovery | `src/domain/sync/recovery.test.ts`, `src/lib/journal/recovery.test.ts` | UNIT-COVERED (E2E pending Supabase project) |
+| FX-FR-025-001 | Checkpoint | `src/domain/serverSync/{checkpoints,checkpointsMigration}.test.ts` | UNIT-COVERED (E2E pending Supabase project) |
+| FX-FR-075-001 | DOCX export | `src/domain/docx/{serialize,manifest,labels}.test.ts`, `src/lib/docx/export.test.ts` | UNIT-COVERED (E2E pending Supabase project) |
+| FX-X-A11Y-001 | Accessibility | `e2e/a11y.spec.ts`, `src/domain/sync/labels.test.ts` | E2E-PARTIAL (editor a11y BLOCKED: Supabase project paused) |
+| FX-X-REL-001 | Reliability | `src/lib/sync/drainRunner.test.ts`, `src/lib/journal/lock.test.ts` | UNIT-COVERED (E2E pending Supabase project) |
+| FX-X-CLIENT-001 | Offline/client | `e2e/smoke.spec.ts`, `src/lib/journal/journal.test.ts` | E2E-PARTIAL (in-browser journal BLOCKED: Supabase project paused) |
+| FX-X-DG-001 | Data governance | `src/domain/workspace/migration.test.ts`, `src/domain/serverSync/migration.test.ts`, `src/lib/journal/journal.test.ts` | UNIT-COVERED (E2E pending Supabase project) |
+| FX-X-SEC-001 | Security | `e2e/auth-guard.spec.ts`, `src/lib/supabase/guard.test.ts` | E2E-PARTIAL (authenticated allow path BLOCKED: Supabase project paused) |
+
+No fixture is PASS: UNIT-COVERED means the mechanism has executable unit
+tests, E2E-PARTIAL means only the unconfigured-deployment leg runs in Chromium.
 
 ## 5. Constitution invariants enforced in F1
 

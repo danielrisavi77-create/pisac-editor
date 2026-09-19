@@ -13,6 +13,8 @@ const eslintConfig = [
       "next-env.d.ts",
       "node_modules/**",
       "public/**",
+      "playwright-report/**",
+      "test-results/**",
       "netlify/**",
       "tools/**",
       "supabase/**",
