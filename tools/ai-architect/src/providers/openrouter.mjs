@@ -26,7 +26,9 @@ export function createOpenRouterProvider(config = {}, runtime = {}) {
             messages: [
               { role: "system", content: system },
               { role: "user", content: user }
-            ]
+            ],
+            ...(Number.isFinite(Number(plan?.temperature)) ? { temperature:Number(plan.temperature) } : {}),
+            ...(plan?.outputBudgetTokens ? { max_tokens:plan.outputBudgetTokens } : {})
           })
         },
         { timeoutMs: plan?.budgets?.maxLatencyMs || 30000, fetchImpl }
