@@ -1,77 +1,92 @@
 #!/usr/bin/env node
 import { resolve } from "node:path";
+import { AIArchitect } from "./architect.mjs";
 import { scanRepo } from "./scanner.mjs";
-import { recommend } from "./router.mjs";
-import { routeAndExecute } from "./openrouter.mjs";
-import { recordOutcome, summarizeOutcomes } from "./outcomes.mjs";
+import { runGoldenEval } from "./evaluator.mjs";
+import { validateConfig } from "./validator.mjs";
 
-function rootFromToolDir() {
-  return resolve(import.meta.dirname, "../../..");
+const root = resolve(import.meta.dirname, "../../..");
+const [command, ...rawArgs] = process.argv.slice(2);
+const architect = new AIArchitect({ repoRoot:root });
+
+function parseContext(args) {
+  const contextArg = args.find((a) => a.startsWith("--context="));
+  const argsWithoutContext = args.filter((a) => a !== contextArg);
+  if (!contextArg) return { context:{}, text:argsWithoutContext.join(" ").trim() };
+  try {
+    return {
+      context:JSON.parse(contextArg.slice("--context=".length)),
+      text:argsWithoutContext.join(" ").trim()
+    };
+  } catch {
+    console.error("--context must contain valid JSON.");
+    process.exit(2);
+  }
 }
 
-const [command, ...args] = process.argv.slice(2);
-const root = rootFromToolDir();
-
-if (command === "scan") {
-  console.log(JSON.stringify(await scanRepo(root), null, 2));
-} else if (command === "recommend") {
-  const text = args.join(" ").trim();
-  if (!text) {
-    console.error('Usage: npm run recommend -- "task description"');
-    process.exit(2);
+async function main() {
+  if (command === "scan") {
+    console.log(JSON.stringify(await scanRepo(root), null, 2));
+    return;
   }
-  console.log(JSON.stringify(await recommend(text, root), null, 2));
-} else if (command === "execute") {
-  const text = args.join(" ").trim();
-  if (!text) {
-    console.error('Usage: node src/cli.mjs execute "task description"');
-    process.exit(2);
+
+  if (command === "validate") {
+    const result = await validateConfig(root);
+    console.log(JSON.stringify(result, null, 2));
+    if (!result.valid) process.exitCode = 1;
+    return;
   }
-  const rec = await recommend(text, root);
-  const workflow = rec.recommendation.workflowSteps.join(" -> ");
-  const system = [
-    rec.recommendation.promptText,
-    `Selected workflow: ${workflow}.`,
-    `Reasoning level: ${rec.recommendation.reasoning}.`,
-    rec.recommendation.needsIndependentVerification
-      ? "Independent verification is mandatory before finalizing."
-      : ""
-  ].filter(Boolean).join("\n\n");
 
-  const started = Date.now();
-  const result = await routeAndExecute({
-    model: rec.recommendation.exactModel || "openrouter/auto-beta",
-    messages:[
-      {role:"system",content:system},
-      {role:"user",content:text}
-    ]
-  });
+  if (command === "eval") {
+    const result = await runGoldenEval(root);
+    console.log(JSON.stringify(result, null, 2));
+    if (!result.passed) process.exitCode = 1;
+    return;
+  }
 
-  console.log(JSON.stringify({
-    recommendation:rec,
-    result:{
-      selectedModel:result.selectedModel,
-      usage:result.usage,
-      latencyMs:Date.now()-started,
-      output:result.output
+  if (command === "stats") {
+    console.log(JSON.stringify(await architect.stats(), null, 2));
+    return;
+  }
+
+  if (command === "record") {
+    const raw = rawArgs.join(" ").trim();
+    if (!raw) {
+      console.error("Usage: npm run record -- '{\"taskClass\":\"grammar\",...}'");
+      process.exit(2);
     }
-  }, null, 2));
-} else if (command === "record") {
-  const raw = args.join(" ").trim();
-  if (!raw) {
-    console.error('Usage: npm run record -- \'{"task":"coding","workflow":"plan-execute-test-review","prompt":"code-change","model":"...","quality":0.95,"costUsd":0.02,"latencyMs":8000,"tokens":3500,"success":true}\'');
-    process.exit(2);
+    let record;
+    try { record = JSON.parse(raw); }
+    catch {
+      console.error("record expects one JSON object.");
+      process.exit(2);
+    }
+    console.log(JSON.stringify(await architect.recordOutcome(record), null, 2));
+    return;
   }
-  let record;
-  try { record = JSON.parse(raw); }
-  catch {
-    console.error("record expects one JSON object.");
-    process.exit(2);
+
+  if (["recommend","explain","execute"].includes(command)) {
+    const { context, text } = parseContext(rawArgs);
+    if (!text) {
+      console.error(`Usage: npm run ${command} -- "task description" [--context='{"purpose":"language"}']`);
+      process.exit(2);
+    }
+    if (command === "recommend") {
+      console.log(JSON.stringify(await architect.plan(text, context), null, 2));
+      return;
+    }
+    if (command === "explain") {
+      console.log(JSON.stringify(await architect.explain(text, context), null, 2));
+      return;
+    }
+    const result = await architect.execute(text, context);
+    console.log(JSON.stringify(result, null, 2));
+    if (!result.ok) process.exitCode = 1;
+    return;
   }
-  console.log(JSON.stringify(await recordOutcome(record, root), null, 2));
-} else if (command === "stats") {
-  console.log(JSON.stringify(await summarizeOutcomes(root), null, 2));
-} else {
-  console.log("AI Architect v0.1");
-  console.log('Commands: scan | recommend "task" | execute "task" | record JSON | stats');
+
+  console.log("AI Architect v0.2");
+  console.log('Commands: scan | recommend "task" | explain "task" | execute "task" | stats | eval | validate | record JSON');
 }
+
+await main();
