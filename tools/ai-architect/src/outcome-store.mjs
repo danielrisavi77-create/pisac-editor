@@ -7,6 +7,12 @@ export class OutcomeStore {
   async readRecords(){return[];}
 }
 
+export class NoopOutcomeStore extends OutcomeStore {
+  async writeBundle(bundle){return{stored:false,reason:"durable-store-not-configured",records:flattenBundle(bundle).length};}
+  async loadCalibration(){return{};}
+  async readRecords(){return[];}
+}
+
 export class LocalOutcomeStore extends OutcomeStore {
   constructor({repoRoot=process.cwd(),path=null}={}){
     super();
@@ -85,6 +91,9 @@ export class SupabaseOutcomeStore extends OutcomeStore {
 export function createOutcomeStore(env=process.env,{repoRoot=process.cwd(),fetchImpl=globalThis.fetch}={}){
   if(env.SUPABASE_URL&&env.SUPABASE_SERVICE_ROLE_KEY){
     return new SupabaseOutcomeStore({url:env.SUPABASE_URL,serviceRoleKey:env.SUPABASE_SERVICE_ROLE_KEY,fetchImpl});
+  }
+  if(env.NETLIFY||env.AWS_LAMBDA_FUNCTION_NAME||env.LAMBDA_TASK_ROOT){
+    return new NoopOutcomeStore();
   }
   return new LocalOutcomeStore({repoRoot});
 }
