@@ -1,11 +1,28 @@
+import { existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { AIArchitect } from "../../tools/ai-architect/src/index.mjs";
 
 const MAX_PROMPT_CHARS = 12000;
 const MAX_SELECTED_CHARS = 6000;
 const ALLOWED_PURPOSES = new Set(["explain","brainstorm","language","translate","restructure","generate"]);
 
+function findRepoRoot() {
+  const starts = [process.cwd(), dirname(fileURLToPath(import.meta.url))];
+  for (const start of starts) {
+    let dir = resolve(start);
+    for (let i = 0; i < 8; i += 1) {
+      if (existsSync(resolve(dir, ".ai", "project.json"))) return dir;
+      const parent = dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+  }
+  throw new Error("AI Architect repository root could not be resolved.");
+}
+
 const architect = new AIArchitect({
-  repoRoot:process.cwd(),
+  repoRoot:findRepoRoot(),
   outcomeSink:async (record) => {
     // Privacy-safe telemetry only: sanitizeOutcome strips task/output content.
     console.log("AI_ARCHITECT_OUTCOME", JSON.stringify(record));
@@ -29,8 +46,8 @@ export default async function handler(request) {
 
   const requestOrigin = new URL(request.url).origin;
   const origin = request.headers.get("origin");
-  if (origin && origin !== requestOrigin) {
-    return json(403, {ok:false,code:"ORIGIN_NOT_ALLOWED",message:"Cross-origin AI requests are not allowed."});
+  if (!origin || origin !== requestOrigin) {
+    return json(403, {ok:false,code:"ORIGIN_NOT_ALLOWED",message:"A same-origin browser request is required."});
   }
 
   if (process.env.AI_ARCHITECT_LIVE_ENABLED !== "true") {
@@ -100,8 +117,9 @@ export default async function handler(request) {
 
 export const config = {
   path:"/api/ai",
+  method:"POST",
   rateLimit:{
-    windowLimit:20,
+    windowLimit:10,
     windowSize:60,
     aggregateBy:["ip","domain"]
   }
