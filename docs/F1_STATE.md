@@ -16,9 +16,10 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 
 - DONE 811d03b F1-2b Tiptap editor bound to canonical model (F1-only extensions, nodeId attr, pure interop with round-trip tests, /d/[id] guarded route, HR toolbar; 57 tests).
 
+- DONE 38cf712 F1-3a Dexie journal + sync reducer (atomic tx, sticky states persisted across reload, honest durability via onDirty/flush, Web Locks multi-tab guard, pending trim 50; review round applied). Obligations: F1-4b clearPending on ACK, F1-5a clearPending on discard.
+
 ## Queue (top = next). Tags: [review] = reviewer pass required.
 
-- IN_PROGRESS F1-3a [review] Local durable journal (Dexie): atomic tx storing snapshot + pending transaction + local sequence + sync state; state machine EDITING/SAVING_LOCAL/LOCAL_DURABLE/SYNCING/SYNCED/CONFLICT/ERROR/RECOVERY_REQUIRED as a pure reducer + tests.
 - TODO F1-3b Sync status UI: status chip bound to the reducer; never shows generic "Saved"; Croatian labels.
 - TODO F1-4a [review] Server sync: `documents`, `document_revisions` tables + RLS; CAS on base revision; idempotency (document_id, actor_id, client_transaction_id); server action commit.
 - TODO F1-4b Pending queue drain + ACK → SYNCED; retry with backoff; lost-response replay is idempotent.
