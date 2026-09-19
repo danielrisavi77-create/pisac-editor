@@ -14,6 +14,7 @@ test("adaptive routing only learns from matching task/prompt/workflow context", 
       workflow:{id:"direct",version:"2.0.0"},
       prompt:{id:"academic-writing",version:"2.0.0"},
       provider:"openrouter",
+      requestedModel:"model-a",
       actualModel:"model-a",
       reasoningLevel:"low",
       tools:[],
@@ -26,6 +27,7 @@ test("adaptive routing only learns from matching task/prompt/workflow context", 
       workflow:{id:"retrieve-verify-judge",version:"2.0.0"},
       prompt:{id:"citation-verification",version:"2.0.0"},
       provider:"openrouter",
+      requestedModel:"model-b",
       actualModel:"model-b",
       reasoningLevel:"high",
       tools:["web.search"],
@@ -73,4 +75,35 @@ test("configured priority wins when no candidate passes quality evidence gate", 
 
   assert.equal(selected.candidate.model, "model-a");
   assert.equal(selected.basis, "configured-priority");
+});
+
+test("OpenRouter Auto outcomes stay attributed to the auto route, not the selected actual model candidate", () => {
+  const routes=[
+    {provider:"openrouter",model:"openrouter/auto"},
+    {provider:"openrouter",model:"openai/gpt-5.6-sol"}
+  ];
+  const stats=[{
+    taskClass:"grammar",
+    workflow:{id:"direct",version:"2.0.0"},
+    prompt:{id:"academic-writing",version:"2.0.0"},
+    provider:"openrouter",
+    requestedModel:"openrouter/auto",
+    actualModel:"openai/gpt-5.6-sol",
+    reasoningLevel:"low",
+    tools:[],
+    evaluatedCount:5,
+    meanQuality:0.96,
+    meanUtility:0.8
+  }];
+  const selected=selectAdaptiveCandidate(routes,stats,{
+    taskClass:"grammar",
+    workflow:{id:"direct",version:"2.0.0"},
+    prompt:{id:"academic-writing",version:"2.0.0"},
+    reasoningLevel:"low",
+    tools:[],
+    qualityGate:0.9,
+    minSamples:3
+  });
+  assert.equal(selected.candidate.model,"openrouter/auto");
+  assert.equal(selected.basis,"project-outcomes");
 });
