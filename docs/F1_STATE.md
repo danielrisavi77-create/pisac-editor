@@ -24,7 +24,7 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 
 ## Queue (top = next). Tags: [review] = reviewer pass required.
 
-- TODO F1-4b Pending queue drain + ACK → SYNCED; retry with backoff; lost-response replay is idempotent.
+- IN_PROGRESS F1-4b Pending queue drain + ACK → SYNCED; retry with backoff; lost-response replay is idempotent.
 - TODO F1-5a [review] Conflict: stale base → CONFLICT; explicit rebase / explicit discard; original conflict recorded; no LWW.
 - TODO F1-5b Recovery: corrupt/unavailable IndexedDB → RECOVERY_REQUIRED flow; checkpoint = named immutable snapshot (server + local).
 - TODO F1-6 DOCX export: `docx` JS, explicit F1 subset, fidelity labels (SUPPORTED_EXACT/APPROXIMATED/UNKNOWN) in export manifest.
