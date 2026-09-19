@@ -27,6 +27,20 @@ export default async function handler(request) {
     return json(405, {ok:false,code:"METHOD_NOT_ALLOWED",message:"POST is required."});
   }
 
+  const requestOrigin = new URL(request.url).origin;
+  const origin = request.headers.get("origin");
+  if (origin && origin !== requestOrigin) {
+    return json(403, {ok:false,code:"ORIGIN_NOT_ALLOWED",message:"Cross-origin AI requests are not allowed."});
+  }
+
+  if (process.env.AI_ARCHITECT_LIVE_ENABLED !== "true") {
+    return json(503, {
+      ok:false,
+      code:"LIVE_AI_DISABLED",
+      message:"Live AI is disabled for this deployment. The client may use its clearly labelled demo fallback."
+    });
+  }
+
   let body;
   try { body = await request.json(); }
   catch { return json(400, {ok:false,code:"INVALID_JSON",message:"Request body must be valid JSON."}); }
@@ -83,3 +97,12 @@ export default async function handler(request) {
     }
   });
 }
+
+export const config = {
+  path:"/api/ai",
+  rateLimit:{
+    windowLimit:20,
+    windowSize:60,
+    aggregateBy:["ip","domain"]
+  }
+};
