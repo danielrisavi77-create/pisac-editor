@@ -1,47 +1,37 @@
 # F1-8 Activate — runbook
 
 **Datum:** 20. rujna 2026.  
-**Status:** IN_PROGRESS (Supabase project restored this session)  
+**Status:** SCHEMA_APPLIED  
 **Owner:** Daniel Rišavi  
-**Project ref:** `cxwxxcwrgushfkisfpxz` (eu-central-1)
+**Project ref:** `cxwxxcwrgushfkisfpxz` (eu-central-1) — `ACTIVE_HEALTHY`
 
-## Slot juggling (free plan, 2 active)
+## Applied migrations
 
-To restore Pisac this session:
+- `f1_workspace`
+- `f1_documents_tables`
+- `f1_ensure_document_fn`
+- `f1_commit_document_fn`
+- `f1_documents_grants`
+- `f1_checkpoints`
 
-1. Paused `Lekta staging` (`bnyemcnsphlitjradrst`)
-2. Restored `Pisac` (`cxwxxcwrgushfkisfpxz`)
+Live tables: `pisac_workspaces`, `pisac_projects`, `pisac_documents`, `pisac_document_revisions`, `pisac_checkpoints`.
 
-`Lekta` production (`zrrjttizjyfcxmcpgzml`) was left ACTIVE. Restore Lekta staging after Pisac env is captured if needed.
+SECURITY DEFINER RPCs (`pisac_ensure_document`, `pisac_commit_document`, `pisac_create_checkpoint`) are intentional write paths. Advisor WARN is expected.
 
-## Checklist
+## Slot juggling
 
-- [x] Restore Pisac project
-- [ ] Wait until status = `ACTIVE_HEALTHY`
-- [ ] Apply migrations `2026091904`, `2026091905`, `2026091906` (skip AI Architect 1901/1903 in F1)
-- [ ] Fetch publishable/anon key
-- [ ] Set `NEXT_PUBLIC_SUPABASE_URL=https://cxwxxcwrgushfkisfpxz.supabase.co`
-- [ ] Set `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- [ ] Set `NEXT_PUBLIC_SITE_URL` to the public origin
-- [ ] Auth → URL configuration: allow `/auth/callback` with query
-- [ ] Deploy (Netlify existing / Vercel if team exists)
-- [ ] Authenticated E2E
-- [ ] Flip fixture evidence toward PASS
+Lekta staging (`bnyemcnsphlitjradrst`) remains paused so Pisac can stay active on the free plan.
 
-## Auth redirect allowlist
+## Still on you
 
-Must permit:
+1. Auth → URL Configuration:
+   - `http://localhost:3000/auth/callback`
+   - production origin `/auth/callback` once deployed
+2. Local `.env.local`:
+   - `NEXT_PUBLIC_SUPABASE_URL=https://cxwxxcwrgushfkisfpxz.supabase.co`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY=` (Project Settings → API → anon)
+   - `NEXT_PUBLIC_SITE_URL=http://localhost:3000`
+3. Vercel connector needs re-auth to finish deploy (`pisac` project id `prj_ksnRDuZjXCeaCZuZOPCcUGiR6tDe`).
+4. Authenticated E2E after env is live.
 
-```
-https://<origin>/auth/callback
-```
-
-and local:
-
-```
-http://localhost:3000/auth/callback
-```
-
-## Honest limit
-
-Definition ≠ PASS. Applying schema does not mark FX-FR-* PASS until bound evidence exists (SHA + env + result + artifact).
+Definition ≠ PASS. Schema applied is not fixture PASS.
