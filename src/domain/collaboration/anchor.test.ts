@@ -19,7 +19,7 @@ describe("TextAnchor", () => {
     const a = createTextAnchor({ nodeId: ID, nodeText: oldText, start, end: start + "važna tvrdnja".length, contextLength: 0 });
     const next = "Novi početak. Uvod. važna tvrdnja Zaključak.";
     const moved = next.indexOf("važna tvrdnja");
-    expect(resolveTextAnchor(a, ID, next)).toEqual({ status: "moved", start: moved, end: moved + 14 });
+    expect(resolveTextAnchor(a, ID, next)).toEqual({ status: "moved", start: moved, end: moved + "važna tvrdnja".length });
   });
 
   it("refuses to guess between duplicate quotations", () => {
