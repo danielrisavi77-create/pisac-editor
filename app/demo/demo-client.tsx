@@ -54,6 +54,7 @@ import { blocksHr, problemsHr, wordsHr } from "@/lib/i18n/hr";
 
 import DocxExportBar from "../d/[id]/docx-export-bar";
 import DemoCollaborationPanel from "./demo-collaboration-panel";
+import ProtectedFactsDemo from "./protected-facts-demo";
 
 /**
  * The journal key every visitor's demo shares inside their own browser.
@@ -358,6 +359,7 @@ function JournalledDemoEditor({
         full. Its summary always carries the local-changes note, which is true.
       */}
       <DemoCollaborationPanel />
+      <ProtectedFactsDemo />
 
       <DocxExportBar
         document={visibleDocument}
