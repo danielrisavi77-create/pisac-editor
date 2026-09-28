@@ -6,7 +6,7 @@ const pkg=(revision:number)=>createSharePackage({
  id:(`share-${revision}`) as SharePackageId,documentId:"doc-1",ownerId:"student-1",recipientId:"mentor-1",
  scope:{revision,visibility:"review"},createdAt:"2026-09-28T12:00:00Z",
 });
-const input=(shares=[])=>({
+const input=(shares: ReturnType<typeof pkg>[] = [])=>({
  requestId:"req-1",documentId:"doc-1",currentRevision:4,ownerId:"student-1",
  evaluation:{status:"REREVIEW_REQUIRED",reason:"missing"} as const,sharePackages:shares,
 });
