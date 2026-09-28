@@ -138,7 +138,7 @@ test.describe("local collaboration demo", () => {
     await page.getByRole("button", { name: "Student", exact: true }).click();
     await page.getByRole("button", { name: "Simuliraj dijeljenje v4 mentoru" }).click();
     await page.getByRole("button", { name: "Mentor", exact: true }).click();
-    await expect(page.locator("[data-attention-count]")).toHaveAttribute("data-attention-count", "1");
+    await expect(page.locator("[data-attention-count]")).toHaveAttribute("data-attention-count", "2");
   });
 });
 
