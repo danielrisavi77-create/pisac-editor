@@ -367,3 +367,11 @@ a {
 .collab-card { border-color: color-mix(in srgb, var(--muted) 65%, transparent); }
 .review-chip { display: inline-flex; padding: .2rem .55rem; border-radius: 999px; color: var(--tone-ok-fg); background: var(--tone-ok-bg); font-size: .82rem; }
 .attention-item { margin: .55rem 0 0; padding: .55rem .7rem; border-left: 3px solid var(--tone-warn-fg); background: var(--tone-warn-bg); color: var(--tone-warn-fg); }
+
+.protected-demo { margin-top: 1.25rem; display: grid; gap: .75rem; }
+.protected-list { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .65rem; }
+.protected-pill { padding: .25rem .55rem; border-radius: 999px; border: 1px solid var(--tone-progress-fg); color: var(--tone-progress-fg); background: var(--tone-progress-bg); font-size: .82rem; }
+.protected-result { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; padding: .55rem 0; border-top: 1px solid var(--muted); }
+.protected-result:first-of-type { margin-top: .6rem; }
+.fact-ok { color: var(--tone-ok-fg); }
+.fact-warn { color: var(--tone-warn-fg); }
