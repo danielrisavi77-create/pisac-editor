@@ -381,3 +381,5 @@ a {
 .lineage-arrow { text-align: center; color: var(--tone-progress-fg); padding: .2rem; }
 
 .decision-demo { margin-top: 1.25rem; display: grid; gap: .75rem; }
+
+.defense-demo { margin-top: 1.25rem; display: grid; gap: .75rem; }\n.coverage { margin-top: .6rem; }\n.coverage p { margin: .3rem 0; }\n
