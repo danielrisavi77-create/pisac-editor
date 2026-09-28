@@ -379,3 +379,5 @@ a {
 .lineage-demo { margin-top: 1.25rem; display: grid; gap: .75rem; }
 .lineage-step { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; padding: .55rem .7rem; border: 1px solid var(--muted); border-radius: .5rem; }
 .lineage-arrow { text-align: center; color: var(--tone-progress-fg); padding: .2rem; }
+
+.decision-demo { margin-top: 1.25rem; display: grid; gap: .75rem; }
