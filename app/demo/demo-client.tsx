@@ -57,6 +57,7 @@ import DemoCollaborationPanel from "./demo-collaboration-panel";
 import ProtectedFactsDemo from "./protected-facts-demo";
 import AnalysisLineageDemo from "./analysis-lineage-demo";
 import DecisionLogDemo from "./decision-log-demo";
+import DefenseDemo from "./defense-demo";
 
 /**
  * The journal key every visitor's demo shares inside their own browser.
@@ -364,6 +365,7 @@ function JournalledDemoEditor({
       <ProtectedFactsDemo />
       <AnalysisLineageDemo />
       <DecisionLogDemo />
+      <DefenseDemo />
 
       <DocxExportBar
         document={visibleDocument}
