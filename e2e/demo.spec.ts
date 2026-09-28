@@ -116,6 +116,8 @@ test.describe("demo on a 360px viewport", () => {
 });
 
 
+const V4_TEXT_FOR_PRIVACY_TEST = "Lindblom dokazuje da je racionalno-sveobuhvatni model neprimjenjiv u stvarnom političkom odlučivanju.";
+
 test.describe("local collaboration demo", () => {
   test("keeps private v4 attention hidden from mentor until sharing", async ({ page }) => {
     await openDemo(page);
@@ -131,6 +133,7 @@ test.describe("local collaboration demo", () => {
     await page.getByRole("button", { name: "Mentor", exact: true }).click();
     await expect(page.locator("[data-attention-count]")).toHaveAttribute("data-attention-count", "0");
     await expect(page.getByText("Privatna v4 nije otkrivena.")).toBeVisible();
+    await expect(page.getByText(V4_TEXT_FOR_PRIVACY_TEST)).toHaveCount(0);
 
     await page.getByRole("button", { name: "Student", exact: true }).click();
     await page.getByRole("button", { name: "Simuliraj dijeljenje v4 mentoru" }).click();
