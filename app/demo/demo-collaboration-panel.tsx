@@ -7,6 +7,7 @@ import { projectReviewAttention } from "@/domain/attention";
 import { newNodeId } from "@/domain/document";
 import { createClaimRevision, createEvidenceBasis, evaluateEvidenceBasis, type ClaimId, type SourceId, type EvidenceBasisId } from "@/domain/evidence";
 import { analyzeImpact, type DependencyEdge } from "@/domain/dependency";
+import { advisoryClassifications, diffText } from "@/domain/diff";
 
 type Stage = "comment" | "request" | "responded" | "shared" | "accepted" | "private-v4" | "shared-v4";
 const NODE=newNodeId(()=>"11111111-1111-4111-8111-111111111111");
@@ -35,6 +36,8 @@ export default function DemoCollaborationPanel(){
   {id:"dep-3",from:{type:"section",id:"rasprava-5"},to:{type:"section",id:"zakljucak-6"},kind:"affects"},
  ],[]);
  const impact=stage==="private-v4"||stage==="shared-v4"?analyzeImpact({type:"claim",id:"claim-014"},dependencyEdges):[];
+ const textDiff=stage==="private-v4"||stage==="shared-v4"?diffText(V3,V4):null;
+ const advisory=textDiff?advisoryClassifications(V3,V4):[];
  const attention=evaluation?projectReviewAttention({requestId:"demo-request",documentId:"demo",currentRevision:stage==="private-v4"||stage==="shared-v4"?4:3,evaluation,ownerId:"student",sharePackages:shares},view==="student"?{kind:"owner",userId:"student"}:{kind:"recipient",userId:"mentor"}):[];
 
  function convert(){const request=createRevisionRequest({id:"demo-request",documentId:"demo",createdBy:"mentor",requestedRevision:2,target:anchor,instruction:"Preciziraj tvrdnju i objasni izmjenu."});setFlow({request,response:null});setStage("request");}
@@ -56,6 +59,7 @@ export default function DemoCollaborationPanel(){
   {stage==="accepted"&&<div className="card collab-card"><strong>ReviewBasis v3</strong><p className="hint">Pregled je vezan uz točnu formulaciju i reviziju 3.</p>{view==="student"&&<button className="btn" onClick={()=>setStage("private-v4")}>Simuliraj privatnu sadržajnu izmjenu v4</button>}</div>}
   {(stage==="private-v4"||stage==="shared-v4")&&<div className="card collab-card"><strong>{view==="student"?"Trenutačni privatni tekst":"Podijeljeni tekst"}</strong><p>{V4}</p>{stage==="private-v4"&&view==="student"&&<button className="btn btn-primary" onClick={()=>setStage("shared-v4")}>Simuliraj dijeljenje v4 mentoru</button>}</div>}
   <div className="card collab-card"><strong>Tvrdnja + izvor</strong><p>{stage==="private-v4"||stage==="shared-v4"?V4:V3}</p><p className="hint">Lindblom 1959 · str. 81–82 · EvidenceBasis za formulaciju v3</p><span className="review-chip">{evidenceEval.status==="VALID"?"Potpora pregledana za v3":"Potrebna nova provjera izvora"}</span></div>
+  {textDiff?<div className="card collab-card"><strong>Promjene v3 → v4</strong><p className="hint">Deterministički diff: uklonjeno <b>{textDiff.removedWords.join(" · ")}</b>; dodano <b>{textDiff.addedWords.join(" · ")}</b>.</p>{advisory.length>0?<p className="hint">Advisory signali: {advisory.map(x=>x.kind).join(" · ")}. Oni objašnjavaju što vrijedi pregledati, ali ne odlučuju valjanost.</p>:null}</div>:null}
   {impact.length>0?<div className="card collab-card"><strong>Utjecaj promjene</strong><p className="hint">Prikazane su samo zabilježene veze. „Povezano” ne znači „pogrešno”.</p>{impact.map(item=><p key={item.object.type+item.object.id} className="hint"><b>{item.object.type}:{item.object.id}</b> · dubina {item.depth} · put: {item.path.map(edge=>edge.kind).join(" → ")}</p>)}</div>:null}
   <div className="card collab-card" data-attention-count={attention.length + ((evidenceEval.status==="RECHECK_REQUIRED" && (view==="student" || stage==="shared-v4"))?1:0)}><strong>Pažnja ({attention.length + ((evidenceEval.status==="RECHECK_REQUIRED" && (view==="student" || stage==="shared-v4"))?1:0)})</strong>{attention.length===0?<p className="hint">{view==="mentor"&&stage==="private-v4"?"Nema novih podijeljenih stavki. Privatna v4 nije otkrivena.":"Nema stavki koje zahtijevaju pažnju."}</p>:attention.map(x=><p key={x.id} className="attention-item">Potreban ponovni pregled · revizija {x.revision} · {x.visibility}</p>)}{evidenceEval.status==="RECHECK_REQUIRED" && (view==="student" || stage==="shared-v4")?<p className="attention-item">Potrebna nova provjera izvora · EvidenceBasis vrijedi za staru formulaciju v3.</p>:null}</div>
  </section>;
