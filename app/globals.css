@@ -361,3 +361,9 @@ a {
     animation: none;
   }
 }
+
+/* F2 local collaboration demo: separate from F1 editor persistence. */
+.collab-demo { margin-top: 1.25rem; display: grid; gap: 0.75rem; }
+.collab-card { border-color: color-mix(in srgb, var(--muted) 65%, transparent); }
+.review-chip { display: inline-flex; padding: .2rem .55rem; border-radius: 999px; color: var(--tone-ok-fg); background: var(--tone-ok-bg); font-size: .82rem; }
+.attention-item { margin: .55rem 0 0; padding: .55rem .7rem; border-left: 3px solid var(--tone-warn-fg); background: var(--tone-warn-bg); color: var(--tone-warn-fg); }
