@@ -114,3 +114,27 @@ test.describe("demo on a 360px viewport", () => {
     expect(widths.client).toBeLessThanOrEqual(360);
   });
 });
+
+
+test.describe("local collaboration demo", () => {
+  test("keeps private v4 attention hidden from mentor until sharing", async ({ page }) => {
+    await openDemo(page);
+    await page.getByRole("button", { name: "Pretvori u doradu" }).click();
+    await page.getByRole("button", { name: "Primijeni izmjenu i odgovor" }).click();
+    await page.getByRole("button", { name: "Simuliraj dijeljenje v3" }).click();
+    await page.getByRole("button", { name: "Prihvati za v3" }).click();
+    await page.getByRole("button", { name: "Student", exact: true }).click();
+    await page.getByRole("button", { name: "Simuliraj privatnu sadržajnu izmjenu v4" }).click();
+
+    await expect(page.locator("[data-attention-count]")).toHaveAttribute("data-attention-count", "1");
+
+    await page.getByRole("button", { name: "Mentor", exact: true }).click();
+    await expect(page.locator("[data-attention-count]")).toHaveAttribute("data-attention-count", "0");
+    await expect(page.getByText("Privatna v4 nije otkrivena.")).toBeVisible();
+
+    await page.getByRole("button", { name: "Student", exact: true }).click();
+    await page.getByRole("button", { name: "Simuliraj dijeljenje v4 mentoru" }).click();
+    await page.getByRole("button", { name: "Mentor", exact: true }).click();
+    await expect(page.locator("[data-attention-count]")).toHaveAttribute("data-attention-count", "1");
+  });
+});
