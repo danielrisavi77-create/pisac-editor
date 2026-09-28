@@ -137,3 +137,36 @@ test.describe("mobile viewport, 360px", () => {
     expect(box!.width).toBeLessThanOrEqual(360);
   });
 });
+
+
+test.describe("Pisač 2.0 demo accessibility and mobile", () => {
+  test("all new demo controls have accessible names", async ({ page }) => {
+    await page.goto("/demo");
+    await page.getByRole("heading", { name: "Dorada 2.0" }).waitFor();
+    const controls = await page.locator(".collab-demo input, .collab-demo textarea, .collab-demo button, .protected-demo input, .protected-demo textarea, .protected-demo button, .lineage-demo input, .lineage-demo textarea, .lineage-demo button, .decision-demo input, .decision-demo textarea, .decision-demo button, .defense-demo input, .defense-demo textarea, .defense-demo button, .memory-demo input, .memory-demo textarea, .memory-demo button").evaluateAll((els) => els.map((el) => ({tag:el.tagName.toLowerCase(),name:(el.getAttribute("aria-label") ?? el.textContent ?? "").trim()})));
+    expect(controls.filter((control) => control.name === "")).toEqual([]);
+  });
+
+  test("status region exposes changing attention to assistive technology", async ({ page }) => {
+    await page.goto("/demo");
+    const attention = page.locator("[data-attention-count]");
+    await expect(attention).toBeVisible();
+    await expect(attention).toHaveAttribute("aria-live", "polite");
+  });
+
+  test.describe("at 360px", () => {
+    test.use({ viewport: { width: 360, height: 740 } });
+    test("all Pisač 2.0 demo panels stay within the viewport", async ({ page }) => {
+      await page.goto("/demo");
+      await page.getByRole("heading", { name: "Dorada 2.0" }).waitFor();
+      for (const selector of [".collab-demo",".protected-demo",".lineage-demo",".decision-demo",".defense-demo",".memory-demo"]) {
+        const box = await page.locator(selector).boundingBox();
+        expect(box, selector).not.toBeNull();
+        expect(box!.x).toBeGreaterThanOrEqual(0);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(360);
+      }
+      const widths = await page.evaluate(() => ({scroll:document.documentElement.scrollWidth,client:document.documentElement.clientWidth}));
+      expect(widths.scroll).toBeLessThanOrEqual(widths.client);
+    });
+  });
+});

@@ -382,5 +382,9 @@ a {
 
 .decision-demo { margin-top: 1.25rem; display: grid; gap: .75rem; }
 
-.defense-demo { margin-top: 1.25rem; display: grid; gap: .75rem; }\n.coverage { margin-top: .6rem; }\n.coverage p { margin: .3rem 0; }\n
-.memory-demo { margin-top: 1.25rem; display: grid; gap: .75rem; }\n.memory-result { display: grid; gap: .2rem; padding: .7rem 0; border-top: 1px solid var(--muted); }\n
+.defense-demo { margin-top: 1.25rem; display: grid; gap: .75rem; }
+.coverage { margin-top: .6rem; }
+.coverage p { margin: .3rem 0; }
+
+.memory-demo { margin-top: 1.25rem; display: grid; gap: .75rem; }
+.memory-result { display: grid; gap: .2rem; padding: .7rem 0; border-top: 1px solid var(--muted); }

@@ -28,13 +28,7 @@ export function evaluateProtectedFact(
   currentNodeText: string,
 ): ProtectedFactEvaluation {
   const resolved=resolveTextAnchor(fact.target,nodeId,currentNodeText);
-  if(resolved.status==="missing"){
-    // If the node still exists but the exact quote does not, we can only call
-    // this changed when the original hint still addresses a non-empty span.
-    const candidate=currentNodeText.slice(fact.target.startHint,fact.target.endHint);
-    if(candidate && candidate!==fact.expectedText) return {status:"CHANGED",before:fact.expectedText,after:candidate};
-    return {status:"MISSING"};
-  }
+  if(resolved.status==="missing") return {status:"MISSING"};
   if(resolved.status==="ambiguous") return {status:"AMBIGUOUS"};
   const current=currentNodeText.slice(resolved.start,resolved.end);
   if(current!==fact.expectedText) return {status:"CHANGED",before:fact.expectedText,after:current};

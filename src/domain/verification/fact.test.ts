@@ -4,7 +4,7 @@ function fact(text:string,kind:"number"|"statistic"|"verbatim-quote"|"term"="num
 describe("ProtectedFact",()=>{
  it("keeps unchanged value valid",()=>{const x=fact("238");expect(evaluateProtectedFact(x.f,N,x.full)).toEqual({status:"UNCHANGED",resolution:"exact"});});
  it("allows the identical value to move",()=>{const x=fact("p = .031","statistic");expect(evaluateProtectedFact(x.f,N,"Novo. "+x.full)).toEqual({status:"UNCHANGED",resolution:"moved"});});
- it("reports a changed value at the original span",()=>{const x=fact("238");expect(evaluateProtectedFact(x.f,N,"Rezultat: 241 kraj.")).toEqual({status:"CHANGED",before:"238",after:"241"});});
+ it("does not guess a replacement when the protected quote no longer resolves",()=>{const x=fact("238");expect(evaluateProtectedFact(x.f,N,"Rezultat: 241 kraj.")).toEqual({status:"MISSING"});});
  it("reports deletion when no replacement occupies the span",()=>{const x=fact("238");expect(evaluateProtectedFact(x.f,N,"")).toEqual({status:"MISSING"});});
  it("refuses to guess duplicate protected text",()=>{const x=fact("238");expect(evaluateProtectedFact(x.f,N,"238 i 238")).toEqual({status:"AMBIGUOUS"});});
  it("protects Croatian terminology verbatim",()=>{const x=fact("obvezno glasovanje","term");expect(evaluateProtectedFact(x.f,N,x.full).status).toBe("UNCHANGED");});

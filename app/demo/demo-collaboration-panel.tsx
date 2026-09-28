@@ -29,14 +29,16 @@ export default function DemoCollaborationPanel(){
   excerpt:{sourceId:"lindblom-1959" as SourceId,sourceVersion:"v1",locator:"81–82",text:"Sažeti relevantni izvadak za demonstraciju.",kind:"summary"},
   reviewedAt:"2026-09-28T12:00:00Z"
  }),[anchor]);
- const evidenceEval=evaluateEvidenceBasis(evidenceBasis,NODE,stage==="private-v4"||stage==="shared-v4"?V4:V3,"v1");
+ const privateHiddenFromMentor=view==="mentor"&&stage==="private-v4";
+ const visibleText=privateHiddenFromMentor?V3:(stage==="private-v4"||stage==="shared-v4"?V4:V3);
+ const evidenceEval=evaluateEvidenceBasis(evidenceBasis,NODE,visibleText,"v1");
  const dependencyEdges=useMemo<DependencyEdge[]>(()=>[
   {id:"dep-1",from:{type:"source",id:"lindblom-1959"},to:{type:"claim",id:"claim-014"},kind:"supports"},
   {id:"dep-2",from:{type:"claim",id:"claim-014"},to:{type:"section",id:"rasprava-5"},kind:"used_by"},
   {id:"dep-3",from:{type:"section",id:"rasprava-5"},to:{type:"section",id:"zakljucak-6"},kind:"affects"},
  ],[]);
- const impact=stage==="private-v4"||stage==="shared-v4"?analyzeImpact({type:"claim",id:"claim-014"},dependencyEdges):[];
- const textDiff=stage==="private-v4"||stage==="shared-v4"?diffText(V3,V4):null;
+ const impact=(stage==="private-v4"||stage==="shared-v4")&&!privateHiddenFromMentor?analyzeImpact({type:"claim",id:"claim-014"},dependencyEdges):[];
+ const textDiff=(stage==="private-v4"||stage==="shared-v4")&&!privateHiddenFromMentor?diffText(V3,V4):null;
  const advisory=textDiff?advisoryClassifications(V3,V4):[];
  const attention=evaluation?projectReviewAttention({requestId:"demo-request",documentId:"demo",currentRevision:stage==="private-v4"||stage==="shared-v4"?4:3,evaluation,ownerId:"student",sharePackages:shares},view==="student"?{kind:"owner",userId:"student"}:{kind:"recipient",userId:"mentor"}):[];
 
@@ -47,7 +49,7 @@ export default function DemoCollaborationPanel(){
  return <section className="collab-demo" aria-label="Demo dorade i pregleda">
   <div className="row" style={{justifyContent:"space-between"}}>
    <h2 style={{fontSize:"1.1rem",margin:0}}>Dorada 2.0</h2>
-   <div className="row"><button className={"btn "+(view==="student"?"btn-primary":"")} onClick={()=>setView("student")}>Student</button><button className={"btn "+(view==="mentor"?"btn-primary":"")} onClick={()=>setView("mentor")}>Mentor</button></div>
+   <div className="row"><button className={"btn "+(view==="student"?"btn-primary":"")} aria-pressed={view==="student"} onClick={()=>setView("student")}>Student</button><button className={"btn "+(view==="mentor"?"btn-primary":"")} aria-pressed={view==="mentor"} onClick={()=>setView("mentor")}>Mentor</button></div>
   </div>
   <p className="hint">Lokalna demonstracija. Nema backenda, stvarnog dijeljenja ni autorizacije.</p>
   <div className="card collab-card">
@@ -57,10 +59,10 @@ export default function DemoCollaborationPanel(){
   {stage!=="comment"&&view==="student"&&<div className="card collab-card"><strong>Odgovor studenta</strong><p className="hint">{stage==="request"?"Privatno — mentor ovo još ne vidi.":"Odgovor je pripremljen za reviziju 3."}</p>{stage==="request"&&<button className="btn btn-primary" onClick={respond}>Primijeni izmjenu i odgovor</button>}{stage==="responded"&&<button className="btn btn-primary" onClick={share}>Simuliraj dijeljenje v3</button>}</div>}
   {stage==="shared"&&view==="mentor"&&<div className="card collab-card"><strong>Pregled prije / poslije</strong><p><del>{V3}</del></p><p>{V3}</p><button className="btn btn-primary" onClick={accept}>Prihvati za v3</button></div>}
   {stage==="accepted"&&<div className="card collab-card"><strong>ReviewBasis v3</strong><p className="hint">Pregled je vezan uz točnu formulaciju i reviziju 3.</p>{view==="student"&&<button className="btn" onClick={()=>setStage("private-v4")}>Simuliraj privatnu sadržajnu izmjenu v4</button>}</div>}
-  {(stage==="private-v4"||stage==="shared-v4")&&<div className="card collab-card"><strong>{view==="student"?"Trenutačni privatni tekst":"Podijeljeni tekst"}</strong><p>{V4}</p>{stage==="private-v4"&&view==="student"&&<button className="btn btn-primary" onClick={()=>setStage("shared-v4")}>Simuliraj dijeljenje v4 mentoru</button>}</div>}
-  <div className="card collab-card"><strong>Tvrdnja + izvor</strong><p>{stage==="private-v4"||stage==="shared-v4"?V4:V3}</p><p className="hint">Lindblom 1959 · str. 81–82 · EvidenceBasis za formulaciju v3</p><span className="review-chip">{evidenceEval.status==="VALID"?"Potpora pregledana za v3":"Potrebna nova provjera izvora"}</span></div>
+  {(stage==="private-v4"||stage==="shared-v4")&&!privateHiddenFromMentor&&<div className="card collab-card"><strong>{view==="student"?"Trenutačni privatni tekst":"Podijeljeni tekst"}</strong><p>{V4}</p>{stage==="private-v4"&&view==="student"&&<button className="btn btn-primary" onClick={()=>setStage("shared-v4")}>Simuliraj dijeljenje v4 mentoru</button>}</div>}
+  <div className="card collab-card"><strong>Tvrdnja + izvor</strong><p>{visibleText}</p><p className="hint">Lindblom 1959 · str. 81–82 · EvidenceBasis za formulaciju v3</p><span className="review-chip">{evidenceEval.status==="VALID"?"Potpora pregledana za v3":"Potrebna nova provjera izvora"}</span></div>
   {textDiff?<div className="card collab-card"><strong>Promjene v3 → v4</strong><p className="hint">Deterministički diff: uklonjeno <b>{textDiff.removedWords.join(" · ")}</b>; dodano <b>{textDiff.addedWords.join(" · ")}</b>.</p>{advisory.length>0?<p className="hint">Advisory signali: {advisory.map(x=>x.kind).join(" · ")}. Oni objašnjavaju što vrijedi pregledati, ali ne odlučuju valjanost.</p>:null}</div>:null}
   {impact.length>0?<div className="card collab-card"><strong>Utjecaj promjene</strong><p className="hint">Prikazane su samo zabilježene veze. „Povezano” ne znači „pogrešno”.</p>{impact.map(item=><p key={item.object.type+item.object.id} className="hint"><b>{item.object.type}:{item.object.id}</b> · dubina {item.depth} · put: {item.path.map(edge=>edge.kind).join(" → ")}</p>)}</div>:null}
-  <div className="card collab-card" data-attention-count={attention.length + ((evidenceEval.status==="RECHECK_REQUIRED" && (view==="student" || stage==="shared-v4"))?1:0)}><strong>Pažnja ({attention.length + ((evidenceEval.status==="RECHECK_REQUIRED" && (view==="student" || stage==="shared-v4"))?1:0)})</strong>{attention.length===0?<p className="hint">{view==="mentor"&&stage==="private-v4"?"Nema novih podijeljenih stavki. Privatna v4 nije otkrivena.":"Nema stavki koje zahtijevaju pažnju."}</p>:attention.map(x=><p key={x.id} className="attention-item">Potreban ponovni pregled · revizija {x.revision} · {x.visibility}</p>)}{evidenceEval.status==="RECHECK_REQUIRED" && (view==="student" || stage==="shared-v4")?<p className="attention-item">Potrebna nova provjera izvora · EvidenceBasis vrijedi za staru formulaciju v3.</p>:null}</div>
+  <div className="card collab-card" aria-live="polite" aria-atomic="true" data-attention-count={attention.length + ((evidenceEval.status==="RECHECK_REQUIRED" && (view==="student" || stage==="shared-v4"))?1:0)}><strong>Pažnja ({attention.length + ((evidenceEval.status==="RECHECK_REQUIRED" && (view==="student" || stage==="shared-v4"))?1:0)})</strong>{attention.length===0?<p className="hint">{view==="mentor"&&stage==="private-v4"?"Nema novih podijeljenih stavki. Privatna v4 nije otkrivena.":"Nema stavki koje zahtijevaju pažnju."}</p>:attention.map(x=><p key={x.id} className="attention-item">Potreban ponovni pregled · revizija {x.revision} · {x.visibility}</p>)}{evidenceEval.status==="RECHECK_REQUIRED" && (view==="student" || stage==="shared-v4")?<p className="attention-item">Potrebna nova provjera izvora · EvidenceBasis vrijedi za staru formulaciju v3.</p>:null}</div>
  </section>;
 }

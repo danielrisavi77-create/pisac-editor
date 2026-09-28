@@ -10,16 +10,16 @@ describe("TextAnchor", () => {
     const text = "Prije važna tvrdnja poslije.";
     const start = text.indexOf("važna tvrdnja");
     const a = createTextAnchor({ nodeId: ID, nodeText: text, start, end: start + "važna tvrdnja".length });
-    expect(resolveTextAnchor(a, ID, text)).toEqual({ status: "exact", start, end: start + 14 });
+    expect(resolveTextAnchor(a, ID, text)).toEqual({ status: "exact", start, end: start + "važna tvrdnja".length });
   });
 
   it("finds a target that moved inside the same node", () => {
     const oldText = "Uvod. važna tvrdnja Zaključak.";
     const start = oldText.indexOf("važna tvrdnja");
-    const a = createTextAnchor({ nodeId: ID, nodeText: oldText, start, end: start + 14, contextLength: 0 });
+    const a = createTextAnchor({ nodeId: ID, nodeText: oldText, start, end: start + "važna tvrdnja".length, contextLength: 0 });
     const next = "Novi početak. Uvod. važna tvrdnja Zaključak.";
     const moved = next.indexOf("važna tvrdnja");
-    expect(resolveTextAnchor(a, ID, next)).toEqual({ status: "moved", start: moved, end: moved + 14 });
+    expect(resolveTextAnchor(a, ID, next)).toEqual({ status: "moved", start: moved, end: moved + "važna tvrdnja".length });
   });
 
   it("refuses to guess between duplicate quotations", () => {
@@ -30,12 +30,12 @@ describe("TextAnchor", () => {
   });
 
   it("reports a deleted target as missing", () => {
-    const a = createTextAnchor({ nodeId: ID, nodeText: "važna tvrdnja", start: 0, end: 14 });
+    const a = createTextAnchor({ nodeId: ID, nodeText: "važna tvrdnja", start: 0, end: "važna tvrdnja".length });
     expect(resolveTextAnchor(a, ID, "nešto drugo")).toEqual({ status: "missing" });
   });
 
   it("never reanchors across a different structural node", () => {
-    const a = createTextAnchor({ nodeId: ID, nodeText: "važna tvrdnja", start: 0, end: 14 });
+    const a = createTextAnchor({ nodeId: ID, nodeText: "važna tvrdnja", start: 0, end: "važna tvrdnja".length });
     expect(resolveTextAnchor(a, OTHER, "važna tvrdnja")).toEqual({ status: "missing" });
   });
 
