@@ -138,3 +138,16 @@ test.describe("local collaboration demo", () => {
     await expect(page.locator("[data-attention-count]")).toHaveAttribute("data-attention-count", "1");
   });
 });
+
+
+test.describe("Protected Facts Lekta simulation", () => {
+  test("reports unsafe changes without claiming a real Lekta call", async ({ page }) => {
+    await openDemo(page);
+    await page.getByRole("button", { name: "Problematična simulacija" }).click();
+    const report=page.locator('[data-protected-report="unsafe"]');
+    await expect(report).toBeVisible();
+    await expect(report.getByText(/N-001/)).toBeVisible();
+    await expect(report.getByText(/CHANGED/).first()).toBeVisible();
+    await expect(page.getByText("Lokalna simulacija Lekta rezultata.")).toBeVisible();
+  });
+});
