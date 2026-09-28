@@ -53,6 +53,7 @@ import { acquireDocumentLock, documentLockName } from "@/lib/journal/lock";
 import { blocksHr, problemsHr, wordsHr } from "@/lib/i18n/hr";
 
 import DocxExportBar from "../d/[id]/docx-export-bar";
+import DemoCollaborationPanel from "./demo-collaboration-panel";
 
 /**
  * The journal key every visitor's demo shares inside their own browser.
@@ -356,6 +357,8 @@ function JournalledDemoEditor({
         in the browser, so this is the one F1 capability the demo can offer in
         full. Its summary always carries the local-changes note, which is true.
       */}
+      <DemoCollaborationPanel />
+
       <DocxExportBar
         document={visibleDocument}
         title={DEMO_TITLE}
