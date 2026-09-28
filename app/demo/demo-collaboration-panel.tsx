@@ -49,7 +49,7 @@ export default function DemoCollaborationPanel(){
  return <section className="collab-demo" aria-label="Demo dorade i pregleda">
   <div className="row" style={{justifyContent:"space-between"}}>
    <h2 style={{fontSize:"1.1rem",margin:0}}>Dorada 2.0</h2>
-   <div className="row"><button className={"btn "+(view==="student"?"btn-primary":"")} onClick={()=>setView("student")}>Student</button><button className={"btn "+(view==="mentor"?"btn-primary":"")} onClick={()=>setView("mentor")}>Mentor</button></div>
+   <div className="row"><button className={"btn "+(view==="student"?"btn-primary":"")} aria-pressed={view==="student"} onClick={()=>setView("student")}>Student</button><button className={"btn "+(view==="mentor"?"btn-primary":"")} aria-pressed={view==="mentor"} onClick={()=>setView("mentor")}>Mentor</button></div>
   </div>
   <p className="hint">Lokalna demonstracija. Nema backenda, stvarnog dijeljenja ni autorizacije.</p>
   <div className="card collab-card">
