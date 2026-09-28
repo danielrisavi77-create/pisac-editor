@@ -3,7 +3,8 @@ import { createTextAnchor } from "./anchor";
 import { acceptForRevision, createRevisionRequest, markRereviewRequired, requestClarification, shareResponseForReview, submitStudentResponse, type RevisionRequestState } from "./revision-request";
 import { newNodeId } from "../document";
 const nodeId=newNodeId(()=>"11111111-1111-4111-8111-111111111111");
-const target=createTextAnchor({nodeId,nodeText:"važna tvrdnja",start:0,end:14});
+const quote="važna tvrdnja";
+const target=createTextAnchor({nodeId,nodeText:quote,start:0,end:quote.length});
 const initial=():RevisionRequestState=>({request:createRevisionRequest({id:"r1",documentId:"d1",createdBy:"mentor",requestedRevision:2,target,instruction:"Preciziraj tvrdnju."}),response:null});
 const response={requestId:"r1",authorId:"student",responseRevision:3,explanation:"Dodao sam izvor i ublažio tvrdnju."};
 
