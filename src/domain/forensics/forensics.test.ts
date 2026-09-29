@@ -1,6 +1,8 @@
 import{describe,expect,it}from"vitest";import{createForensicEvent,type ForensicEvent}from"./ledger";import{appendToHashChain,canonicalize,verifyHashChain}from"./integrity";
 const fakeHash=async(s:string)=>"h:"+s;
-const ev=(sequence:number,text:string):ForensicEvent=>createForensicEvent({schemaVersion:1,id:"e"+sequence,documentId:"doc",sequence,revision:0,occurredAt:`2026-09-29T09:00:0${sequence}Z`,actorId:"student",actorRole:"student",payload:{kind:"insert-text",nodeId:"n1",offset:sequence-1,text}});
+const ev=(sequence:number,text:string):ForensicEvent=>createForensicEvent({schemaVersion:1,id:"e"+sequence,documentId:"doc",sequence,revision:0,occurredAt:`2026-09-29T09:00:0${sequence}Z`,actorId:"student",actorRole:"student",payload:{kind:"insert-text",nodeId:"n1",offset:sequence-1,text} it("rejects sequence gaps even when hashes otherwise chain",async()=>{const a=await appendToHashChain(ev(1,"a"),"GENESIS",fakeHash);const three={...ev(2,"b"),sequence:3,id:"e3"};const b=await appendToHashChain(three,a.eventHash,fakeHash);expect(await verifyHashChain([a,b],"GENESIS",fakeHash)).toEqual({valid:false,sequence:3});});
+ it("canonicalizer rejects undefined instead of hashing an ambiguous representation",()=>expect(()=>canonicalize({a:undefined})).toThrow("unsupported"));
+});
 describe("Forensic Writing Ledger",()=>{
  it("preserves exact inserted text and sequence",()=>expect(ev(1,"č")).toMatchObject({sequence:1,payload:{kind:"insert-text",text:"č"}}));
  it("canonicalization is stable across object key order",()=>expect(canonicalize({b:2,a:1})).toBe(canonicalize({a:1,b:2})));
