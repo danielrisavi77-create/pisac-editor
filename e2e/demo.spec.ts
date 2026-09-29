@@ -254,3 +254,35 @@ test.describe("Mentor project operating modules", () => {
     await expect(center.getByText(/Potpora tvrdnje zahtijeva novu provjeru/)).toBeVisible();
   });
 });
+
+
+test.describe("Mentor sequential review workflow", () => {
+  test("comment stays on the object while reviewed advances and creates coverage", async ({ page }) => {
+    await openDemo(page);
+    const center=page.getByRole("region",{name:"Mentor Command Center"});
+    await center.getByRole("button",{name:/Daniel Rišavi/}).click();
+    await center.getByRole("button",{name:"Pokreni pregled"}).click();
+    const queue=center.getByRole("region",{name:"Mentor Review Queue"});
+    await expect(queue.getByText("Stavka 1/6")).toBeVisible();
+    const firstHeading=await queue.locator("h4").textContent();
+    await queue.getByLabel("Mentorska bilješka").fill("Provjeri formulaciju.");
+    await queue.getByRole("button",{name:"Komentiraj"}).click();
+    await expect(queue.getByText("Stavka 1/6")).toBeVisible();
+    await expect(queue.locator("h4")).toHaveText(firstHeading??"");
+    await expect(queue.getByLabel("Mentorska bilješka")).toHaveValue("");
+    await queue.getByRole("button",{name:"Označi pregledano"}).click();
+    await expect(queue.getByText("Stavka 2/6")).toBeVisible();
+    await expect(queue.getByText(/novi coverage zapisi: 1/)).toBeVisible();
+  });
+
+  test("revision request requires an explanatory note", async ({ page }) => {
+    await openDemo(page);
+    const center=page.getByRole("region",{name:"Mentor Command Center"});
+    await center.getByRole("button",{name:/Daniel Rišavi/}).click();
+    await center.getByRole("button",{name:"Pokreni pregled"}).click();
+    const queue=center.getByRole("region",{name:"Mentor Review Queue"});
+    await expect(queue.getByRole("button",{name:"Traži doradu"})).toBeDisabled();
+    await queue.getByLabel("Mentorska bilješka").fill("Potrebno je precizirati odnos rezultata i tvrdnje.");
+    await expect(queue.getByRole("button",{name:"Traži doradu"})).toBeEnabled();
+  });
+});
