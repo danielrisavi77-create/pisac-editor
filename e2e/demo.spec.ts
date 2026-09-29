@@ -237,3 +237,20 @@ test.describe("Mentor Review Delta and Coverage", () => {
     await expect(center.getByText(/Zaključak §6 · nikad pregledano/)).toBeVisible();
   });
 });
+
+
+test.describe("Mentor project operating modules", () => {
+  test("opens revisions, argument path and readiness from one project", async ({ page }) => {
+    await openDemo(page);
+    const center=page.getByRole("region",{name:"Mentor Command Center"});
+    await center.getByRole("button",{name:/Daniel Rišavi/}).click();
+    await center.getByRole("button",{name:"Dorade"}).click();
+    await expect(center.getByText(/2 odgovora studenta čekaju mentorski pregled/)).toBeVisible();
+    await center.getByRole("button",{name:"Argumenti"}).click();
+    await expect(center.getByText(/ANALYSIS-011 · regresija/)).toBeVisible();
+    await expect(center.getByText(/Zaključak §6/).last()).toBeVisible();
+    await center.getByRole("button",{name:"Provjere"}).click();
+    await expect(center.getByText("Postoje otvoreni blokeri")).toBeVisible();
+    await expect(center.getByText(/Potpora tvrdnje zahtijeva novu provjeru/)).toBeVisible();
+  });
+});
