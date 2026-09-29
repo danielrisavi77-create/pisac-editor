@@ -43,6 +43,7 @@ export default function LiveProcessEditor(props: EditorProps) {
   const persistenceFailure = useRef("");
   const failPersistence = useCallback((code:string)=>{persistenceFailure.current=code;setPersistenceError(code);},[]);
   const [previousSegments, setPreviousSegments] = useState(0);
+  const [persistedCount, setPersistedCount] = useState(0);
   const ledger = useRef<ProcessLedgerDatabase | null>(null);
   const previousHead = useRef<string | null>(null);
   const startedAt = useRef("");
@@ -80,7 +81,7 @@ export default function LiveProcessEditor(props: EditorProps) {
     if (!editor || editor.isDestroyed || !editor.isEditable) return;
     cleanup.current();
     const version = ++generation.current;
-    setBundle(null); setError(""); setCount(0); setPosition(0);
+    setBundle(null); setError(""); setCount(0); setPersistedCount(0); setPosition(0);
     try {
       const sessionId=crypto.randomUUID(); startedAt.current=new Date().toISOString();
       const session = new LocalProcessCapture(editor.state.doc, {
@@ -94,7 +95,7 @@ export default function LiveProcessEditor(props: EditorProps) {
           persistTail.current=persistTail.current.then(async()=>{
             const checkpoint=await session.checkpoint();
             if(versionAtQueue!==generation.current)return;
-            await saveProcessCheckpoint(db,{bundle:checkpoint,status:"active",startedAt:startedAt.current,updatedAt:new Date().toISOString(),previousSessionHead:previousHead.current});
+            await saveProcessCheckpoint(db,{bundle:checkpoint,status:"active",startedAt:startedAt.current,updatedAt:new Date().toISOString(),previousSessionHead:previousHead.current});setPersistedCount(checkpoint.events.length);
           }).catch(()=>failPersistence("process-ledger-write-failed"));
         },
       });
@@ -104,7 +105,7 @@ export default function LiveProcessEditor(props: EditorProps) {
         persistTail.current=persistTail.current.then(async()=>{
           const checkpoint=await session.checkpoint();
           if(version!==generation.current)return;
-          await saveProcessCheckpoint(db,{bundle:checkpoint,status:"active",startedAt:startedAt.current,updatedAt:new Date().toISOString(),previousSessionHead:previousHead.current});
+          await saveProcessCheckpoint(db,{bundle:checkpoint,status:"active",startedAt:startedAt.current,updatedAt:new Date().toISOString(),previousSessionHead:previousHead.current});setPersistedCount(checkpoint.events.length);
         }).catch(()=>failPersistence("process-ledger-write-failed"));
       }
       const onTransaction = ({ transaction, appendedTransactions }: EditorEvents["transaction"]) => {
@@ -163,7 +164,7 @@ export default function LiveProcessEditor(props: EditorProps) {
       <p className="hint">Proces se sprema u zasebni lokalni IndexedDB ledger ovog preglednika. Prekid ili reload završava taj segment kao prekinut; novi segment može se povezati na prethodnu glavu. To nije serverska potvrda ni udaljena mentorska pohrana.</p>
       <p className="hint">Bilježenje ostaje u editoru: nema praćenja drugih aplikacija ni čitanja međuspremnika izvan lijepljenja. Podudaranje zapisa nije dokaz ljudskog autorstva, identiteta ili odsutnosti vanjskog AI-ja.</p>
       <p role="status">{LABEL[status]} {error ? `(${error})` : ""}</p>{persistenceError?<p role="alert">Trajna lokalna evidencija nije potvrđena ({persistenceError}). Dokument se i dalje uređuje i sprema odvojeno.</p>:null}<p className="hint">Ranije provjerljivi lokalni segmenti ovog dokumenta: <b data-testid="persisted-segments">{previousSegments}</b></p>
-      <p>Pohranjene transakcije u ovoj memorijskoj sesiji: <b data-testid="capture-count">{count}</b></p>
+      <p>Pohranjene transakcije u ovoj memorijskoj sesiji: <b data-testid="capture-count">{count}</b> · potvrđene u trajnom lokalnom checkpointu: <b data-testid="persisted-count">{persistedCount}</b></p>
       <div className="row">
         {status === "idle" ? <button className="btn" disabled={!editor} onClick={begin}>Pokreni lokalno bilježenje</button> : null}
         {status === "recording" ? <button className="btn" onClick={() => void finish()}>Završi i provjeri sesiju</button> : null}
