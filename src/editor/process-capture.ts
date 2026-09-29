@@ -84,10 +84,11 @@ export class LocalProcessCapture {
     this.hash = options.hash ?? sha256WebCrypto;
     const start = performance.now();
     this.clock = options.clock ?? (() => ({ occurredAt: new Date().toISOString(), elapsedMs: performance.now() - start }));
+    const hash = this.hash, initialDocument = this.initialDocument;
     this.pending = (async () => {
-      this.root = await this.hash(canonicalize(genesis({ documentId: options.documentId, sessionId: options.sessionId, initialDocument: this.initialDocument })));
+      this.root = await hash(canonicalize(genesis({ documentId: options.documentId, sessionId: options.sessionId, initialDocument })));
       this.head = this.root;
-      this.documentHash = await this.hash(canonicalize(this.initialDocument));
+      this.documentHash = await hash(canonicalize(initialDocument));
     })().catch(() => this.fail("capture-hash-failed"));
   }
   get count() { return this.entries.length; }
