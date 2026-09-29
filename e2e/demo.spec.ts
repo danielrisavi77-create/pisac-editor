@@ -154,3 +154,27 @@ test.describe("Protected Facts Lekta simulation", () => {
     await expect(page.getByText("Lokalna simulacija Lekta rezultata.")).toBeVisible();
   });
 });
+
+
+test.describe("Mentor Process View", () => {
+  test("replays writing process without claiming unperformed verification", async ({ page }) => {
+    await openDemo(page);
+    const process=page.getByRole("region",{name:"Mentorski proces pisanja"});
+    await expect(process).toBeVisible();
+    await expect(process.getByText("Demo ledger · integritet nije kriptografski verificiran")).toBeVisible();
+    await process.getByRole("button",{name:"Paste",exact:true}).click();
+    await expect(process.getByText(/Zalijepljeno 8 znakova/)).toBeVisible();
+    await process.getByRole("button",{name:/Zalijepljeno 8 znakova/}).click();
+    await expect(process.getByText("Forensic dokaz")).toBeVisible();
+    await expect(process.getByText(/paste · fp-4/)).toBeVisible();
+  });
+
+  test("replay scrubber reconstructs only events through selected sequence", async ({ page }) => {
+    await openDemo(page);
+    const process=page.getByRole("region",{name:"Mentorski proces pisanja"});
+    const slider=process.getByRole("slider",{name:"Pozicija replaya"});
+    await slider.fill("3");
+    await expect(process.getByText("Rez",{exact:true})).toBeVisible();
+    await expect(process.getByText("Događaj 3/8")).toBeVisible();
+  });
+});
