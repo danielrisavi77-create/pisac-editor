@@ -3,6 +3,7 @@ import type{CapturedProcess}from"@/editor/process-capture";
 export const PROCESS_LEDGER_DB_NAME="pisac-process-ledger";
 export type ProcessSegmentStatus="active"|"interrupted"|"sealed";
 export type ProcessSegmentRecord={documentId:string;sessionId:string;status:ProcessSegmentStatus;startedAt:string;updatedAt:string;previousSessionHead:string|null;bundle:CapturedProcess};
+export type ProcessCheckpointInput=Omit<ProcessSegmentRecord,"documentId"|"sessionId">;
 export class ProcessLedgerDatabase extends Dexie{segments!:Table<ProcessSegmentRecord,[string,string]>;constructor(name:string=PROCESS_LEDGER_DB_NAME){super(name);this.version(1).stores({segments:"[documentId+sessionId], documentId, status, updatedAt"});}}
 export type ProcessLedgerOpenResult={ok:true;db:ProcessLedgerDatabase}|{ok:false;reason:"unavailable"|"open-failed"};
 const validDate=(x:string)=>Number.isFinite(Date.parse(x));
@@ -19,7 +20,8 @@ async function assertContinuation(db:ProcessLedgerDatabase,r:ProcessSegmentRecor
  const parent=rows.find(x=>x.sessionId!==r.sessionId&&x.bundle?.receipt?.headHash===r.previousSessionHead);
  if(!parent)throw new Error("process-ledger-missing-parent");
 }
-export async function saveProcessCheckpoint(db:ProcessLedgerDatabase,r:ProcessSegmentRecord):Promise<void>{
+export async function saveProcessCheckpoint(db:ProcessLedgerDatabase,input:ProcessCheckpointInput):Promise<void>{
+ const r:ProcessSegmentRecord={...input,documentId:input.bundle.documentId,sessionId:input.bundle.sessionId};
  if(!structurallyValid(r))throw new Error("process-ledger-invalid-record");
  await db.transaction("rw",db.segments,async()=>{const existing=await db.segments.get([r.documentId,r.sessionId]);if(existing?.status==="sealed")throw new Error("process-ledger-sealed");if(existing&&existing.startedAt!==r.startedAt)throw new Error("process-ledger-session-identity");await assertContinuation(db,r);await db.segments.put(structuredClone(r));});
 }
