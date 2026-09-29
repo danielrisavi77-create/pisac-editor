@@ -74,13 +74,13 @@ export default function LiveProcessEditor(props: EditorProps) {
       if(loaded.invalidSessionIds.length)failPersistence("process-ledger-invalid-record");
     })().catch(()=>{if(!cancelled)failPersistence("process-ledger-open-failed")});
     return()=>{cancelled=true;};
-  },[editor]);
+  },[editor,failPersistence]);
 
   function begin() {
     if (!editor || editor.isDestroyed || !editor.isEditable) return;
     cleanup.current();
     const version = ++generation.current;
-    setBundle(null); setError(""); setCount(0); setPosition(0); persistenceFailure.current=""; setPersistenceError("");
+    setBundle(null); setError(""); setCount(0); setPosition(0);
     try {
       const sessionId=crypto.randomUUID(); startedAt.current=new Date().toISOString();
       const session = new LocalProcessCapture(editor.state.doc, {
