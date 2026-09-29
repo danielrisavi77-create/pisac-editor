@@ -6,7 +6,7 @@ export function projectSemanticProvenance(events:readonly ForensicEvent[],manual
  const ordered=[...events].sort((a,b)=>a.sequence-b.sequence);const out:SemanticProvenanceItem[]=[];let burst:ForensicEvent[]=[];
  const flush=()=>{if(!burst.length)return;out.push({id:`manual:${burst[0].id}:${burst.at(-1)!.id}`,kind:"manual-writing",startedAt:burst[0].occurredAt,endedAt:burst.at(-1)!.occurredAt,sourceEventIds:burst.map(e=>e.id),summary:`Ručno uneseno ${burst.reduce((n,e)=>n+(e.payload.kind==="insert-text"?e.payload.text.length:0),0)} znakova.`,metrics:{characters:burst.reduce((n,e)=>n+(e.payload.kind==="insert-text"?e.payload.text.length:0),0),events:burst.length}});burst=[];};
  for(const e of ordered){
-  if(e.payload.kind==="insert-text"){const prev=burst.at(-1);if(prev&&Date.parse(e.occurredAt)-Date.parse(prev.occurredAt)>manualGapMs)flush();burst.push(e);continue;}
+  if(e.payload.kind==="insert-text"){const prev=burst.at(-1);if(prev&&((prev.payload.kind==="insert-text"&&prev.payload.nodeId!==e.payload.nodeId)||Date.parse(e.occurredAt)-Date.parse(prev.occurredAt)>manualGapMs))flush();burst.push(e);continue;}
   flush();
   if(e.payload.kind==="paste")out.push({id:`paste:${e.id}`,kind:"paste",startedAt:e.occurredAt,endedAt:e.occurredAt,sourceEventIds:[e.id],summary:`Zalijepljeno ${e.payload.text.length} znakova.`,metrics:{characters:e.payload.text.length}});
   else if(["ai-request","ai-response","ai-accept","ai-reject"].includes(e.payload.kind))out.push({id:`ai:${e.id}`,kind:"ai-use",startedAt:e.occurredAt,endedAt:e.occurredAt,sourceEventIds:[e.id],summary:`AI događaj: ${e.payload.kind}.`,metrics:{}});
