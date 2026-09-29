@@ -1,8 +1,11 @@
-import{describe,expect,it}from"vitest";import{createForensicEvent,type ForensicEvent}from"./ledger";import{replayUntil}from"./replay";import{analyzeWritingRhythm}from"./rhythm";
-const e=(sequence:number,ms:number,payload:ForensicEvent["payload"]):ForensicEvent=>createForensicEvent({schemaVersion:1,id:"e"+sequence,documentId:"d",sequence,revision:0,occurredAt:new Date(Date.UTC(2026,8,29,9,0,0,ms)).toISOString(),actorId:"student",actorRole:"student",payload it("rejects out-of-bounds replay offsets",()=>expect(()=>replayUntil({nodes:[{id:"n",text:"a"}]},[e(1,0,{kind:"insert-text",nodeId:"n",offset:9,text:"x"})],1)).toThrow("invalid offset"));
- it("does not let paste timing distort manual inter-event rhythm",()=>{const events=[e(1,0,{kind:"insert-text",nodeId:"n",offset:0,text:"a"}),e(2,50,{kind:"paste",nodeId:"n",offset:1,text:"x"}),e(3,120,{kind:"insert-text",nodeId:"n",offset:2,text:"b"})];expect(analyzeWritingRhythm(events).medianManualInterEventMs).toBe(120);});
-});
+import{describe,expect,it}from"vitest";
+import{createForensicEvent,type ForensicEvent}from"./ledger";
+import{replayUntil}from"./replay";
+import{analyzeWritingRhythm}from"./rhythm";
+const e=(sequence:number,ms:number,payload:ForensicEvent["payload"]):ForensicEvent=>createForensicEvent({schemaVersion:1,id:"e"+sequence,documentId:"d",sequence,revision:0,occurredAt:new Date(Date.UTC(2026,8,29,9,0,0,ms)).toISOString(),actorId:"student",actorRole:"student",payload});
 describe("Replay and rhythm",()=>{
  it("reconstructs exact text from insert/delete/paste operations",()=>{const events=[e(1,0,{kind:"insert-text",nodeId:"n",offset:0,text:"A"}),e(2,100,{kind:"insert-text",nodeId:"n",offset:1,text:"B"}),e(3,200,{kind:"paste",nodeId:"n",offset:2,text:" XYZ"}),e(4,300,{kind:"delete",nodeId:"n",start:1,end:2,deletedTextHash:"h"})];expect(replayUntil({nodes:[{id:"n",text:""}]},events,4).nodes[0].text).toBe("A XYZ");});
  it("measures rhythm without classifying human vs AI",()=>{const events=[e(1,0,{kind:"insert-text",nodeId:"n",offset:0,text:"a"}),e(2,120,{kind:"insert-text",nodeId:"n",offset:1,text:"b"}),e(3,500,{kind:"paste",nodeId:"n",offset:2,text:"hello"})];const r=analyzeWritingRhythm(events);expect(r).toMatchObject({manualInsertEvents:2,manualCharacters:2,pasteCharacters:5,writingBursts:1,longestBurstEvents:2});expect(r).not.toHaveProperty("aiProbability");});
+ it("rejects out-of-bounds replay offsets",()=>expect(()=>replayUntil({nodes:[{id:"n",text:"a"}]},[e(1,0,{kind:"insert-text",nodeId:"n",offset:9,text:"x"})],1)).toThrow("invalid offset"));
+ it("does not let paste timing distort manual inter-event rhythm",()=>{const events=[e(1,0,{kind:"insert-text",nodeId:"n",offset:0,text:"a"}),e(2,50,{kind:"paste",nodeId:"n",offset:1,text:"x"}),e(3,120,{kind:"insert-text",nodeId:"n",offset:2,text:"b"})];expect(analyzeWritingRhythm(events).medianManualInterEventMs).toBe(120);});
 });
