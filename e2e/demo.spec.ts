@@ -26,96 +26,52 @@ async function openDemo(page: import("@playwright/test").Page) {
 test.describe("public demo", () => {
   test("loads without a session and says where the text lives", async ({ page }) => {
     await openDemo(page);
-
-    await expect(page.locator("[data-demo-banner]")).toContainText(
-      "Demo bez prijave. Sadržaj se sprema samo u ovaj preglednik.",
-    );
-    await expect(
-      page.locator("[data-demo-banner]").getByRole("link", { name: "Prijava" }),
-    ).toHaveAttribute("href", "/prijava");
+    await expect(page.locator("[data-demo-banner]")).toContainText("Demo bez prijave. Sadržaj se sprema samo u ovaj preglednik.");
+    await expect(page.locator("[data-demo-banner]").getByRole("link", { name: "Prijava" })).toHaveAttribute("href", "/prijava");
   });
-
   test("the landing page offers the demo as its primary action", async ({ page }) => {
     await page.goto("/");
-
     const cta = page.getByRole("link", { name: "Isprobaj editor (demo)" });
     await expect(cta).toHaveAttribute("href", "/demo");
     await cta.click();
     await expect(page).toHaveURL(/\/demo$/);
   });
-
   test("typing reaches LOCAL_DURABLE and stops there", async ({ page }) => {
     await openDemo(page);
-
     const surface = page.locator(".tiptap");
     await surface.click();
     await surface.pressSequentially(SENTENCE, { delay: 10 });
-
-    // 3s covers the 500ms projection debounce plus one IndexedDB write with
-    // room to spare; anything slower is a regression, not a slow machine.
-    await expect(page.locator("[data-sync-state]")).toHaveAttribute(
-      "data-sync-state",
-      "LOCAL_DURABLE",
-      { timeout: 3_000 },
-    );
-
-    // The honest half: local durable state is not canonical server state, and
-    // this route has no server that could ever acknowledge anything.
+    await expect(page.locator("[data-sync-state]")).toHaveAttribute("data-sync-state", "LOCAL_DURABLE", { timeout: 3_000 });
     await expect(page.locator("[data-sync-state='SYNCED']")).toHaveCount(0);
   });
-
   test("the bold toolbar button toggles its pressed state", async ({ page }) => {
     await openDemo(page);
-
     const surface = page.locator(".tiptap");
     await surface.click();
     await surface.pressSequentially("Podebljano", { delay: 10 });
     await page.keyboard.press("ControlOrMeta+a");
-
     const bold = page.getByRole("button", { name: "Podebljano" });
     await expect(bold).toHaveAttribute("aria-pressed", "false");
-
     await bold.click();
     await expect(bold).toHaveAttribute("aria-pressed", "true");
-
     await bold.click();
     await expect(bold).toHaveAttribute("aria-pressed", "false");
   });
-
   test("the DOCX export button is offered", async ({ page }) => {
     await openDemo(page);
-
     await expect(page.getByRole("button", { name: "Preuzmi DOCX" })).toBeVisible();
   });
 });
 
-/**
- * The mobile-first guard (F1-9b), extended to the demo: 360px is the narrowest
- * screen we design for, and a page the visitor has to scroll sideways is a page
- * whose toolbar they will miss. `scrollWidth` is read from the document rather
- * than inferred from a screenshot, and no `overflow-x: hidden` hides it.
- */
 test.describe("demo on a 360px viewport", () => {
   test.use({ viewport: { width: 360, height: 740 } });
-
-  test("does not scroll horizontally, toolbar and editor included", async ({
-    page,
-  }) => {
+  test("does not scroll horizontally, toolbar and editor included", async ({ page }) => {
     await openDemo(page);
-
-    const widths = await page.evaluate(() => ({
-      scroll: document.documentElement.scrollWidth,
-      client: document.documentElement.clientWidth,
-    }));
-
+    const widths = await page.evaluate(() => ({scroll:document.documentElement.scrollWidth,client:document.documentElement.clientWidth}));
     expect(widths.scroll).toBeLessThanOrEqual(360);
-    // The page really is being laid out at 360px, so the assertion above is
-    // about wrapping rather than about a viewport that never applied.
     expect(widths.client).toBeLessThanOrEqual(360);
   });
 });
-
-
 const V4_TEXT_FOR_PRIVACY_TEST = "Lindblom dokazuje da je racionalno-sveobuhvatni model neprimjenjiv u stvarnom političkom odlučivanju.";
 
 test.describe("local collaboration demo", () => {
@@ -127,21 +83,17 @@ test.describe("local collaboration demo", () => {
     await page.getByRole("button", { name: "Prihvati za v3" }).click();
     await page.getByRole("button", { name: "Student", exact: true }).click();
     await page.getByRole("button", { name: "Simuliraj privatnu sadržajnu izmjenu v4" }).click();
-
     await expect(page.locator("[data-attention-count]")).toHaveAttribute("data-attention-count", "2");
-
     await page.getByRole("button", { name: "Mentor", exact: true }).click();
     await expect(page.locator("[data-attention-count]")).toHaveAttribute("data-attention-count", "0");
     await expect(page.getByText("Privatna v4 nije otkrivena.")).toBeVisible();
     await expect(page.getByText(V4_TEXT_FOR_PRIVACY_TEST)).toHaveCount(0);
-
     await page.getByRole("button", { name: "Student", exact: true }).click();
     await page.getByRole("button", { name: "Simuliraj dijeljenje v4 mentoru" }).click();
     await page.getByRole("button", { name: "Mentor", exact: true }).click();
     await expect(page.locator("[data-attention-count]")).toHaveAttribute("data-attention-count", "2");
   });
 });
-
 
 test.describe("Protected Facts Lekta simulation", () => {
   test("reports unsafe changes without claiming a real Lekta call", async ({ page }) => {
@@ -155,7 +107,6 @@ test.describe("Protected Facts Lekta simulation", () => {
   });
 });
 
-
 test.describe("Mentor Process View", () => {
   test("replays writing process without claiming unperformed verification", async ({ page }) => {
     await openDemo(page);
@@ -168,30 +119,25 @@ test.describe("Mentor Process View", () => {
     await expect(process.getByText("Forensic dokaz")).toBeVisible();
     await expect(process.getByText(/paste · fp-4/)).toBeVisible();
   });
-
   test("replay scrubber reconstructs only events through selected sequence", async ({ page }) => {
     await openDemo(page);
     const process=page.getByRole("region",{name:"Mentorski proces pisanja"});
-    const slider=process.getByRole("slider",{name:"Pozicija replaya"});
-    await slider.fill("3");
+    await process.getByRole("slider",{name:"Pozicija replaya"}).fill("3");
     await expect(process.getByText("Rez",{exact:true})).toBeVisible();
     await expect(process.getByText("Događaj 3/8")).toBeVisible();
   });
 });
 
-
 test.describe("Mentor playback controls", () => {
   test("manual navigation and speed changes keep replay deterministic", async ({ page }) => {
     await openDemo(page);
     const process=page.getByRole("region",{name:"Mentorski proces pisanja"});
-    const slider=process.getByRole("slider",{name:"Pozicija replaya"});
-    await slider.fill("3");
+    await process.getByRole("slider",{name:"Pozicija replaya"}).fill("3");
     await process.getByRole("button",{name:"Sljedeći",exact:true}).click();
     await expect(process.getByText("Događaj 4/8")).toBeVisible();
     await process.getByLabel("Brzina reprodukcije").selectOption("4");
     await expect(process.getByRole("button",{name:"Pokreni"})).toBeEnabled();
   });
-
   test("play is disabled at the terminal event", async ({ page }) => {
     await openDemo(page);
     const process=page.getByRole("region",{name:"Mentorski proces pisanja"});
@@ -199,7 +145,6 @@ test.describe("Mentor playback controls", () => {
     await expect(process.getByRole("button",{name:"Pokreni"})).toBeDisabled();
   });
 });
-
 
 test.describe("Mentor Command Center", () => {
   test("explains the mentor queue without misconduct scoring", async ({ page }) => {
@@ -212,7 +157,6 @@ test.describe("Mentor Command Center", () => {
     await expect(center.getByText(/sumnjiv/i)).toHaveCount(0);
     await expect(center.locator("[data-risk-score]")).toHaveCount(0);
   });
-
   test("derives separate mentor, student and no-action work queues", async ({ page }) => {
     await openDemo(page);
     const center=page.getByRole("region",{name:"Mentor Command Center"});
@@ -223,7 +167,6 @@ test.describe("Mentor Command Center", () => {
     await expect(center.getByText(/Marko Marić/)).toBeVisible();
   });
 });
-
 
 test.describe("Mentor Review Delta and Coverage", () => {
   test("opens concrete academic changes from Daniel's command-center item", async ({ page }) => {
@@ -237,7 +180,6 @@ test.describe("Mentor Review Delta and Coverage", () => {
     await expect(center.getByText(/Zaključak §6 · nikad pregledano/)).toBeVisible();
   });
 });
-
 
 test.describe("Mentor project operating modules", () => {
   test("opens revisions, argument path and readiness from one project", async ({ page }) => {
@@ -254,7 +196,6 @@ test.describe("Mentor project operating modules", () => {
     await expect(center.getByText(/Potpora tvrdnje zahtijeva novu provjeru/)).toBeVisible();
   });
 });
-
 
 test.describe("Mentor sequential review workflow", () => {
   test("comment stays on the object while reviewed advances and creates coverage", async ({ page }) => {
@@ -274,7 +215,6 @@ test.describe("Mentor sequential review workflow", () => {
     await expect(queue.getByText("Stavka 2/6")).toBeVisible();
     await expect(queue.getByText(/novi coverage zapisi: 1/)).toBeVisible();
   });
-
   test("revision request requires an explanatory note", async ({ page }) => {
     await openDemo(page);
     const center=page.getByRole("region",{name:"Mentor Command Center"});
@@ -287,19 +227,59 @@ test.describe("Mentor sequential review workflow", () => {
   });
 });
 
-
 test.describe("Mentor review context bundle", () => {
-  test("shows diff, evidence, impact and scoped forensic provenance for CLAIM-014", async ({ page }) => {
+  test("shows diff, evidence, impact and actual local event references for CLAIM-014", async ({ page }) => {
     await openDemo(page);
     const center=page.getByRole("region",{name:"Mentor Command Center"});
     await center.getByRole("button",{name:/Daniel Rišavi/}).click();
     await center.getByRole("button",{name:"Pokreni pregled"}).click();
-    const queue=center.getByRole("region",{name:"Mentor Review Queue"});
-    const context=queue.getByLabel("Kontekst pregleda CLAIM-014");
+    const context=center.getByRole("region",{name:"Kontekst pregleda CLAIM-014"});
     await expect(context.getByText(/Rezultati pokazuju povezanost/)).toBeVisible();
     await expect(context.getByText(/Rezultati dokazuju povezanost/)).toBeVisible();
-    await expect(context.getByText(/Lindblom \(1959\), str. 81–82/)).toBeVisible();
+    await expect(context.getByText(/Demonstracijski izvor EB-014/)).toBeVisible();
     await expect(context.getByText(/Rasprava §5.2/)).toBeVisible();
-    await expect(context.getByText(/dokazni eventi: fp-5, fp-6, fp-7/)).toBeVisible();
+    await expect(context.getByText(/događaj: claim-014:002/)).toBeVisible();
+    await expect(context.getByText(/fp-5, fp-6, fp-7/)).toHaveCount(0);
+    await expect(context.getByText(/nisu kriptografski verificirani/)).toBeVisible();
+  });
+  test("jumps to the shared demo snapshot and replays the exact claim segment", async ({page}) => {
+    await openDemo(page);
+    const center=page.getByRole("region",{name:"Mentor Command Center"});
+    await center.getByRole("button",{name:/Daniel Rišavi/}).click();
+    await center.getByRole("button",{name:"Pokreni pregled"}).click();
+    const context=center.getByRole("region",{name:"Kontekst pregleda CLAIM-014"});
+    await context.getByRole("button",{name:"Prikaži u dokumentu",exact:true}).click();
+    const snapshot=context.getByRole("region",{name:"Podijeljeni demonstracijski dokument revizija 4"});
+    await expect(snapshot.locator("mark")).toHaveText("Rezultati dokazuju povezanost promatranih varijabli.");
+    await expect(snapshot).toBeFocused();
+    await context.getByRole("button",{name:"Prikaži nastanak ove tvrdnje"}).click();
+    const replay=context.getByRole("region",{name:"Nastanak tvrdnje CLAIM-014"});
+    await replay.getByRole("slider",{name:"Korak nastanka"}).fill("1");
+    await expect(replay.locator("[data-claim-replay-text]")).toHaveText("Rezultati pokazuju povezanost promatranih varijabli.");
+    await replay.getByRole("button",{name:"Sljedeći korak"}).click();
+    await expect(replay.locator("[data-claim-replay-text]")).toHaveText("Rezultati dokazuju povezanost promatranih varijabli.");
+  });
+  test("review refreshes delta and coverage but does not clear evidence blockers", async ({page}) => {
+    await openDemo(page);
+    const center=page.getByRole("region",{name:"Mentor Command Center"});
+    await center.getByRole("button",{name:/Daniel Rišavi/}).click();
+    await center.getByRole("button",{name:"Pokreni pregled"}).click();
+    await center.getByRole("button",{name:"Označi pregledano"}).click();
+    await expect(center.getByRole("button",{name:"Označi pregledano"})).toBeDisabled();
+    await center.getByRole("button",{name:"Promjene i coverage"}).click();
+    await expect(center.getByText("Preostalo za pregled: 5")).toBeVisible();
+    await expect(center.locator("[data-mentor-delta]").getByText(/CLAIM-014/)).toHaveCount(0);
+    await expect(center.locator("[data-mentor-coverage]").getByText(/CLAIM-014.*aktualno pregledano/)).toBeVisible();
+    await center.getByRole("button",{name:"Provjere"}).click();
+    await expect(center.getByText(/Potpora tvrdnje zahtijeva novu provjeru/)).toBeVisible();
+    await center.getByRole("button",{name:"← Natrag na studente"}).click();
+    await expect(center.getByRole("button",{name:/Daniel Rišavi/})).toContainText("5 × akademski relevantne promjene");
+  });
+  test("another project's detail does not link to Daniel's process", async ({page}) => {
+    await openDemo(page);
+    const center=page.getByRole("region",{name:"Mentor Command Center"});
+    await center.getByRole("button",{name:/Petra Novak/}).click();
+    await expect(center.getByRole("link",{name:/procesa pisanja/i})).toHaveCount(0);
+    await expect(center.getByText(/drugi projekt nije korišten kao zamjena/)).toBeVisible();
   });
 });
