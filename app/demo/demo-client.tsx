@@ -37,7 +37,8 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import SyncStatusChip from "@/components/SyncStatusChip";
-import DocumentEditor, { type EditorFlushHandle } from "@/editor/Editor";
+import type { EditorFlushHandle } from "@/editor/Editor";
+import dynamic from "next/dynamic";
 import { countNodes, countWords, type CanonicalCandidate } from "@/editor/interop";
 import { emptyDocument, type CanonicalDocument } from "@/domain/document";
 import {
@@ -61,6 +62,9 @@ import DefenseDemo from "./defense-demo";
 import ResearchMemoryDemo from "./research-memory-demo";
 import MentorProcessDemo from "./mentor-process-demo";
 import MentorCommandCenterDemo from "./mentor-command-center-demo";
+
+// Load the optional capture UI with the same editor, without inflating initial JS.
+const DocumentEditor = dynamic(() => import("./live-process-editor"), { ssr: false });
 
 /**
  * The journal key every visitor's demo shares inside their own browser.
