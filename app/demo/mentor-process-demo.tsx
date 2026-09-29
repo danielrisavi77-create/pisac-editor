@@ -16,8 +16,8 @@ const FILTERS:readonly ProcessFilter[]=["all","manual-writing","paste","ai-use",
 const LABEL:Record<ProcessFilter,string>={all:"Sve", "manual-writing":"Ručno pisanje",paste:"Paste","ai-use":"AI","source-work":"Izvori","revision-work":"Revizije",checkpoint:"Checkpoint"};
 export default function MentorProcessDemo(){
  const[filter,setFilter]=useState<ProcessFilter>("all");const[sequence,setSequence]=useState(EVENTS.length);const[selected,setSelected]=useState<string|null>(null);
- const scope={throughSequence:EVENTS.length,allowedRevisions:[3],allowedNodeIds:["n"]};
- const view=useMemo(()=>buildMentorProcessView({events:EVENTS,integrityVerified:false,filter,scope}),[filter]);
+ const scope=useMemo(()=>({throughSequence:EVENTS.length,allowedRevisions:[3] as const,allowedNodeIds:["n"] as const}),[]);
+ const view=useMemo(()=>buildMentorProcessView({events:EVENTS,integrityVerified:false,filter,scope}),[filter,scope]);
  const replay=useMemo(()=>replayUntil({nodes:[{id:"n",text:""}]},EVENTS,sequence),[sequence]);
  const item=view.timeline.find(x=>x.id===selected)??null;const proof=item?forensicDrillDown(EVENTS,item.sourceEventIds,scope):[];
  return <section className="card mentor-process-demo" aria-label="Mentorski proces pisanja">
