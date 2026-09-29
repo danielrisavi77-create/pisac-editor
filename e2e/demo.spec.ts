@@ -199,3 +199,27 @@ test.describe("Mentor playback controls", () => {
     await expect(process.getByRole("button",{name:"Pokreni"})).toBeDisabled();
   });
 });
+
+
+test.describe("Mentor Command Center", () => {
+  test("explains the mentor queue without misconduct scoring", async ({ page }) => {
+    await openDemo(page);
+    const center=page.getByRole("region",{name:"Mentor Command Center"});
+    await expect(center).toBeVisible();
+    await expect(center.getByText(/Daniel Rišavi/)).toBeVisible();
+    await center.getByRole("button",{name:/Petra Novak/}).click();
+    await expect(center.getByText(/anomalije integriteta\/procesa za tehnički pregled/)).toBeVisible();
+    await expect(center.getByText(/sumnjiv/i)).toHaveCount(0);
+    await expect(center.getByText(/risk score/i)).toHaveCount(0);
+  });
+
+  test("derives separate mentor, student and no-action work queues", async ({ page }) => {
+    await openDemo(page);
+    const center=page.getByRole("region",{name:"Mentor Command Center"});
+    await center.getByRole("button",{name:/Čeka studenta/}).click();
+    await expect(center.getByText(/Ana Horvat/)).toBeVisible();
+    await expect(center.getByText(/Daniel Rišavi/)).toHaveCount(0);
+    await center.getByRole("button",{name:/Bez otvorene akcije/}).click();
+    await expect(center.getByText(/Marko Marić/)).toBeVisible();
+  });
+});
