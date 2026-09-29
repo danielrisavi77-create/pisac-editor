@@ -178,3 +178,24 @@ test.describe("Mentor Process View", () => {
     await expect(process.getByText("Događaj 3/8")).toBeVisible();
   });
 });
+
+
+test.describe("Mentor playback controls", () => {
+  test("manual navigation and speed changes keep replay deterministic", async ({ page }) => {
+    await openDemo(page);
+    const process=page.getByRole("region",{name:"Mentorski proces pisanja"});
+    const slider=process.getByRole("slider",{name:"Pozicija replaya"});
+    await slider.fill("3");
+    await process.getByRole("button",{name:"Sljedeći",exact:true}).click();
+    await expect(process.getByText("Događaj 4/8")).toBeVisible();
+    await process.getByLabel("Brzina reprodukcije").selectOption("4");
+    await expect(process.getByRole("button",{name:"Pokreni"})).toBeEnabled();
+  });
+
+  test("play is disabled at the terminal event", async ({ page }) => {
+    await openDemo(page);
+    const process=page.getByRole("region",{name:"Mentorski proces pisanja"});
+    await process.getByRole("slider",{name:"Pozicija replaya"}).fill("8");
+    await expect(process.getByRole("button",{name:"Pokreni"})).toBeDisabled();
+  });
+});
