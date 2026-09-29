@@ -1,0 +1,9 @@
+import{describe,expect,it}from"vitest";import{applyReviewAction,createReviewQueue,currentReviewItem,type ReviewQueueItem}from"./review-queue";
+const items:ReviewQueueItem[]=[{object:{id:"C1",type:"claim",label:"Tvrdnja",revision:4},reason:"changed",contextLabel:"Rasprava §5"},{object:{id:"K1",type:"conclusion",label:"Zaključak",revision:2},reason:"new",contextLabel:"Zaključak §6"}];
+describe("Mentor Review Queue",()=>{
+ it("creates revision-specific coverage only for reviewed action",()=>{const a=applyReviewAction(createReviewQueue(items),{reviewerId:"m",action:"reviewed",occurredAt:"2026-09-29T12:00:00Z",auditId:"a1",coverageId:"c1"});expect(a.coverage).toEqual([expect.objectContaining({objectId:"C1",reviewedRevision:4})]);expect(currentReviewItem(a)?.object.id).toBe("K1");});
+ it("revision request advances but does not create coverage",()=>{const a=applyReviewAction(createReviewQueue(items),{reviewerId:"m",action:"revision-requested",note:"Preciziraj tvrdnju",occurredAt:"2026-09-29T12:00:00Z",auditId:"a1"});expect(a.coverage).toHaveLength(0);expect(a.audits[0].action).toBe("revision-requested");});
+ it("skip never masquerades as review",()=>expect(applyReviewAction(createReviewQueue(items),{reviewerId:"m",action:"skipped",occurredAt:"2026-09-29T12:00:00Z",auditId:"a1"}).coverage).toHaveLength(0));
+ it("requires an explanation for comment or revision request",()=>expect(()=>applyReviewAction(createReviewQueue(items),{reviewerId:"m",action:"commented",occurredAt:"2026-09-29T12:00:00Z",auditId:"a1"})).toThrow("note required"));
+ it("refuses actions after queue completion",()=>{let s=createReviewQueue(items.slice(0,1));s=applyReviewAction(s,{reviewerId:"m",action:"skipped",occurredAt:"2026-09-29T12:00:00Z",auditId:"a1"});expect(()=>applyReviewAction(s,{reviewerId:"m",action:"skipped",occurredAt:"2026-09-29T12:01:00Z",auditId:"a2"})).toThrow("queue complete");});
+});
