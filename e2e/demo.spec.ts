@@ -223,3 +223,17 @@ test.describe("Mentor Command Center", () => {
     await expect(center.getByText(/Marko Marić/)).toBeVisible();
   });
 });
+
+
+test.describe("Mentor Review Delta and Coverage", () => {
+  test("opens concrete academic changes from Daniel's command-center item", async ({ page }) => {
+    await openDemo(page);
+    const center=page.getByRole("region",{name:"Mentor Command Center"});
+    await center.getByRole("button",{name:/Daniel Rišavi/}).click();
+    await center.getByRole("button",{name:"Promjene i coverage"}).click();
+    await expect(center.getByText("Promijenjeno od zadnjeg pregleda")).toBeVisible();
+    await expect(center.getByText(/CLAIM-014 · tvrdnja o povezanosti/)).toBeVisible();
+    await expect(center.getByText(/RESULT-031 · statistički rezultat/)).toBeVisible();
+    await expect(center.getByText(/Zaključak §6 · nikad pregledano/)).toBeVisible();
+  });
+});
