@@ -7,10 +7,10 @@ const EVENTS:ForensicEvent[]=[
  E(2,2,{kind:"insert-text",nodeId:"n",offset:1,text:"e"}),
  E(3,3,{kind:"insert-text",nodeId:"n",offset:2,text:"z"}),
  E(4,8,{kind:"paste",nodeId:"n",offset:3,text:"ultati "}),
- E(5,12,{kind:"insert-text",nodeId:"n",offset:11,text:"p"}),
- E(6,13,{kind:"insert-text",nodeId:"n",offset:12,text:"o"}),
- E(7,14,{kind:"insert-text",nodeId:"n",offset:13,text:"k"}),
- E(8,20,{kind:"citation-insert",nodeId:"n",offset:14,sourceId:"lindblom-1959",locator:"81-82"}),
+ E(5,12,{kind:"insert-text",nodeId:"n",offset:10,text:"p"}),
+ E(6,13,{kind:"insert-text",nodeId:"n",offset:11,text:"o"}),
+ E(7,14,{kind:"insert-text",nodeId:"n",offset:12,text:"k"}),
+ E(8,20,{kind:"citation-insert",nodeId:"n",offset:13,sourceId:"lindblom-1959",locator:"81-82"}),
 ];
 const FILTERS:readonly ProcessFilter[]=["all","manual-writing","paste","ai-use","source-work","revision-work","checkpoint"];
 const LABEL:Record<ProcessFilter,string>={all:"Sve", "manual-writing":"Ručno pisanje",paste:"Paste","ai-use":"AI","source-work":"Izvori","revision-work":"Revizije",checkpoint:"Checkpoint"};
