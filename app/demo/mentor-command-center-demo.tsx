@@ -6,7 +6,7 @@ import{traceAcademicPaths,type AcademicGraph}from"@/domain/academic-graph";
 import{evaluateAcademicReadiness}from"@/domain/readiness";
 
 const INPUTS:MentorProjectInput[]=[
- {projectId:"p-daniel",studentId:"s-daniel",studentLabel:"Daniel Rišavi",workLabel:"Diplomski rad",lastActivityAt:"2026-09-29T10:41:00Z",reviewDeltaCount:6,studentResponseCount:2,neverReviewedCount:1,readinessBlockerCount:0,forensicAnomalyCount:0,finalReviewRequested:false,studentWorkPending:false},
+ {projectId:"p-daniel",studentId:"s-daniel",studentLabel:"Daniel Rišavi",workLabel:"Diplomski rad",lastActivityAt:"2026-09-29T10:41:00Z",reviewDeltaCount:6,studentResponseCount:2,neverReviewedCount:1,readinessBlockerCount:1,forensicAnomalyCount:0,finalReviewRequested:false,studentWorkPending:false},
  {projectId:"p-ana",studentId:"s-ana",studentLabel:"Ana Horvat",workLabel:"Završni rad",lastActivityAt:"2026-09-28T16:12:00Z",reviewDeltaCount:0,studentResponseCount:0,neverReviewedCount:0,readinessBlockerCount:0,forensicAnomalyCount:0,finalReviewRequested:false,studentWorkPending:true},
  {projectId:"p-marko",studentId:"s-marko",studentLabel:"Marko Marić",workLabel:"Diplomski rad",lastActivityAt:"2026-09-27T12:05:00Z",reviewDeltaCount:0,studentResponseCount:0,neverReviewedCount:0,readinessBlockerCount:0,forensicAnomalyCount:0,finalReviewRequested:false,studentWorkPending:false},
  {projectId:"p-petra",studentId:"s-petra",studentLabel:"Petra Novak",workLabel:"Diplomski rad",lastActivityAt:"2026-09-29T08:10:00Z",reviewDeltaCount:0,studentResponseCount:0,neverReviewedCount:0,readinessBlockerCount:2,forensicAnomalyCount:1,finalReviewRequested:true,studentWorkPending:false},
