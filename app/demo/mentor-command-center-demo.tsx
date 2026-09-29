@@ -1,6 +1,8 @@
 "use client";
 import{useMemo,useState}from"react";
 import{buildMentorQueue,groupMentorQueue,type MentorProjectInput,type WaitingOn}from"@/domain/mentor-command";
+import{buildCoverageMap,buildMentorReviewDelta,type ObjectChange,type ReviewCoverageRecord}from"@/domain/mentor-review";
+import type{AcademicGraph}from"@/domain/academic-graph";
 
 const INPUTS:MentorProjectInput[]=[
  {projectId:"p-daniel",studentId:"s-daniel",studentLabel:"Daniel Rišavi",workLabel:"Diplomski rad",lastActivityAt:"2026-09-29T10:41:00Z",reviewDeltaCount:6,studentResponseCount:2,neverReviewedCount:1,readinessBlockerCount:0,forensicAnomalyCount:0,finalReviewRequested:false,studentWorkPending:false},
@@ -8,18 +10,23 @@ const INPUTS:MentorProjectInput[]=[
  {projectId:"p-marko",studentId:"s-marko",studentLabel:"Marko Marić",workLabel:"Diplomski rad",lastActivityAt:"2026-09-27T12:05:00Z",reviewDeltaCount:0,studentResponseCount:0,neverReviewedCount:0,readinessBlockerCount:0,forensicAnomalyCount:0,finalReviewRequested:false,studentWorkPending:false},
  {projectId:"p-petra",studentId:"s-petra",studentLabel:"Petra Novak",workLabel:"Diplomski rad",lastActivityAt:"2026-09-29T08:10:00Z",reviewDeltaCount:0,studentResponseCount:0,neverReviewedCount:0,readinessBlockerCount:2,forensicAnomalyCount:1,finalReviewRequested:true,studentWorkPending:false},
 ];
+const DANIEL_GRAPH:AcademicGraph={objects:[{id:"CLAIM-014",type:"claim",label:"CLAIM-014 · tvrdnja o povezanosti",revision:4},{id:"S5.2",type:"section",label:"Rasprava §5.2",revision:4},{id:"K6",type:"conclusion",label:"Zaključak §6",revision:2}],links:[]};
+const DANIEL_REVIEWS:ReviewCoverageRecord[]=[{id:"r1",reviewerId:"mentor",objectId:"CLAIM-014",reviewedRevision:3,reviewedAt:"2026-09-20T10:00:00Z",status:"accepted"},{id:"r2",reviewerId:"mentor",objectId:"S5.2",reviewedRevision:3,reviewedAt:"2026-09-20T10:05:00Z",status:"reviewed"}];
+const DANIEL_CHANGES:ObjectChange[]=[{objectId:"CLAIM-014",revision:4,kind:"content"},{objectId:"S5.2",revision:4,kind:"evidence"},{objectId:"K6",revision:2,kind:"structure"}];
 type View="all"|WaitingOn;
 const LABEL:Record<View,string>={all:"Svi",mentor:"Treba moju pažnju",student:"Čeka studenta",none:"Bez otvorene akcije"};
 const REASON:Record<string,string>={"review-delta":"akademski relevantne promjene","student-responses":"odgovori na dorade","never-reviewed":"nikad pregledani objekti","readiness-blockers":"blokeri za predaju","forensic-anomalies":"anomalije integriteta/procesa za tehnički pregled","final-review-requested":"zatražen završni pregled"};
 
 export default function MentorCommandCenterDemo(){
- const[view,setView]=useState<View>("mentor");const[selected,setSelected]=useState<string|null>(null);
+ const[view,setView]=useState<View>("mentor");const[selected,setSelected]=useState<string|null>(null);const[details,setDetails]=useState<"summary"|"review">("summary");const[language,setLanguage]=useState(false);
  const queue=useMemo(()=>buildMentorQueue(INPUTS),[]);const groups=useMemo(()=>groupMentorQueue(queue),[queue]);
  const shown=view==="all"?queue:groups[view];const project=queue.find(x=>x.projectId===selected)??null;
+ const danielCoverage=useMemo(()=>buildCoverageMap(DANIEL_GRAPH,DANIEL_REVIEWS,"mentor"),[]);
+ const danielDelta=useMemo(()=>buildMentorReviewDelta(DANIEL_GRAPH,DANIEL_REVIEWS,"mentor",DANIEL_CHANGES,{includeLanguageOnly:language}),[language]);
  return <section className="card mentor-command-demo" aria-label="Mentor Command Center">
   <div><strong>Mentor Command Center</strong><p className="hint">Radna lista proizlazi iz workflow činjenica. Nema risk scorea ni procjene akademskog poštenja.</p></div>
   <div className="row">{(["mentor","student","none","all"] as const).map(v=><button key={v} className={"btn "+(view===v?"btn-primary":"")} aria-pressed={view===v} onClick={()=>{setView(v);setSelected(null)}}>{LABEL[v]} ({v==="all"?queue.length:groups[v].length})</button>)}</div>
   {!project?<div style={{marginTop:".75rem"}}>{shown.map(item=><button key={item.projectId} className="card" style={{display:"block",width:"100%",textAlign:"left"}} onClick={()=>setSelected(item.projectId)}><strong>{item.studentLabel} · {item.workLabel}</strong><p className="hint">Zadnja aktivnost: {item.lastActivityAt.slice(0,10)}</p>{item.reasons.length?<p>{item.reasons.map(r=>`${r.count} × ${REASON[r.kind]}`).join(" · ")}</p>:<p className="hint">{item.waitingOn==="student"?"Student još radi na sljedećoj verziji.":"Nema otvorene akcije."}</p>}</button>)}</div>:
-  <div className="card" style={{marginTop:".75rem"}}><button className="btn" onClick={()=>setSelected(null)}>← Natrag na studente</button><h3>{project.studentLabel} · {project.workLabel}</h3><p className="hint">{LABEL[project.waitingOn]}</p><div className="row"><a className="btn btn-primary" href="#mentor-process-view">Proces pisanja</a><span className="review-chip">Promjene · sljedeći modul</span><span className="review-chip">Dorade · postojeći workflow</span><span className="review-chip">Coverage · domain spreman</span><span className="review-chip">Argumenti · Academic Graph</span><span className="review-chip">Provjere · Readiness</span></div>{project.reasons.map(r=><p key={r.kind}><b>{r.count}</b> · {REASON[r.kind]}</p>)}</div>}
+  <div className="card" style={{marginTop:".75rem"}}><button className="btn" onClick={()=>setSelected(null)}>← Natrag na studente</button><h3>{project.studentLabel} · {project.workLabel}</h3><p className="hint">{LABEL[project.waitingOn]}</p><div className="row"><a className="btn btn-primary" href="#mentor-process-view">Proces pisanja</a>{project.projectId==="p-daniel"?<button className="btn" onClick={()=>setDetails(details==="review"?"summary":"review")}>Promjene i coverage</button>:null}<span className="review-chip">Dorade · postojeći workflow</span><span className="review-chip">Argumenti · Academic Graph</span><span className="review-chip">Provjere · Readiness</span></div>{details==="summary"||project.projectId!=="p-daniel"?project.reasons.map(r=><p key={r.kind}><b>{r.count}</b> · {REASON[r.kind]}</p>):<div><label className="row"><input type="checkbox" checked={language} onChange={e=>setLanguage(e.target.checked)}/> Uključi čisto jezične promjene</label><h4>Promijenjeno od zadnjeg pregleda</h4>{danielDelta.map(x=><p key={x.object.id}><b>{x.object.label}</b> · {x.kind==="new"?"novo za pregled":`revizija ${x.lastReviewedRevision} → ${x.currentRevision}`} · {x.changeKinds.join(", ")||"nova stavka"}</p>)}<h4>Coverage Map</h4>{danielCoverage.map(x=><p key={x.object.id}>{x.object.label} · <b>{x.state==="CURRENTLY_COVERED"?"aktualno pregledano":x.state==="CHANGED_SINCE_REVIEW"?"promijenjeno nakon pregleda":"nikad pregledano"}</b></p>)}</div>}</div>}
  </section>;
 }
