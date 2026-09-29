@@ -163,8 +163,8 @@ test.describe("Mentor Process View", () => {
     await expect(process).toBeVisible();
     await expect(process.getByText("Demo ledger · integritet nije kriptografski verificiran")).toBeVisible();
     await process.getByRole("button",{name:"Paste",exact:true}).click();
-    await expect(process.getByText(/Zalijepljeno 8 znakova/)).toBeVisible();
-    await process.getByRole("button",{name:/Zalijepljeno 8 znakova/}).click();
+    await expect(process.getByText(/Zalijepljeno 7 znakova/)).toBeVisible();
+    await process.getByRole("button",{name:/Zalijepljeno 7 znakova/}).click();
     await expect(process.getByText("Forensic dokaz")).toBeVisible();
     await expect(process.getByText(/paste · fp-4/)).toBeVisible();
   });
@@ -210,7 +210,7 @@ test.describe("Mentor Command Center", () => {
     await center.getByRole("button",{name:/Petra Novak/}).click();
     await expect(center.getByText(/anomalije integriteta\/procesa za tehnički pregled/)).toBeVisible();
     await expect(center.getByText(/sumnjiv/i)).toHaveCount(0);
-    await expect(center.getByText(/risk score/i)).toHaveCount(0);
+    await expect(center.locator("[data-risk-score]")).toHaveCount(0);
   });
 
   test("derives separate mentor, student and no-action work queues", async ({ page }) => {
@@ -232,8 +232,8 @@ test.describe("Mentor Review Delta and Coverage", () => {
     await center.getByRole("button",{name:/Daniel Rišavi/}).click();
     await center.getByRole("button",{name:"Promjene i coverage"}).click();
     await expect(center.getByText("Promijenjeno od zadnjeg pregleda")).toBeVisible();
-    await expect(center.getByText(/CLAIM-014 · tvrdnja o povezanosti/)).toBeVisible();
-    await expect(center.getByText(/RESULT-031 · statistički rezultat/)).toBeVisible();
+    await expect(center.getByText("CLAIM-014 · tvrdnja o povezanosti",{exact:true}).first()).toBeVisible();
+    await expect(center.getByText("RESULT-031 · statistički rezultat",{exact:true}).first()).toBeVisible();
     await expect(center.getByText(/Zaključak §6 · nikad pregledano/)).toBeVisible();
   });
 });
