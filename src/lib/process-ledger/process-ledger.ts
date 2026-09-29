@@ -14,6 +14,12 @@ function structurallyValid(r:ProcessSegmentRecord):boolean{
 export async function openProcessLedger(name:string=PROCESS_LEDGER_DB_NAME):Promise<ProcessLedgerOpenResult>{
  try{if(typeof indexedDB==="undefined"||indexedDB===null)return{ok:false,reason:"unavailable"};const db=new ProcessLedgerDatabase(name);await db.open();return{ok:true,db};}catch{return{ok:false,reason:"open-failed"};}
 }
+function extendsPersistedPrefix(previous:CapturedProcess,next:CapturedProcess):boolean{
+ if(previous.documentId!==next.documentId||previous.sessionId!==next.sessionId||previous.genesisHash!==next.genesisHash||JSON.stringify(previous.initialDocument)!==JSON.stringify(next.initialDocument)||next.events.length<previous.events.length)return false;
+ for(let i=0;i<previous.events.length;i++)if(previous.events[i].eventHash!==next.events[i]?.eventHash)return false;
+ const expectedHead=previous.events.length?next.events[previous.events.length-1]?.eventHash:next.genesisHash;
+ return previous.receipt.headHash===expectedHead;
+}
 async function assertContinuation(db:ProcessLedgerDatabase,r:ProcessSegmentRecord){
  if(r.previousSessionHead===null)return;
  const rows=await db.segments.where("documentId").equals(r.documentId).toArray();
@@ -23,11 +29,11 @@ async function assertContinuation(db:ProcessLedgerDatabase,r:ProcessSegmentRecor
 export async function saveProcessCheckpoint(db:ProcessLedgerDatabase,input:ProcessCheckpointInput):Promise<void>{
  const r:ProcessSegmentRecord={...input,documentId:input.bundle.documentId,sessionId:input.bundle.sessionId};
  if(!structurallyValid(r))throw new Error("process-ledger-invalid-record");
- await db.transaction("rw",db.segments,async()=>{const existing=await db.segments.get([r.documentId,r.sessionId]);if(existing?.status==="sealed")throw new Error("process-ledger-sealed");if(existing&&existing.startedAt!==r.startedAt)throw new Error("process-ledger-session-identity");await assertContinuation(db,r);await db.segments.put(structuredClone(r));});
+ await db.transaction("rw",db.segments,async()=>{const existing=await db.segments.get([r.documentId,r.sessionId]);if(existing?.status==="sealed")throw new Error("process-ledger-sealed");if(existing&&existing.startedAt!==r.startedAt)throw new Error("process-ledger-session-identity");if(existing&&!extendsPersistedPrefix(existing.bundle,r.bundle))throw new Error("process-ledger-non-append");await assertContinuation(db,r);await db.segments.put(structuredClone(r));});
 }
 export async function sealProcessSegment(db:ProcessLedgerDatabase,documentId:string,sessionId:string,bundle:CapturedProcess,sealedAt:string):Promise<void>{
  if(!validDate(sealedAt)||bundle.documentId!==documentId||bundle.sessionId!==sessionId)throw new Error("process-ledger-invalid-seal");
- await db.transaction("rw",db.segments,async()=>{const existing=await db.segments.get([documentId,sessionId]);if(!existing)throw new Error("process-ledger-missing-segment");if(existing.status==="sealed"){if(existing.bundle.receipt.headHash!==bundle.receipt.headHash)throw new Error("process-ledger-sealed");return;}const next:ProcessSegmentRecord={...existing,status:"sealed",updatedAt:sealedAt,bundle:structuredClone(bundle)};if(!structurallyValid(next))throw new Error("process-ledger-invalid-record");await db.segments.put(next);});
+ await db.transaction("rw",db.segments,async()=>{const existing=await db.segments.get([documentId,sessionId]);if(!existing)throw new Error("process-ledger-missing-segment");if(existing.status==="sealed"){if(existing.bundle.receipt.headHash!==bundle.receipt.headHash)throw new Error("process-ledger-sealed");return;}if(!extendsPersistedPrefix(existing.bundle,bundle))throw new Error("process-ledger-non-append");const next:ProcessSegmentRecord={...existing,status:"sealed",updatedAt:sealedAt,bundle:structuredClone(bundle)};if(!structurallyValid(next))throw new Error("process-ledger-invalid-record");await db.segments.put(next);});
 }
 export async function markProcessInterrupted(db:ProcessLedgerDatabase,documentId:string,sessionId:string,at:string):Promise<void>{
  if(!validDate(at))throw new Error("process-ledger-invalid-time");
