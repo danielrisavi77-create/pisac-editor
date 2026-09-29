@@ -10,7 +10,7 @@ const INPUTS:MentorProjectInput[]=[
 ];
 type View="all"|WaitingOn;
 const LABEL:Record<View,string>={all:"Svi",mentor:"Treba moju pažnju",student:"Čeka studenta",none:"Bez otvorene akcije"};
-const REASON:Record<string,string>={"review-delta":"akademski relevantne promjene","student-responses":"odgovori na dorade","never-reviewed":"nikad pregledani objekti","readiness-blockers":"blokeri za predaju","forensic-anomalies":"forensic anomalije","final-review-requested":"zatražen završni pregled"};
+const REASON:Record<string,string>={"review-delta":"akademski relevantne promjene","student-responses":"odgovori na dorade","never-reviewed":"nikad pregledani objekti","readiness-blockers":"blokeri za predaju","forensic-anomalies":"anomalije integriteta/procesa za tehnički pregled","final-review-requested":"zatražen završni pregled"};
 
 export default function MentorCommandCenterDemo(){
  const[view,setView]=useState<View>("mentor");const[selected,setSelected]=useState<string|null>(null);
