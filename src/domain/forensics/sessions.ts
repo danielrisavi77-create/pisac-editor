@@ -3,6 +3,7 @@ export type SessionAnomaly={kind:"timestamp-regression"|"sequence-gap";eventId:s
 export type ForensicWritingSession={id:string;documentId:string;firstSequence:number;lastSequence:number;startedAt:string;endedAt:string;eventIds:readonly string[];activeDurationMs:number;anomalies:readonly SessionAnomaly[]};
 export function buildForensicWritingSessions(events:readonly ForensicEvent[],idleGapMs=15*60*1000):ForensicWritingSession[]{
  if(!Number.isFinite(idleGapMs)||idleGapMs<=0)throw new Error("buildForensicWritingSessions: invalid idle gap");
+ const docs=new Set(events.map(e=>e.documentId));if(docs.size>1)throw new Error("buildForensicWritingSessions: mixed documents");
  const ordered=[...events].sort((a,b)=>a.sequence-b.sequence);const groups:{events:ForensicEvent[];anomalies:SessionAnomaly[]}[]=[];let previous:ForensicEvent|null=null;
  for(const e of ordered){
   const anomalies:SessionAnomaly[]=[];if(previous){if(e.sequence!==previous.sequence+1)anomalies.push({kind:"sequence-gap",eventId:e.id});if(Date.parse(e.occurredAt)<Date.parse(previous.occurredAt))anomalies.push({kind:"timestamp-regression",eventId:e.id});}
