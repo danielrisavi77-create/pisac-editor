@@ -40,6 +40,8 @@ export default function LiveProcessEditor(props: EditorProps) {
   const [position, setPosition] = useState(0);
   const [error, setError] = useState("");
   const [persistenceError, setPersistenceError] = useState("");
+  const persistenceFailure = useRef("");
+  const failPersistence = useCallback((code:string)=>{persistenceFailure.current=code;setPersistenceError(code);},[]);
   const [previousSegments, setPreviousSegments] = useState(0);
   const ledger = useRef<ProcessLedgerDatabase | null>(null);
   const previousHead = useRef<string | null>(null);
@@ -56,20 +58,21 @@ export default function LiveProcessEditor(props: EditorProps) {
     void (async()=>{
       const opened=await openProcessLedger("pisac-process-ledger-demo");
       if(cancelled)return;
-      if(!opened.ok){setPersistenceError("process-ledger-unavailable");return;}
+      if(!opened.ok){failPersistence("process-ledger-unavailable");return;}
       ledger.current=opened.db;
       const loaded=await loadProcessLedger(opened.db,"demo");
       let valid=0;let head:string|null=null;
       for(const segment of loaded.segments){
-        if(await verifyCapturedProcess(segment.bundle,editor.schema)){
-          valid++;head=segment.bundle.receipt.headHash;
-          if(segment.status==="active")await markProcessInterrupted(opened.db,"demo",segment.sessionId,new Date().toISOString());
-        }
+        const bundleValid=await verifyCapturedProcess(segment.bundle,editor.schema);
+        const linkValid=segment.previousSessionHead===null?valid===0:segment.previousSessionHead===head;
+        if(!bundleValid||!linkValid){failPersistence("process-ledger-chain-invalid");break;}
+        valid++;head=segment.bundle.receipt.headHash;
+        if(segment.status==="active")await markProcessInterrupted(opened.db,"demo",segment.sessionId,new Date().toISOString());
       }
       if(cancelled)return;
       setPreviousSegments(valid);previousHead.current=head;
-      if(loaded.invalidSessionIds.length)setPersistenceError("process-ledger-invalid-record");
-    })().catch(()=>{if(!cancelled)setPersistenceError("process-ledger-open-failed")});
+      if(loaded.invalidSessionIds.length)failPersistence("process-ledger-invalid-record");
+    })().catch(()=>{if(!cancelled)failPersistence("process-ledger-open-failed")});
     return()=>{cancelled=true;};
   },[editor]);
 
@@ -77,7 +80,7 @@ export default function LiveProcessEditor(props: EditorProps) {
     if (!editor || editor.isDestroyed || !editor.isEditable) return;
     cleanup.current();
     const version = ++generation.current;
-    setBundle(null); setError(""); setCount(0); setPosition(0); setPersistenceError("");
+    setBundle(null); setError(""); setCount(0); setPosition(0); persistenceFailure.current=""; setPersistenceError("");
     try {
       const sessionId=crypto.randomUUID(); startedAt.current=new Date().toISOString();
       const session = new LocalProcessCapture(editor.state.doc, {
@@ -92,7 +95,7 @@ export default function LiveProcessEditor(props: EditorProps) {
             const checkpoint=await session.checkpoint();
             if(versionAtQueue!==generation.current)return;
             await saveProcessCheckpoint(db,{bundle:checkpoint,status:"active",startedAt:startedAt.current,updatedAt:new Date().toISOString(),previousSessionHead:previousHead.current});
-          }).catch(()=>setPersistenceError("process-ledger-write-failed"));
+          }).catch(()=>failPersistence("process-ledger-write-failed"));
         },
       });
       capture.current = session;
@@ -102,7 +105,7 @@ export default function LiveProcessEditor(props: EditorProps) {
           const checkpoint=await session.checkpoint();
           if(version!==generation.current)return;
           await saveProcessCheckpoint(db,{bundle:checkpoint,status:"active",startedAt:startedAt.current,updatedAt:new Date().toISOString(),previousSessionHead:previousHead.current});
-        }).catch(()=>setPersistenceError("process-ledger-write-failed"));
+        }).catch(()=>failPersistence("process-ledger-write-failed"));
       }
       const onTransaction = ({ transaction, appendedTransactions }: EditorEvents["transaction"]) => {
         // Tiptap applies plugin-appended transactions too; do not omit them.
@@ -129,9 +132,9 @@ export default function LiveProcessEditor(props: EditorProps) {
       setBundle(result); setPosition(result.events.length); setCount(result.events.length); setStatus("verified-local");
       await persistTail.current;
       const db=ledger.current;
-      if(db&&!persistenceError){
+      if(db&&!persistenceFailure.current){
         try{await sealProcessSegment(db,result.documentId,result.sessionId,result,new Date().toISOString());previousHead.current=result.receipt.headHash;setPreviousSegments(x=>x+1);}
-        catch{setPersistenceError("process-ledger-seal-failed");}
+        catch{failPersistence("process-ledger-seal-failed");}
       }
     } catch {
       if (version !== generation.current) return;
