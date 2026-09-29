@@ -21,10 +21,10 @@ function extendsPersistedPrefix(previous:CapturedProcess,next:CapturedProcess):b
  return previous.receipt.headHash===expectedHead;
 }
 async function assertContinuation(db:ProcessLedgerDatabase,r:ProcessSegmentRecord){
- if(r.previousSessionHead===null)return;
- const rows=await db.segments.where("documentId").equals(r.documentId).toArray();
- const parent=rows.find(x=>x.sessionId!==r.sessionId&&x.bundle?.receipt?.headHash===r.previousSessionHead);
- if(!parent)throw new Error("process-ledger-missing-parent");
+ const rows=(await db.segments.where("documentId").equals(r.documentId).toArray()).filter(x=>x.sessionId!==r.sessionId&&structurallyValid(x)).sort((a,b)=>Date.parse(a.startedAt)-Date.parse(b.startedAt)||a.sessionId.localeCompare(b.sessionId));
+ const latest=rows.at(-1);
+ if(!latest){if(r.previousSessionHead!==null)throw new Error("process-ledger-missing-parent");return;}
+ if(r.previousSessionHead!==latest.bundle.receipt.headHash)throw new Error("process-ledger-missing-parent");
 }
 export async function saveProcessCheckpoint(db:ProcessLedgerDatabase,input:ProcessCheckpointInput):Promise<void>{
  const r:ProcessSegmentRecord={...input,documentId:input.bundle.documentId,sessionId:input.bundle.sessionId};
