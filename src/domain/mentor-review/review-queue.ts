@@ -14,5 +14,6 @@ export function applyReviewAction(state:ReviewQueueState,input:{reviewerId:strin
  const audit:ReviewQueueAudit={id:input.auditId,itemObjectId:item.object.id,objectRevision:item.object.revision,reviewerId:input.reviewerId,action:input.action,occurredAt:input.occurredAt,...(input.note?.trim()?{note:input.note.trim()}:{})};
  const coverage=[...state.coverage];
  if(input.action==="reviewed"){if(!input.coverageId)throw new Error("applyReviewAction: coverage id required");if(coverage.some(c=>c.id===input.coverageId))throw new Error("applyReviewAction: duplicate coverage id");coverage.push({id:input.coverageId,reviewerId:input.reviewerId,objectId:item.object.id,reviewedRevision:item.object.revision,reviewedAt:input.occurredAt,status:"reviewed"});}
- return{...state,cursor:state.cursor+1,audits:[...state.audits,audit],coverage};
+ const terminal=input.action!=="commented";
+ return{...state,cursor:terminal?state.cursor+1:state.cursor,audits:[...state.audits,audit],coverage};
 }
