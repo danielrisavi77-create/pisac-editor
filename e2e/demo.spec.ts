@@ -286,3 +286,20 @@ test.describe("Mentor sequential review workflow", () => {
     await expect(queue.getByRole("button",{name:"Traži doradu"})).toBeEnabled();
   });
 });
+
+
+test.describe("Mentor review context bundle", () => {
+  test("shows diff, evidence, impact and scoped forensic provenance for CLAIM-014", async ({ page }) => {
+    await openDemo(page);
+    const center=page.getByRole("region",{name:"Mentor Command Center"});
+    await center.getByRole("button",{name:/Daniel Rišavi/}).click();
+    await center.getByRole("button",{name:"Pokreni pregled"}).click();
+    const queue=center.getByRole("region",{name:"Mentor Review Queue"});
+    const context=queue.getByLabel("Kontekst pregleda CLAIM-014");
+    await expect(context.getByText(/Rezultati pokazuju povezanost/)).toBeVisible();
+    await expect(context.getByText(/Rezultati dokazuju povezanost/)).toBeVisible();
+    await expect(context.getByText(/Lindblom \(1959\), str. 81–82/)).toBeVisible();
+    await expect(context.getByText(/Rasprava §5.2/)).toBeVisible();
+    await expect(context.getByText(/dokazni eventi: fp-5, fp-6, fp-7/)).toBeVisible();
+  });
+});
