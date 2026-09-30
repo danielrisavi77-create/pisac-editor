@@ -1,6 +1,6 @@
 export type HistorySegmentStatus="sealed"|"interrupted";
 export type HistorySegmentInput={sessionId:string;startedAt:string;updatedAt:string;status:HistorySegmentStatus;headHash:string;previousSessionHead:string|null;eventCount:number};
-export type HistoryIssue={kind:"invalid-time"|"broken-link"|"overlap"|"duplicate-session";sessionId:string};
+export type HistoryIssue={kind:"invalid-time"|"invalid-event-count"|"broken-link"|"overlap"|"duplicate-session";sessionId:string};
 export type HistorySegmentItem=HistorySegmentInput&{kind:"segment";globalEventStart:number;globalEventEnd:number};
 export type HistoryGapItem={kind:"gap";fromSessionId:string;toSessionId:string;startedAt:string;endedAt:string;durationMs:number;precededByInterruption:boolean};
 export type ProcessHistory={valid:boolean;segments:readonly HistorySegmentItem[];timeline:readonly(HistorySegmentItem|HistoryGapItem)[];issues:readonly HistoryIssue[];totalEvents:number};
@@ -16,7 +16,7 @@ export function buildProcessHistory(input:readonly HistorySegmentInput[]):Proces
    if(start< Date.parse(previous.updatedAt))issues.push({kind:"overlap",sessionId:raw.sessionId});
    else if(start>Date.parse(previous.updatedAt))timeline.push({kind:"gap",fromSessionId:previous.sessionId,toSessionId:raw.sessionId,startedAt:previous.updatedAt,endedAt:raw.startedAt,durationMs:start-Date.parse(previous.updatedAt),precededByInterruption:previous.status==="interrupted"});
   }else if(raw.previousSessionHead!==null)issues.push({kind:"broken-link",sessionId:raw.sessionId});
-  const count=Number.isSafeInteger(raw.eventCount)&&raw.eventCount>=0?raw.eventCount:0;
+  const countValid=Number.isSafeInteger(raw.eventCount)&&raw.eventCount>=0;if(!countValid)issues.push({kind:"invalid-event-count",sessionId:raw.sessionId});const count=countValid?raw.eventCount:0;
   const segment:HistorySegmentItem={...raw,eventCount:count,kind:"segment",globalEventStart:cursor,globalEventEnd:count?cursor+count-1:cursor-1};
   segments.push(segment);timeline.push(segment);cursor+=count;previous=segment;
  }
