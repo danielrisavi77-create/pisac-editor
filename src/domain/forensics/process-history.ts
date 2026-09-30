@@ -14,7 +14,7 @@ export function buildProcessHistory(input:readonly HistorySegmentInput[]):Proces
   if(previous){
    if(raw.previousSessionHead!==previous.headHash)issues.push({kind:"broken-link",sessionId:raw.sessionId});
    if(start< Date.parse(previous.updatedAt))issues.push({kind:"overlap",sessionId:raw.sessionId});
-   else if(start>Date.parse(previous.updatedAt))timeline.push({kind:"gap",fromSessionId:previous.sessionId,toSessionId:raw.sessionId,startedAt:previous.updatedAt,endedAt:raw.startedAt,durationMs:start-Date.parse(previous.updatedAt),precededByInterruption:previous.status==="interrupted"});
+   else timeline.push({kind:"gap",fromSessionId:previous.sessionId,toSessionId:raw.sessionId,startedAt:previous.updatedAt,endedAt:raw.startedAt,durationMs:start-Date.parse(previous.updatedAt),precededByInterruption:previous.status==="interrupted"});
   }else if(raw.previousSessionHead!==null)issues.push({kind:"broken-link",sessionId:raw.sessionId});
   const countValid=Number.isSafeInteger(raw.eventCount)&&raw.eventCount>=0;if(!countValid)issues.push({kind:"invalid-event-count",sessionId:raw.sessionId});const count=countValid?raw.eventCount:0;
   const segment:HistorySegmentItem={...raw,eventCount:count,kind:"segment",globalEventStart:cursor,globalEventEnd:count?cursor+count-1:cursor-1};
