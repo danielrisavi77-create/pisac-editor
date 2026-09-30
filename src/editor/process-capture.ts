@@ -10,7 +10,7 @@ export type CaptureSource = "editor" | "paste" | "cut" | "drop" | "composition" 
 type CaptureEvent = {
   sequence: number; documentId: string; sessionId: string;
   occurredAt: string; elapsedMs: number; source: CaptureSource;
-  steps: JsonObject[]; touchedNodeIds: string[]; beforeHash: string; afterHash: string;
+  steps: JsonObject[]; touchedNodeIds?: string[]; beforeHash: string; afterHash: string;
 };
 type Entry = { event: CaptureEvent; previousHash: string; eventHash: string };
 export type CapturedProcess = {
@@ -191,7 +191,7 @@ export async function verifyCapturedProcess(bundle: CapturedProcess, schema: Sch
       const entry = bundle.events[i], event = entry.event;
       if (event.sequence !== i + 1 || event.documentId !== bundle.documentId || event.sessionId !== bundle.sessionId || !event.steps.length || !SOURCES.includes(event.source) || !Number.isFinite(event.elapsedMs) || event.elapsedMs < elapsed || !Number.isFinite(Date.parse(event.occurredAt)) || entry.previousHash !== head || event.beforeHash !== documentHash) return false;
       if (entry.eventHash !== await hash(canonicalize({ previousHash: head, event }))) return false;
-      const applied=applyStepsWithTouched(doc,event.steps);if(JSON.stringify(applied.touchedNodeIds)!==JSON.stringify(event.touchedNodeIds))return false;doc=applied.doc; documentHash = await hash(canonicalize(json(doc)));
+      const applied=applyStepsWithTouched(doc,event.steps);if(event.touchedNodeIds!==undefined&&(!Array.isArray(event.touchedNodeIds)||JSON.stringify(applied.touchedNodeIds)!==JSON.stringify(event.touchedNodeIds)))return false;doc=applied.doc; documentHash = await hash(canonicalize(json(doc)));
       if (documentHash !== event.afterHash) return false;
       head = entry.eventHash; elapsed = event.elapsedMs;
     }
