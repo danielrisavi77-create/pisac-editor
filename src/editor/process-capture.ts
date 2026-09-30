@@ -122,9 +122,9 @@ export class LocalProcessCapture {
       const steps = copy(tr.steps.map(step => step.toJSON() as JsonObject));
       const after = json(tr.doc);
       if (!steps.length || !applySteps(tr.before, steps).eq(tr.doc)) throw new Error("capture-invalid-step");
-      const size = bytes(steps) + 512, snapshotBytes = bytes(after);
+      const touchedNodeIds=collectTouchedNodeIds(tr);const size = bytes(steps) + bytes(touchedNodeIds) + 512, snapshotBytes = bytes(after);
       if (this.reserved >= (this.options.maxEvents ?? MAX_EVENTS) || this.usedBytes + size + this.pendingBytes + snapshotBytes > (this.options.maxBytes ?? MAX_BYTES) || snapshotBytes > MAX_DOCUMENT_BYTES) throw new Error("capture-limit");
-      const touchedNodeIds=collectTouchedNodeIds(tr);const header = { sequence: ++this.reserved, documentId: this.options.documentId, sessionId: this.options.sessionId, ...stamp, source: source(tr), steps, touchedNodeIds };
+      const header = { sequence: ++this.reserved, documentId: this.options.documentId, sessionId: this.options.sessionId, ...stamp, source: source(tr), steps, touchedNodeIds };
       this.usedBytes += size; this.pendingBytes += snapshotBytes; this.lastElapsed = stamp.elapsedMs; this.expected = tr.doc;
       // Serialize before awaiting; only one writer updates the chain head.
       this.pending = this.pending.then(async () => {
