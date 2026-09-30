@@ -8,4 +8,10 @@ test.describe("multi-session writing history",()=>{
   const sessions=history.getByRole("button");await sessions.nth(0).click();let replay=history.getByLabel("Replay odabrane trajne sesije");await replay.locator('input[type="range"]').fill("1");await expect(replay.getByTestId("history-replay")).toContainText("P");
   await sessions.nth(1).click();replay=history.getByLabel("Replay odabrane trajne sesije");await expect(replay.locator('input[type="range"]')).toHaveValue("0");await expect(replay.getByTestId("history-replay")).toContainText("Prva");await replay.locator('input[type="range"]').fill("1");await expect(replay.getByTestId("history-replay")).toContainText("Prva ");
  });
+ test("global navigation stops on the gap instead of interpolating across sessions",async({page})=>{
+  await page.goto("/demo");let panel=page.getByRole("region",{name:"Stvarni proces pisanja"});let editor=page.getByRole("textbox",{name:"Tekst rada"});
+  await panel.getByRole("button",{name:"Pokreni lokalno bilježenje"}).click();await editor.pressSequentially("A");await expect(panel.getByTestId("persisted-count")).toHaveText("1");await panel.getByRole("button",{name:"Završi i provjeri sesiju"}).click();await page.reload();
+  panel=page.getByRole("region",{name:"Stvarni proces pisanja"});editor=page.getByRole("textbox",{name:"Tekst rada"});await panel.getByRole("button",{name:"Pokreni lokalno bilježenje"}).click();await editor.pressSequentially("B");await expect(panel.getByTestId("persisted-count")).toHaveText("1");await panel.getByRole("button",{name:"Završi i provjeri sesiju"}).click();
+  const nav=page.getByRole("region",{name:"Globalna navigacija procesa"});const next=nav.getByRole("button",{name:"Sljedeće"});await next.click();await expect(nav.getByTestId("global-history-replay")).toContainText("A");await next.click();await expect(nav.getByTestId("global-history-replay")).toContainText("A");await next.click();await expect(nav.getByTestId("global-gap")).toBeVisible();await expect(nav.getByTestId("global-history-replay")).toHaveCount(0);await next.click();await expect(nav.getByTestId("global-history-replay")).toContainText("A");
+ });
 });
