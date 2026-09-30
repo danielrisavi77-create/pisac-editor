@@ -14,6 +14,7 @@ import { deriveVerifiedObjectActivity, type VerifiedObjectActivity } from "@/dom
 import { appendPersistedAcademicBinding, loadAcademicObjectRegistry, openAcademicObjectRegistry, type AcademicObjectRegistryDatabase } from "@/lib/academic-object-registry/academic-object-registry-db";
 import { applyVerifiedActivityToRevisionDraft } from "@/domain/academic-graph/verified-revision-adapter";
 import { sealAcademicRevisionDraft, type AcademicRevisionLedger } from "@/domain/academic-graph/academic-revision-lifecycle";
+import { requiredRevisionRegistryRepair } from "@/domain/academic-graph/revision-registry-recovery";
 import { loadAcademicRevisionLedger, openAcademicRevisionStore, saveAcademicRevisionLedger, type AcademicRevisionDatabase } from "@/lib/academic-revision/academic-revision-db";
 import { loadProcessLedger, markProcessInterrupted, openProcessLedger, saveProcessCheckpoint, sealProcessSegment, type ProcessLedgerDatabase } from "@/lib/process-ledger/process-ledger";
 
@@ -77,6 +78,7 @@ export default function LiveProcessEditor(props: EditorProps) {
   useEffect(() => () => { generation.current++; cleanup.current(); capture.current = null; ledger.current?.close(); ledger.current = null; registryDb.current?.close(); registryDb.current=null; revisionDb.current?.close(); revisionDb.current=null; }, []);
   useEffect(()=>{let cancelled=false;void(async()=>{const opened=await openAcademicObjectRegistry("pisac-academic-object-registry-demo");if(cancelled)return;if(!opened.ok){setRegistryError(opened.reason);return;}registryDb.current=opened.db;const loaded=await loadAcademicObjectRegistry(opened.db);if(cancelled)return;if(!loaded.ok){setRegistryError(loaded.reason);return;}setObjectRegistry(loaded.registry);})().catch(()=>{if(!cancelled)setRegistryError("open-failed")});return()=>{cancelled=true;};},[]);  useEffect(()=>{let cancelled=false;void(async()=>{const opened=await openAcademicRevisionStore("pisac-academic-revisions-demo");if(cancelled)return;if(!opened.ok){setRevisionError(opened.reason);return;}revisionDb.current=opened.db;const loaded=await loadAcademicRevisionLedger(opened.db);if(cancelled)return;if(!loaded.ok){setRevisionError(loaded.reason);return;}setRevisionLedger(loaded.ledger);})().catch(()=>{if(!cancelled)setRevisionError("open-failed")});return()=>{cancelled=true;};},[]);
 
+  useEffect(()=>{if(registryError||revisionError||!registryDb.current)return;const binding=currentAcademicObjectBinding(objectRegistry,"CLAIM-014");let repair;try{repair=requiredRevisionRegistryRepair(binding,revisionLedger.revisions,"CLAIM-014");}catch{setRevisionError("revision-registry-unsafe-mismatch");return;}if(!repair)return;let cancelled=false;void appendPersistedAcademicBinding(registryDb.current,{bindingId:crypto.randomUUID(),...repair}).then(next=>{if(!cancelled)setObjectRegistry(r=>({bindings:[...r.bindings,next]}));}).catch(()=>{if(!cancelled)setRevisionError("revision-registry-sync-failed")});return()=>{cancelled=true;};},[objectRegistry,registryError,revisionError,revisionLedger.revisions]);
   useEffect(() => {
     if (!editor) return;
     let cancelled=false;
