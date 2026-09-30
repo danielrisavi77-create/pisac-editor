@@ -13,3 +13,9 @@ export function appendAcademicObjectBinding(registry:AcademicObjectRegistry,inpu
  const next:AcademicObjectNodeBinding={...input,bindingVersion:(previous?.bindingVersion??0)+1,previousBindingId:previous?.bindingId??null};
  return{bindings:[...registry.bindings,next]};
 }
+
+export type AcademicObjectBindingInterval={binding:AcademicObjectNodeBinding;effectiveFrom:string;effectiveUntil:string|null};
+export function academicObjectBindingIntervals(registry:AcademicObjectRegistry,objectId:string):AcademicObjectBindingInterval[]{
+ const xs=registry.bindings.filter(x=>x.objectId===objectId).sort((a,b)=>a.bindingVersion-b.bindingVersion);
+ return xs.map((binding,i)=>({binding,effectiveFrom:binding.boundAt,effectiveUntil:xs[i+1]?.boundAt??null}));
+}
