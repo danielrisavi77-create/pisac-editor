@@ -10,7 +10,7 @@ export type CaptureSource = "editor" | "paste" | "cut" | "drop" | "composition" 
 type CaptureEvent = {
   sequence: number; documentId: string; sessionId: string;
   occurredAt: string; elapsedMs: number; source: CaptureSource;
-  steps: JsonObject[]; beforeHash: string; afterHash: string;
+  steps: JsonObject[]; touchedNodeIds: string[]; beforeHash: string; afterHash: string;
 };
 type Entry = { event: CaptureEvent; previousHash: string; eventHash: string };
 export type CapturedProcess = {
@@ -44,6 +44,17 @@ function source(tr: Transaction): CaptureSource {
   if (tr.getMeta("preventUpdate") === true) return "system-replacement";
   // Includes keyboard, dictation, autocorrect, commands and history. Do not guess.
   return "editor";
+}
+function addNodeId(node:PMNode,out:Set<string>){const id:unknown=node.attrs?.nodeId;if(typeof id==="string"&&id.trim())out.add(id);}
+function collectAt(doc:PMNode,from:number,to:number,out:Set<string>){
+ const max=doc.content.size;const a=Math.max(0,Math.min(from,max)),b=Math.max(a,Math.min(to,max));
+ for(const pos of new Set([a,b])){try{const r=doc.resolve(pos);for(let d=0;d<=r.depth;d++)addNodeId(r.node(d),out);}catch{/* invalid boundary contributes no invented id */}}
+ if(b>a)doc.nodesBetween(a,b,node=>{addNodeId(node,out);return true;});
+}
+export function collectTouchedNodeIds(tr:Transaction):string[]{
+ const out=new Set<string>();
+ tr.steps.forEach((step,i)=>{const before=tr.docs[i]??tr.before;const after=i+1<tr.docs.length?tr.docs[i+1]:tr.doc;step.getMap().forEach((oldStart,oldEnd,newStart,newEnd)=>{collectAt(before,oldStart,oldEnd,out);collectAt(after,newStart,newEnd,out);});});
+ return[...out].sort();
 }
 function applySteps(doc: PMNode, steps: readonly JsonObject[]): PMNode {
   let next = doc;
@@ -108,7 +119,7 @@ export class LocalProcessCapture {
       if (!steps.length || !applySteps(tr.before, steps).eq(tr.doc)) throw new Error("capture-invalid-step");
       const size = bytes(steps) + 512, snapshotBytes = bytes(after);
       if (this.reserved >= (this.options.maxEvents ?? MAX_EVENTS) || this.usedBytes + size + this.pendingBytes + snapshotBytes > (this.options.maxBytes ?? MAX_BYTES) || snapshotBytes > MAX_DOCUMENT_BYTES) throw new Error("capture-limit");
-      const header = { sequence: ++this.reserved, documentId: this.options.documentId, sessionId: this.options.sessionId, ...stamp, source: source(tr), steps };
+      const touchedNodeIds=collectTouchedNodeIds(tr);const header = { sequence: ++this.reserved, documentId: this.options.documentId, sessionId: this.options.sessionId, ...stamp, source: source(tr), steps, touchedNodeIds };
       this.usedBytes += size; this.pendingBytes += snapshotBytes; this.lastElapsed = stamp.elapsedMs; this.expected = tr.doc;
       // Serialize before awaiting; only one writer updates the chain head.
       this.pending = this.pending.then(async () => {
