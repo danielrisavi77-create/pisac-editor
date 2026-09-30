@@ -12,5 +12,5 @@ export function buildGlobalHistorySteps(history:ProcessHistory):GlobalHistorySte
  return out;
 }
 export function moveGlobalHistoryCursor(steps:readonly GlobalHistoryStep[],cursor:number,direction:-1|1):number{
- if(!steps.length)return-1;const base=Number.isSafeInteger(cursor)&&cursor>=0&&cursor<steps.length?cursor:direction>0?-1:steps.length;return Math.max(0,Math.min(steps.length-1,base+direction));
+ if(!steps.length)return-1;if(cursor===-1&&direction===1)return 0;if(!Number.isSafeInteger(cursor)||cursor<0||cursor>=steps.length)return-1;return Math.max(0,Math.min(steps.length-1,cursor+direction));
 }
