@@ -1,6 +1,6 @@
 export type HistorySegmentStatus="sealed"|"interrupted";
 export type HistorySegmentInput={sessionId:string;startedAt:string;updatedAt:string;status:HistorySegmentStatus;headHash:string;previousSessionHead:string|null;eventCount:number};
-export type HistoryIssue={kind:"invalid-time"|"invalid-event-count"|"invalid-bundle"|"broken-link"|"overlap"|"duplicate-session";sessionId:string};
+export type HistoryIssue={kind:"invalid-time"|"invalid-event-count"|"invalid-bundle"|"active-segment"|"broken-link"|"overlap"|"duplicate-session";sessionId:string};
 export type HistorySegmentItem=HistorySegmentInput&{kind:"segment";globalEventStart:number;globalEventEnd:number};
 export type HistoryGapItem={kind:"gap";fromSessionId:string;toSessionId:string;startedAt:string;endedAt:string;durationMs:number;precededByInterruption:boolean};
 export type ProcessHistory={valid:boolean;segments:readonly HistorySegmentItem[];timeline:readonly(HistorySegmentItem|HistoryGapItem)[];issues:readonly HistoryIssue[];totalEvents:number};
