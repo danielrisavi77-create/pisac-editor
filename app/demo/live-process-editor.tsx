@@ -66,12 +66,12 @@ export default function LiveProcessEditor(props: EditorProps) {
       for(const segment of loaded.segments){
         const bundleValid=await verifyCapturedProcess(segment.bundle,editor.schema);
         const linkValid=segment.previousSessionHead===null?valid===0:segment.previousSessionHead===head;
-        if(!bundleValid||!linkValid){failPersistence("process-ledger-chain-invalid");break;}
+        if(!bundleValid||!linkValid){head=null;failPersistence("process-ledger-chain-invalid");break;}
         valid++;head=segment.bundle.receipt.headHash;
         if(segment.status==="active")await markProcessInterrupted(opened.db,"demo",segment.sessionId,new Date().toISOString());
       }
       if(cancelled)return;
-      setPreviousSegments(valid);previousHead.current=head;
+      setPreviousSegments(valid);previousHead.current=persistenceFailure.current?null:head;
       if(loaded.invalidSessionIds.length)failPersistence("process-ledger-invalid-record");
     })().catch(()=>{if(!cancelled)failPersistence("process-ledger-open-failed")});
     return()=>{cancelled=true;};
@@ -79,6 +79,9 @@ export default function LiveProcessEditor(props: EditorProps) {
 
   function begin() {
     if (!editor || editor.isDestroyed || !editor.isEditable) return;
+    // A known durable-ledger error must not create a new segment that looks linked/healthy.
+    // In-memory capture still works, but persistence stays disabled until reload/recovery.
+    const persistenceAllowed=!persistenceFailure.current;
     cleanup.current();
     const version = ++generation.current;
     setBundle(null); setError(""); setCount(0); setPersistedCount(0); setPosition(0);
@@ -90,7 +93,7 @@ export default function LiveProcessEditor(props: EditorProps) {
           if (version !== generation.current) return;
           setCount(session.count);
           if (session.error) { setError(session.error); setStatus("failed"); return; }
-          const db=ledger.current;if(!db)return;
+          const db=ledger.current;if(!db||!persistenceAllowed)return;
           const versionAtQueue=version;
           persistTail.current=persistTail.current.then(async()=>{
             const checkpoint=await session.checkpoint();
@@ -101,7 +104,7 @@ export default function LiveProcessEditor(props: EditorProps) {
       });
       capture.current = session;
       const db=ledger.current;
-      if(db){
+      if(db&&persistenceAllowed){
         persistTail.current=persistTail.current.then(async()=>{
           const checkpoint=await session.checkpoint();
           if(version!==generation.current)return;
