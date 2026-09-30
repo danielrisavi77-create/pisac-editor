@@ -168,6 +168,8 @@ export default function LiveProcessEditor(props: EditorProps) {
   const selected = bundle && position > 0 ? bundle.events[position - 1] : null;
   const selectedHistory=historySegments.find(x=>x.record.sessionId===historySession)??null;
   const historyReplay=useMemo(()=>{if(!selectedHistory||!editor)return null;try{return replayCapturedProcess(selectedHistory.bundle,editor.schema,historyPosition);}catch{return null;}},[selectedHistory,editor,historyPosition]);
+  const historyIdentity=useMemo(()=>history?.segments.map(x=>`${x.sessionId}:${x.headHash}`).join("|")??"",[history]);
+  useEffect(()=>{setGlobalCursor(-1);setHistorySession(null);setHistoryPosition(0);},[historyIdentity]);
   const globalSteps=useMemo(()=>history?buildGlobalHistorySteps(history):[],[history]);
   const globalStep=globalCursor>=0?globalSteps[globalCursor]??null:null;
   const globalSegment=globalStep&&globalStep.kind!=="gap"?historySegments.find(x=>x.record.sessionId===globalStep.sessionId)??null:null;
