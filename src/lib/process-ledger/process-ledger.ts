@@ -37,10 +37,10 @@ export async function sealProcessSegment(db:ProcessLedgerDatabase,documentId:str
 }
 export async function markProcessInterrupted(db:ProcessLedgerDatabase,documentId:string,sessionId:string,at:string):Promise<void>{
  if(!validDate(at))throw new Error("process-ledger-invalid-time");
- await db.transaction("rw",db.segments,async()=>{const r=await db.segments.get([documentId,sessionId]);if(!r)throw new Error("process-ledger-missing-segment");if(r.status==="sealed")return;await db.segments.put({...r,status:"interrupted",updatedAt:at});});
+ await db.transaction("rw",db.segments,async()=>{const r=await db.segments.get([documentId,sessionId]);if(!r)throw new Error("process-ledger-missing-segment");if(r.status==="sealed")return;if(Date.parse(at)<Date.parse(r.startedAt))throw new Error("process-ledger-invalid-time");await db.segments.put({...r,status:"interrupted",updatedAt:at});});
 }
 export async function loadProcessLedger(db:ProcessLedgerDatabase,documentId:string):Promise<{segments:ProcessSegmentRecord[];invalidSessionIds:string[]}>{
  const rows=await db.segments.where("documentId").equals(documentId).toArray();const segments:ProcessSegmentRecord[]=[],invalidSessionIds:string[]=[];
  for(const r of rows){if(structurallyValid(r))segments.push(structuredClone(r));else invalidSessionIds.push(r.sessionId);}
- segments.sort((a,b)=>a.startedAt.localeCompare(b.startedAt)||a.sessionId.localeCompare(b.sessionId));invalidSessionIds.sort();return{segments,invalidSessionIds};
+ segments.sort((a,b)=>Date.parse(a.startedAt)-Date.parse(b.startedAt)||a.sessionId.localeCompare(b.sessionId));invalidSessionIds.sort();return{segments,invalidSessionIds};
 }
