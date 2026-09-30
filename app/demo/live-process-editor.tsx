@@ -146,7 +146,7 @@ export default function LiveProcessEditor(props: EditorProps) {
       await persistTail.current;
       const db=ledger.current;
       if(db&&!persistenceFailure.current){
-        try{await sealProcessSegment(db,result.documentId,result.sessionId,result,new Date().toISOString());previousHead.current=result.receipt.headHash;const loaded=await loadProcessLedger(db,result.documentId);const verified=await verifyAndBuildProcessHistory(loaded.segments,editor.schema);if(!verified.verified)throw new Error("process-ledger-chain-invalid");setHistory(verified.history);setHistorySegments(verified.segments);setPreviousSegments(verified.segments.length);}
+        try{await sealProcessSegment(db,result.documentId,result.sessionId,result,new Date().toISOString());previousHead.current=result.receipt.headHash;const loaded=await loadProcessLedger(db,result.documentId);const verified=await verifyAndBuildProcessHistory(loaded.segments,editor.schema);if(!verified.verified)throw new Error("process-ledger-chain-invalid");setGlobalCursor(-1);setHistorySession(null);setHistoryPosition(0);setHistory(verified.history);setHistorySegments(verified.segments);setPreviousSegments(verified.segments.length);}
         catch{failPersistence("process-ledger-seal-failed");}
       }
     } catch {
