@@ -1,7 +1,7 @@
 import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it } from "vitest";
 import Dexie from "dexie";
-import { openProcessLedger, saveProcessCheckpoint, sealProcessSegment, loadProcessLedger, PROCESS_LEDGER_DB_NAME } from "./process-ledger";
+import { openProcessLedger, saveProcessCheckpoint, sealProcessSegment, loadProcessLedger, markProcessInterrupted, PROCESS_LEDGER_DB_NAME } from "./process-ledger";
 import type { CapturedProcess } from "@/editor/process-capture";
 const bundle=(sessionId:string,head:string):CapturedProcess=>({format:"pisac-local-transactions-v1",schema:"pisac-f1-pm-v1",documentId:"doc-1",sessionId,initialDocument:{type:"doc",content:[{type:"paragraph",attrs:{nodeId:"p1"}}]},genesisHash:"gen-"+sessionId,events:[],receipt:{eventCount:0,headHash:head,finalDocumentHash:"doc-hash"}});
 afterEach(async()=>{await Dexie.delete(PROCESS_LEDGER_DB_NAME);});
