@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import Dexie from "dexie";
 import { openProcessLedger, saveProcessCheckpoint, sealProcessSegment, loadProcessLedger, markProcessInterrupted, PROCESS_LEDGER_DB_NAME } from "./process-ledger";
 import type { CapturedProcess } from "@/editor/process-capture";
-const bundle=(sessionId:string,head:string):CapturedProcess=>({format:"pisac-local-transactions-v1",schema:"pisac-f1-pm-v1",documentId:"doc-1",sessionId,initialDocument:{type:"doc",content:[{type:"paragraph",attrs:{nodeId:"p1"}}]},genesisHash:"gen-"+sessionId,events:[],receipt:{eventCount:0,headHash:head,finalDocumentHash:"doc-hash"}});
+const bundle=(sessionId:string,head:string):CapturedProcess=>({format:"pisac-local-transactions-v1",schema:"pisac-f1-pm-v1",documentId:"doc-1",sessionId,initialDocument:{type:"doc",content:[{type:"paragraph",attrs:{nodeId:"p1"}}]},genesisHash:head,events:[],receipt:{eventCount:0,headHash:head,finalDocumentHash:"doc-hash"}});
 afterEach(async()=>{await Dexie.delete(PROCESS_LEDGER_DB_NAME);});
 describe("durable process ledger",()=>{
  it("persists an active checkpoint across a fresh database handle",async()=>{const opened=await openProcessLedger();expect(opened.ok).toBe(true);if(!opened.ok)return;await saveProcessCheckpoint(opened.db,{bundle:bundle("s1","h1"),status:"active",startedAt:"2026-09-29T20:00:00Z",updatedAt:"2026-09-29T20:01:00Z",previousSessionHead:null});opened.db.close();const reopened=await openProcessLedger();expect(reopened.ok).toBe(true);if(!reopened.ok)return;const loaded=await loadProcessLedger(reopened.db,"doc-1");expect(loaded.segments).toHaveLength(1);expect(loaded.segments[0]).toMatchObject({sessionId:"s1",status:"active"});reopened.db.close();});
