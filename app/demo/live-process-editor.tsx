@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { Editor, EditorEvents } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import DocumentEditor, { type EditorProps } from "@/editor/Editor";
-import { LocalProcessCapture, replayCapturedProcess, verifyCapturedProcess, type CapturedProcess } from "@/editor/process-capture";
+import { LocalProcessCapture, replayCapturedProcess, type CapturedProcess } from "@/editor/process-capture";
+import { verifyAndBuildProcessHistory, type VerifiedHistorySegment } from "@/domain/forensics/verified-process-history";
+import type { ProcessHistory } from "@/domain/forensics/process-history";
 import { loadProcessLedger, markProcessInterrupted, openProcessLedger, saveProcessCheckpoint, sealProcessSegment, type ProcessLedgerDatabase } from "@/lib/process-ledger/process-ledger";
 
 type Status = "idle" | "recording" | "verifying" | "verified-local" | "failed";
@@ -44,6 +46,10 @@ export default function LiveProcessEditor(props: EditorProps) {
   const failPersistence = useCallback((code:string)=>{persistenceFailure.current=code;setPersistenceError(code);},[]);
   const [previousSegments, setPreviousSegments] = useState(0);
   const [persistedCount, setPersistedCount] = useState(0);
+  const [history,setHistory]=useState<ProcessHistory|null>(null);
+  const [historySegments,setHistorySegments]=useState<readonly VerifiedHistorySegment[]>([]);
+  const [historySession,setHistorySession]=useState<string|null>(null);
+  const [historyPosition,setHistoryPosition]=useState(0);
   const ledger = useRef<ProcessLedgerDatabase | null>(null);
   const previousHead = useRef<string | null>(null);
   const startedAt = useRef("");
@@ -62,17 +68,15 @@ export default function LiveProcessEditor(props: EditorProps) {
       if(!opened.ok){failPersistence("process-ledger-unavailable");return;}
       ledger.current=opened.db;
       const loaded=await loadProcessLedger(opened.db,"demo");
-      let valid=0;let head:string|null=null;
-      for(const segment of loaded.segments){
-        const bundleValid=await verifyCapturedProcess(segment.bundle,editor.schema);
-        const linkValid=segment.previousSessionHead===null?valid===0:segment.previousSessionHead===head;
-        if(!bundleValid||!linkValid){head=null;failPersistence("process-ledger-chain-invalid");break;}
-        valid++;head=segment.bundle.receipt.headHash;
-        if(segment.status==="active")await markProcessInterrupted(opened.db,"demo",segment.sessionId,new Date().toISOString());
-      }
+      for(const segment of loaded.segments)if(segment.status==="active")await markProcessInterrupted(opened.db,"demo",segment.sessionId,new Date().toISOString());
+      const refreshed=await loadProcessLedger(opened.db,"demo");
+      const verified=await verifyAndBuildProcessHistory(refreshed.segments,editor.schema);
       if(cancelled)return;
-      setPreviousSegments(valid);previousHead.current=persistenceFailure.current?null:head;
-      if(loaded.invalidSessionIds.length)failPersistence("process-ledger-invalid-record");
+      if(refreshed.invalidSessionIds.length)failPersistence("process-ledger-invalid-record");
+      if(!verified.verified)failPersistence("process-ledger-chain-invalid");
+      setHistory(verified.history);setHistorySegments(verified.segments);
+      setPreviousSegments(verified.verified?verified.segments.length:0);
+      previousHead.current=verified.verified?(verified.segments.at(-1)?.bundle.receipt.headHash??null):null;
     })().catch(()=>{if(!cancelled)failPersistence("process-ledger-open-failed")});
     return()=>{cancelled=true;};
   },[editor,failPersistence]);
@@ -139,7 +143,7 @@ export default function LiveProcessEditor(props: EditorProps) {
       await persistTail.current;
       const db=ledger.current;
       if(db&&!persistenceFailure.current){
-        try{await sealProcessSegment(db,result.documentId,result.sessionId,result,new Date().toISOString());previousHead.current=result.receipt.headHash;setPreviousSegments(x=>x+1);}
+        try{await sealProcessSegment(db,result.documentId,result.sessionId,result,new Date().toISOString());previousHead.current=result.receipt.headHash;const loaded=await loadProcessLedger(db,result.documentId);const verified=await verifyAndBuildProcessHistory(loaded.segments,editor.schema);if(!verified.verified)throw new Error("process-ledger-chain-invalid");setHistory(verified.history);setHistorySegments(verified.segments);setPreviousSegments(verified.segments.length);}
         catch{failPersistence("process-ledger-seal-failed");}
       }
     } catch {
@@ -160,6 +164,8 @@ export default function LiveProcessEditor(props: EditorProps) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   const selected = bundle && position > 0 ? bundle.events[position - 1] : null;
+  const selectedHistory=historySegments.find(x=>x.record.sessionId===historySession)??null;
+  const historyReplay=useMemo(()=>{if(!selectedHistory||!editor)return null;try{return replayCapturedProcess(selectedHistory.bundle,editor.schema,historyPosition);}catch{return null;}},[selectedHistory,editor,historyPosition]);
 
   return <>
     <DocumentEditor {...props} onReady={ready} />
@@ -176,6 +182,7 @@ export default function LiveProcessEditor(props: EditorProps) {
         {status === "verified-local" ? <button className="btn" onClick={download}>Preuzmi zapis procesa</button> : null}
         {status === "verified-local" || status === "failed" ? <button className="btn" onClick={begin}>Odbaci ovaj zapis i započni novu sesiju</button> : null}
       </div>
+      {history&&history.verified!==false&&historySegments.length?<div className="card" role="region" aria-label="Povijest procesa pisanja" style={{marginTop:"1rem"}}><h3>Povijest procesa pisanja</h3><p className="hint">Svaki segment je zasebno kriptografski provjeren. Razdoblje između segmenata prikazuje se kao prekid; nije dokaz aktivnosti ni neaktivnosti tijekom tog razdoblja.</p>{history.timeline.map(item=>item.kind==="gap"?<div key={`gap:${item.fromSessionId}:${item.toSessionId}`} className="card"><b>Prekid između sesija</b><p className="hint">{Math.round(item.durationMs/60000)} min · {item.precededByInterruption?"prethodna sesija prekinuta":"prethodna sesija završena"}</p></div>:<button key={item.sessionId} className="card" style={{display:"block",width:"100%",textAlign:"left"}} onClick={()=>{setHistorySession(item.sessionId);setHistoryPosition(0)}}><b>Sesija {item.sessionId.slice(0,8)}</b><p className="hint">{item.status==="interrupted"?"Prekinuta":"Završena"} · {item.eventCount} događaja · {item.startedAt.slice(0,16).replace("T"," ")}</p></button>)}{selectedHistory?<div className="card" aria-label="Replay odabrane trajne sesije"><label htmlFor="history-position">Događaj odabrane sesije: {historyPosition}/{selectedHistory.bundle.events.length}</label><input id="history-position" className="input" type="range" min={0} max={selectedHistory.bundle.events.length} value={historyPosition} onChange={e=>setHistoryPosition(Number(e.target.value))}/><div className="editor-surface" data-testid="history-replay" style={{minHeight:"4rem"}}>{historyReplay?renderNode(historyReplay,"history-doc"):"Rekonstrukcija nije dostupna."}</div></div>:null}</div>:null}
       {bundle ? <div style={{ marginTop: "1rem" }}>
         <p className="hint">Lokalni pregled procesa za mentora — nije podijeljen drugom korisniku. Provjera vrijedi za završenu sesiju, ne za kasnije izmjene dokumenta.</p>
         <label htmlFor="live-process-position">Događaj stvarne sesije: {position}/{bundle.events.length}</label>
