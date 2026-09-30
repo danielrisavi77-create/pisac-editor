@@ -9,7 +9,10 @@ export type ProcessLedgerOpenResult={ok:true;db:ProcessLedgerDatabase}|{ok:false
 const validDate=(x:string)=>Number.isFinite(Date.parse(x));
 function structurallyValid(r:ProcessSegmentRecord):boolean{
  const b=r.bundle;
- return !!r.documentId&&!!r.sessionId&&r.documentId===b?.documentId&&r.sessionId===b?.sessionId&&["active","interrupted","sealed"].includes(r.status)&&validDate(r.startedAt)&&validDate(r.updatedAt)&&Date.parse(r.updatedAt)>=Date.parse(r.startedAt)&&b?.format==="pisac-local-transactions-v1"&&b?.schema==="pisac-f1-pm-v1"&&Array.isArray(b.events)&&typeof b.genesisHash==="string"&&typeof b.receipt?.headHash==="string"&&b.receipt.eventCount===b.events.length;
+ if(!(!!r.documentId&&!!r.sessionId&&r.documentId===b?.documentId&&r.sessionId===b?.sessionId&&["active","interrupted","sealed"].includes(r.status)&&validDate(r.startedAt)&&validDate(r.updatedAt)&&Date.parse(r.updatedAt)>=Date.parse(r.startedAt)&&b?.format==="pisac-local-transactions-v1"&&b?.schema==="pisac-f1-pm-v1"&&Array.isArray(b.events)&&typeof b.genesisHash==="string"&&typeof b.receipt?.headHash==="string"&&b.receipt.eventCount===b.events.length))return false;
+ let previous=b.genesisHash;
+ for(let i=0;i<b.events.length;i++){const entry=b.events[i];if(entry.event.sequence!==i+1||entry.event.documentId!==b.documentId||entry.event.sessionId!==b.sessionId||entry.previousHash!==previous)return false;previous=entry.eventHash;}
+ return b.receipt.headHash===previous;
 }
 export async function openProcessLedger(name:string=PROCESS_LEDGER_DB_NAME):Promise<ProcessLedgerOpenResult>{
  try{if(typeof indexedDB==="undefined"||indexedDB===null)return{ok:false,reason:"unavailable"};const db=new ProcessLedgerDatabase(name);await db.open();return{ok:true,db};}catch{return{ok:false,reason:"open-failed"};}
