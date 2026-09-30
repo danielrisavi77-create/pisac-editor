@@ -3,6 +3,7 @@ export type VerifiedHistorySegment={record:ProcessSegmentRecord;bundle:CapturedP
 export async function verifyAndBuildProcessHistory(records:readonly ProcessSegmentRecord[],schema:Schema):Promise<{verified:boolean;history:ProcessHistory;segments:readonly VerifiedHistorySegment[];invalidSessionIds:readonly string[]}>{
  const valid:VerifiedHistorySegment[]=[],invalidSessionIds:string[]=[];
  for(const record of records){if(await verifyCapturedProcess(record.bundle,schema))valid.push({record,bundle:record.bundle});else invalidSessionIds.push(record.sessionId);}
- const history=buildProcessHistory(valid.map(({record,bundle})=>({sessionId:record.sessionId,startedAt:record.startedAt,updatedAt:record.updatedAt,status:record.status==="active"?"interrupted":record.status,headHash:bundle.receipt.headHash,previousSessionHead:record.previousSessionHead,eventCount:bundle.events.length})));
- return{verified:invalidSessionIds.length===0&&history.valid,history,segments:valid,invalidSessionIds};
+ const built=buildProcessHistory(valid.map(({record,bundle})=>({sessionId:record.sessionId,startedAt:record.startedAt,updatedAt:record.updatedAt,status:record.status==="active"?"interrupted":record.status,headHash:bundle.receipt.headHash,previousSessionHead:record.previousSessionHead,eventCount:bundle.events.length})));
+ const history:ProcessHistory=invalidSessionIds.length?{...built,valid:false,issues:[...built.issues,...invalidSessionIds.map(sessionId=>({kind:"invalid-bundle" as const,sessionId}))]}:built;
+ return{verified:history.valid,history,segments:valid,invalidSessionIds};
 }
