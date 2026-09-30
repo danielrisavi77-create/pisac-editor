@@ -16,3 +16,13 @@ export function sealAcademicRevisionDraft(ledger:AcademicRevisionLedger,input:{d
  const revision:SealedAcademicRevision={revisionId:input.revisionId,objectId:draft.objectId,revision:draft.baseRevision+1,baseRevision:draft.baseRevision,bindingId:draft.bindingId,openedAt:draft.openedAt,sealedAt:input.sealedAt,activity:draft.activity,afterText:input.afterText,evidenceIds:[...input.evidenceIds]};
  return{revisions:[...ledger.revisions,revision],drafts:ledger.drafts.filter(x=>x.draftId!==draft.draftId)};
 }
+
+export function validateAcademicRevisionLedger(ledger:AcademicRevisionLedger):boolean{
+ try{
+  const revisionIds=new Set<string>(),draftIds=new Set<string>();
+  for(const r of ledger.revisions){if(revisionIds.has(r.revisionId)||!r.revisionId||!r.objectId||!r.bindingId||r.revision!==r.baseRevision+1||!Number.isFinite(Date.parse(r.openedAt))||!Number.isFinite(Date.parse(r.sealedAt))||Date.parse(r.sealedAt)<Date.parse(r.openedAt)||!r.activity.some(x=>x.eventIndexes.length)||new Set(r.evidenceIds).size!==r.evidenceIds.length)return false;revisionIds.add(r.revisionId);mergeActivity([],r.activity);}
+  const byObject=new Map<string,SealedAcademicRevision[]>();for(const r of ledger.revisions){const xs=byObject.get(r.objectId)??[];xs.push(r);byObject.set(r.objectId,xs);}for(const xs of byObject.values()){xs.sort((a,b)=>a.revision-b.revision);for(let i=1;i<xs.length;i++)if(xs[i].baseRevision!==xs[i-1].revision)return false;}
+  for(const d of ledger.drafts){if(draftIds.has(d.draftId)||revisionIds.has(d.draftId)||!d.draftId||!d.objectId||!d.bindingId||!Number.isFinite(Date.parse(d.openedAt)))return false;draftIds.add(d.draftId);mergeActivity([],d.activity);const latest=currentSealedRevision(ledger,d.objectId);if(latest&&d.baseRevision!==latest)return false;}
+  return new Set(ledger.drafts.map(x=>x.objectId)).size===ledger.drafts.length;
+ }catch{return false;}
+}
