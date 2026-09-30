@@ -56,6 +56,11 @@ export function collectTouchedNodeIds(tr:Transaction):string[]{
  tr.steps.forEach((step,i)=>{const before=tr.docs[i]??tr.before;const after=i+1<tr.docs.length?tr.docs[i+1]:tr.doc;step.getMap().forEach((oldStart,oldEnd,newStart,newEnd)=>{collectAt(before,oldStart,oldEnd,out);collectAt(after,newStart,newEnd,out);});});
  return[...out].sort();
 }
+function applyStepsWithTouched(doc:PMNode,steps:readonly JsonObject[]):{doc:PMNode;touchedNodeIds:string[]}{
+ let next=doc;const out=new Set<string>();
+ for(const raw of steps){const step=Step.fromJSON(doc.type.schema,raw);const result=step.apply(next);if(result.failed||!result.doc)throw new Error("capture-invalid-step");step.getMap().forEach((oldStart,oldEnd,newStart,newEnd)=>{collectAt(next,oldStart,oldEnd,out);collectAt(result.doc!,newStart,newEnd,out);});next=result.doc;}
+ next.check();return{doc:next,touchedNodeIds:[...out].sort()};
+}
 function applySteps(doc: PMNode, steps: readonly JsonObject[]): PMNode {
   let next = doc;
   for (const step of steps) {
@@ -186,7 +191,7 @@ export async function verifyCapturedProcess(bundle: CapturedProcess, schema: Sch
       const entry = bundle.events[i], event = entry.event;
       if (event.sequence !== i + 1 || event.documentId !== bundle.documentId || event.sessionId !== bundle.sessionId || !event.steps.length || !SOURCES.includes(event.source) || !Number.isFinite(event.elapsedMs) || event.elapsedMs < elapsed || !Number.isFinite(Date.parse(event.occurredAt)) || entry.previousHash !== head || event.beforeHash !== documentHash) return false;
       if (entry.eventHash !== await hash(canonicalize({ previousHash: head, event }))) return false;
-      doc = applySteps(doc, event.steps); documentHash = await hash(canonicalize(json(doc)));
+      const applied=applyStepsWithTouched(doc,event.steps);if(JSON.stringify(applied.touchedNodeIds)!==JSON.stringify(event.touchedNodeIds))return false;doc=applied.doc; documentHash = await hash(canonicalize(json(doc)));
       if (documentHash !== event.afterHash) return false;
       head = entry.eventHash; elapsed = event.elapsedMs;
     }
