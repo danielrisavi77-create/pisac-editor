@@ -96,8 +96,9 @@ export default function LiveProcessEditor(props: EditorProps) {
           const db=ledger.current;if(!db||!persistenceAllowed)return;
           const versionAtQueue=version;
           persistTail.current=persistTail.current.then(async()=>{
+            if(persistenceFailure.current)return;
             const checkpoint=await session.checkpoint();
-            if(versionAtQueue!==generation.current)return;
+            if(versionAtQueue!==generation.current||persistenceFailure.current)return;
             await saveProcessCheckpoint(db,{bundle:checkpoint,status:"active",startedAt:startedAt.current,updatedAt:new Date().toISOString(),previousSessionHead:previousHead.current});setPersistedCount(checkpoint.events.length);
           }).catch(()=>failPersistence("process-ledger-write-failed"));
         },
@@ -106,8 +107,9 @@ export default function LiveProcessEditor(props: EditorProps) {
       const db=ledger.current;
       if(db&&persistenceAllowed){
         persistTail.current=persistTail.current.then(async()=>{
+          if(persistenceFailure.current)return;
           const checkpoint=await session.checkpoint();
-          if(version!==generation.current)return;
+          if(version!==generation.current||persistenceFailure.current)return;
           await saveProcessCheckpoint(db,{bundle:checkpoint,status:"active",startedAt:startedAt.current,updatedAt:new Date().toISOString(),previousSessionHead:previousHead.current});setPersistedCount(checkpoint.events.length);
         }).catch(()=>failPersistence("process-ledger-write-failed"));
       }
