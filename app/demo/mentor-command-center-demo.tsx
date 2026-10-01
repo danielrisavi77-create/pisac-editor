@@ -99,7 +99,7 @@ export default function MentorCommandCenterDemo() {
       openReviewCoverageStore("pisac-review-coverage-demo")
     ]);
     if(cancelled)return;
-    if(!registryOpen.ok||!revisionOpen.ok||!evidenceOpen.ok||!coverageOpen.ok){setLiveClaimError("local-lifecycle-unavailable");return;}
+    if(!registryOpen.ok||!revisionOpen.ok||!evidenceOpen.ok||!coverageOpen.ok){if(registryOpen.ok)registryOpen.db.close();if(revisionOpen.ok)revisionOpen.db.close();if(evidenceOpen.ok)evidenceOpen.db.close();if(coverageOpen.ok)coverageOpen.db.close();setLiveClaimError("local-lifecycle-unavailable");return;}
     try{
       const [registryResult,revisionResult,evidenceResult,reviews]=await Promise.all([
         loadAcademicObjectRegistry(registryOpen.db),loadAcademicRevisionLedger(revisionOpen.db),loadEvidenceBasisLedger(evidenceOpen.db),loadReviewCoverage(coverageOpen.db)
