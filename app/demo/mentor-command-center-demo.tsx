@@ -91,7 +91,7 @@ export default function MentorCommandCenterDemo() {
   const [reviewQueue,setReviewQueue]=useState<ReviewQueueState|null>(null);
   const [liveClaim,setLiveClaim]=useState<null|{revision:number;reviews:ReviewCoverageRecord[];evidence:{id:string;status:"VALID"|"RECHECK_REQUIRED"}[];sealedAt:string|null}>(null);
   const [liveClaimError,setLiveClaimError]=useState("");
-  useEffect(()=>{let cancelled=false;void(async()=>{
+  useEffect(()=>{let cancelled=false;const load=async()=>{
     const [registryOpen,revisionOpen,evidenceOpen,coverageOpen]=await Promise.all([
       openAcademicObjectRegistry("pisac-academic-object-registry-demo"),
       openAcademicRevisionStore("pisac-academic-revisions-demo"),
@@ -112,7 +112,7 @@ export default function MentorCommandCenterDemo() {
       setLiveClaim({revision:binding.objectRevision,reviews:reviews.filter(x=>x.objectId==="CLAIM-014"),evidence:evidenceReadinessInput(evidenceResult.ledger,"CLAIM-014",binding.objectRevision),sealedAt:sealed?.sealedAt??null});
     }catch{if(!cancelled)setLiveClaimError("local-lifecycle-read-failed");}
     finally{registryOpen.db.close();revisionOpen.db.close();evidenceOpen.db.close();coverageOpen.db.close();}
-  })();return()=>{cancelled=true;};},[]);
+  };void load();const onUpdate=()=>{if(!cancelled)void load()};window.addEventListener("pisac:lifecycle-updated",onUpdate);return()=>{cancelled=true;window.removeEventListener("pisac:lifecycle-updated",onUpdate);};},[]);
   const reviews=useMemo(()=>[...REVIEWS,...(reviewQueue?.coverage??[])],[reviewQueue]);
   const coverage=useMemo(()=>buildCoverageMap(GRAPH,reviews,"mentor"),[reviews]);
   const delta=useMemo(()=>buildMentorReviewDelta(GRAPH,reviews,"mentor",CHANGES,{includeLanguageOnly:language}),[reviews,language]);
@@ -125,7 +125,7 @@ export default function MentorCommandCenterDemo() {
   const queue=useMemo(()=>buildMentorQueue(INPUTS.map(input=>input.projectId==="p-daniel"?{
     ...input,reviewDeltaCount:liveClaimProjection?Math.max(0,buildMentorReviewDelta(GRAPH,reviews,"mentor",CHANGES).filter(x=>x.object.id!=="CLAIM-014").length)+liveClaimProjection.input.reviewDeltaCount:buildMentorReviewDelta(GRAPH,reviews,"mentor",CHANGES).length,
     neverReviewedCount:liveClaimProjection?coverage.filter(x=>x.object.id!=="CLAIM-014"&&x.state==="NEVER_REVIEWED").length+liveClaimProjection.input.neverReviewedCount:coverage.filter(x=>x.state==="NEVER_REVIEWED").length,
-    readinessBlockerCount:liveClaimProjection?Math.max(0,readiness.findings.filter(x=>x.severity==="blocker").length-1)+liveClaimProjection.input.readinessBlockerCount:readiness.findings.filter(x=>x.severity==="blocker").length,
+    readinessBlockerCount:liveClaimProjection?evaluateAcademicReadiness({graphIssues:[],coverage:coverage.filter(x=>x.object.id!=="CLAIM-014"),evidence:[],protectedFacts:[{id:"N-001",status:"UNCHANGED"},{id:"STAT-001",status:"UNCHANGED"}],analysis:[{id:"RESULT-031",status:"CURRENT"}],instructionIssues:[],lekta:{status:"not-run",findingCount:0}}).findings.filter(x=>x.severity==="blocker").length+liveClaimProjection.input.readinessBlockerCount:readiness.findings.filter(x=>x.severity==="blocker").length,
     studentWorkPending:liveClaimProjection?.queue.waitingOn==="student"||input.studentWorkPending,
   }:input)),[reviews,coverage,readiness,liveClaimProjection]);
   const groups=useMemo(()=>groupMentorQueue(queue),[queue]);
