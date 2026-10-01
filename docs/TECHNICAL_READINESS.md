@@ -139,3 +139,75 @@ Current CI covers lint, typecheck, unit tests, AI tests, production build, bundl
 5. Establish pilot operational backlog: monitoring, backup/restore, incident response, privacy/retention, cross-browser and load testing.
 
 This document is intentionally conservative: a capability is never promoted merely because a PR description claims it works.
+
+
+# E. Complete master backlog
+
+Phase 0 expanded the roadmap into an executable queue. Existing capabilities remain separately tracked above; tasks below are verification/implementation units.
+
+## Phase 0 — repository/governance
+P0-AUD-001 inventory; 002 evidence separation; 003 PR topology; 004 obsolete-stack reconciliation; 005 PR19 CI; 006 PR20 CI; 007 PR27 reconciliation; 008 PR28 audit; 009 PR31 audit; 010 consolidation order; 011 duplicate-domain inventory; 012 legacy retirement; 013 deploy reality; 014 SHA-bound readiness; 015 evidence promotion rule.
+
+## Phase 1 — backend/auth (20)
+G1-BE-001 project state; 002 current Supabase guidance; 003 migration1904 review; 004 migration1905 review; 005 migration1906 review; 006 activate backend; 007 apply migrations; 008 advisors; 009 deploy env; 010 auth E2E; 011 workspace E2E; 012 document bootstrap; 013 sync ACK; 014 cross-user deny; 015 direct-write deny; 016 idempotency; 017 tx-key misuse; 018 stale-base conflict; 019 rebase/discard; 020 checkpoints.
+
+## Phase 2 — student lifecycle (10)
+G1-ST-001 first login; 002 project validation; 003 logout/login continuity; 004 expired session; 005 invalid IDs; 006 unauthorized deep link; 007 multiple projects; 008 archive/delete policy; 009 backend outage UI; 010 authenticated accessibility.
+
+## Phase 3 — durability/sync (10)
+G1-SY-001 offline/reconnect; 002 refresh pending; 003 crash recovery; 004 multi-tab; 005 multi-device; 006 timeout/backoff; 007 server 5xx; 008 truthful durability UI; 009 large-doc boundary; 010 evidence PASS upgrades.
+
+## Phase 4 — version/recovery/export (8)
+G1-VR-001 revision history; 002 checkpoint E2E; 003 salvage-local; 004 adopt-server; 005 local DB corruption; 006 DOCX browser export; 007 artifact fidelity; 008 import/roundtrip scope.
+
+## Phase 5 — forensic ledger (8)
+G2-FL-001 PR28 taxonomy; 002 payload privacy; 003 sequence/revision invariants; 004 editor capture; 005 durable process segments; 006 AI-event semantics; 007 retention/deletion; 008 browser regression.
+
+## Phase 6 — integrity (7)
+G2-IN-001 canonical serialization; 002 WebCrypto SHA-256; 003 hash-chain tamper detection; 004 segment/session roots; 005 server anchoring; 006 adversarial tamper suite; 007 evidentiary limitations.
+
+## Phase 7 — replay (7)
+G2-RP-001 PR31 audit; 002 ordered segments; 003 gap states; 004 no interpolation; 005 evidence-derived rhythm; 006 event-to-session navigation; 007 process-history E2E.
+
+## Phase 8 — mentor authorization (8)
+G3-AU-001 SharePackage reconciliation; 002 MentorRelationship persistence; 003 exact-revision persistence; 004 operation matrix; 005 RLS/RPC mentor policy; 006 revoke backend; 007 cross-mentor isolation; 008 private revision invisibility.
+
+## Phase 9 — Mentor Process View (5)
+G3-MV-001 production mentor route; 002 timeline/session/gap; 003 verified-segment replay; 004 review delta/coverage; 005 mentor privacy/a11y E2E.
+
+## Phase 10 — end-to-end review workflow (5)
+G3-WF-001 persisted comments/revision requests; 002 student response; 003 re-review delta; 004 submission freeze; 005 full student→mentor→student→submit E2E.
+
+## Phase 11 — production hardening (7)
+G4-OP-001 monitoring; 002 alert drill; 003 RPO/RTO + backup/restore drill; 004 load/concurrency; 005 cross-browser; 006 dependency/security gate; 007 incident simulation.
+
+## Phase 12 — privacy/pilot (5)
+G4-PV-001 data inventory; 002 retention/deletion/export; 003 legal-basis/privacy/DPIA assessment; 004 synthetic/internal pilot; 005 limited FPZG pilot gate.
+
+This produces **103 executable task IDs**, in addition to the 40 capability records above.
+
+# F. Open PR topology
+
+Observed 2026-10-01:
+- PR #19: feat/f3-protected-facts → feat/f3-semantic-diff; draft, mergeable, latest CI failed.
+- PR #20: feat/f3-protected-facts-demo → feat/f3-protected-facts; draft, mergeable, latest CI failed.
+- PR #25: audit/pisac-2-consolidation → feat/f4-research-memory; draft, mergeable, green CI.
+- PR #27: feat/f5-academic-graph → main; draft, currently non-mergeable, green CI on head.
+- PR #28: feat/f5-forensic-ledger → feat/f5-writing-provenance; draft, mergeable, green CI.
+- PR #31: feat/f5-multisession-history → feat/f5-persistent-process-ledger; draft, mergeable, green CI.
+
+Intermediate F2/F3/F4/F5 branches also exist. Do not merge these PRs independently until a consolidation map identifies already-main, superseded and still-needed commits.
+
+# G. Phase 0 completion
+
+- [x] master plan
+- [x] baseline capability inventory
+- [x] 100+ executable task roadmap
+- [x] open PR topology
+- [ ] exact consolidation order
+- [ ] red PR CI causes classified
+- [ ] migrations reviewed against current Supabase guidance
+- [ ] deployment reality verified
+- [ ] pilot operations/privacy acceptance criteria finalized
+
+Do not apply production migrations until the remaining Phase 0 safety checks are complete.
