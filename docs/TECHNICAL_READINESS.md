@@ -345,3 +345,31 @@ Playwright/build completion is tracked separately by the workflow.
 - G1-BE-007+ remain TODO.
 
 Next state-changing step is restoring the dedicated Pisač Supabase project. It must not be confused with applying migrations; restoration only makes the existing project reachable. Migration application remains a separate reviewed step.
+
+
+# J. Phase 1 — live backend activation result
+
+**Date:** 2026-10-01
+
+- Lekta staging was paused to free the Free-plan active-project slot.
+- Production Lekta was not changed.
+- Pisač project `cxwxxcwrgushfkisfpxz` restored successfully and reached ACTIVE_HEALTHY.
+- Read-only inventory found the original F1 backend had already been applied as six migrations; all five F1 public tables existed with RLS enabled and 0 rows.
+- The reviewed 1904–1906 files were therefore **not replayed**.
+- A forward-only repository migration `2026100101_f1_live_hardening.sql` was created and applied as Supabase migration `f1_live_hardening`.
+- Live migration history now contains seven migrations.
+
+Post-migration advisors:
+- Security: only three intentional `authenticated_security_definer_function_executable` WARN findings for `pisac_ensure_document`, `pisac_commit_document`, and `pisac_create_checkpoint`. These RPCs are intentionally callable by authenticated users and enforce authorization internally; PUBLIC/anon EXECUTE remains revoked.
+- Performance: prior 11 `auth_rls_initplan` warnings are cleared.
+- Performance: prior two unindexed foreign-key findings are cleared.
+- Remaining performance findings are only unused-index INFO entries on an empty database; do not remove these indexes based on zero-row usage.
+
+Task status:
+- G1-BE-006 DONE — backend active and healthy.
+- G1-BE-007 DONE — existing F1 migration history preserved; forward-only hardening applied.
+- G1-BE-008 DONE — security/performance advisors run and triaged.
+- G1-BE-009 TODO — deployed application Supabase environment.
+- G1-BE-010+ TODO — authenticated browser/system verification.
+
+No synthetic or real student rows were inserted during this step.
