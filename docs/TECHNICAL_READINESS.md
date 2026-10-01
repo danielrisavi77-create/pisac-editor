@@ -294,3 +294,54 @@ Completed:
 **PHASE 0: COMPLETE.**
 
 Next phase: **Phase 1 / Gate 1 backend activation**, beginning with migration hardening before any database write. Restoring the inactive Pisač Supabase project is a state-changing owner action and is not performed as part of this audit.
+
+
+# I. Phase 1 — migration hardening started
+
+**Date:** 2026-10-01
+
+## I1 — Supabase RPC security conclusion corrected
+
+Current Supabase documentation explicitly demonstrates a supported pattern for an API-callable `public` SECURITY DEFINER function when:
+- `search_path` is pinned/empty,
+- referenced objects are schema-qualified,
+- business authorization is enforced inside the function,
+- EXECUTE is revoked from PUBLIC/anon,
+- EXECUTE is granted only to the intended role.
+
+The prepared Pisač document/checkpoint RPCs already follow that pattern. Therefore the earlier Phase 0 suggestion that they necessarily move to a non-exposed schema is withdrawn. Moving them would add wrapper complexity without a demonstrated security gain for this RPC use case.
+
+## I2 — Minimal pre-activation hardening applied
+
+Prepared migrations 2026091904–06 were updated before any database application:
+- explicit authenticated Data API table privileges were added instead of relying on default/dashboard grants;
+- workspace/project tables explicitly grant the CRUD operations that their RLS policies permit;
+- canonical document/revision/checkpoint tables explicitly grant SELECT only;
+- direct INSERT/UPDATE/DELETE on canonical server-state tables remains revoked;
+- owner RLS predicates use the `(select auth.uid())` form where applicable, matching current Supabase performance guidance;
+- anon access remains explicitly revoked;
+- privileged RPC execute grants remain authenticated-only.
+
+No migration has been applied to the inactive Pisač project.
+
+## I3 — Verification
+
+On the latest migration-hardening head, GitHub Actions has completed successfully through:
+- lint
+- TypeScript typecheck
+- unit tests
+- AI Architect tests
+
+Playwright/build completion is tracked separately by the workflow.
+
+## I4 — Task status
+
+- G1-BE-001 DONE — project confirmed INACTIVE.
+- G1-BE-002 DONE — current Supabase guidance reviewed.
+- G1-BE-003 REVIEWED/HARDENED — workspace migration.
+- G1-BE-004 REVIEWED/HARDENED — document/revision migration.
+- G1-BE-005 REVIEWED/HARDENED — checkpoint migration.
+- G1-BE-006 BLOCKED/PENDING EXPLICIT ACTION — restore Pisač project.
+- G1-BE-007+ remain TODO.
+
+Next state-changing step is restoring the dedicated Pisač Supabase project. It must not be confused with applying migrations; restoration only makes the existing project reachable. Migration application remains a separate reviewed step.
