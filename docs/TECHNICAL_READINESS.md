@@ -211,3 +211,86 @@ Intermediate F2/F3/F4/F5 branches also exist. Do not merge these PRs independent
 - [ ] pilot operations/privacy acceptance criteria finalized
 
 Do not apply production migrations until the remaining Phase 0 safety checks are complete.
+
+
+# H. Phase 0 closing findings — 2026-10-01
+
+## H1 — Red PR CI classification
+
+PR #19 and PR #20 both fail at TypeScript typecheck, not in Protected Facts/Lekta behavior. The exact repeated error is in `src/domain/attention/project.test.ts`: `SharePackage` is inferred against `never` in the test helper. This is the same defect later documented/fixed by consolidation PR #25. Therefore #19/#20 should not receive isolated feature fixes; their surviving content should be reconciled through the green consolidation lineage.
+
+## H2 — Safe stack consolidation order
+
+Do not merge current open PRs in numerical order.
+
+Recommended reconciliation:
+1. Treat current `main` as the canonical F1 + already-consolidated F2/F3/F4 baseline.
+2. Use green PR #25 only as an audit/reference to identify any F2–F4 commits not already represented on main; do not blindly merge its historical stack.
+3. Mark #19/#20 as superseded candidates after confirming their Protected Facts/Lekta files already exist on main with equivalent/newer content.
+4. Rebase/recreate #27 from current main because it is non-mergeable; preserve only Academic Graph/Mentor Coverage/Delta/Readiness changes.
+5. Audit the F5 provenance chain in order: `feat/f5-writing-provenance` → PR #28 forensic ledger → live-editor capture → persistent-process-ledger → PR #31 multi-session history.
+6. Rebuild that F5 sequence onto current main as bounded PRs rather than merging the historical stacked ancestry wholesale.
+7. Require green lint/typecheck/unit/E2E at every reconstructed boundary.
+
+This minimizes duplicate domain models and prevents old stack failures from being reintroduced.
+
+## H3 — Supabase project reality
+
+Connected Supabase project inventory confirms:
+- Pisač ref `cxwxxcwrgushfkisfpxz`, eu-central-1: **INACTIVE**
+- Lekta staging: ACTIVE_HEALTHY
+- Lekta: ACTIVE_HEALTHY
+
+Therefore G1-BE-001 is DONE and G1-BE-006 remains an explicit activation prerequisite. No migration has been applied by this audit.
+
+## H4 — Current Supabase security review
+
+Current Supabase guidance confirms:
+- exposed tables need explicit grants + RLS;
+- functions receive EXECUTE privileges unless restricted;
+- `security definer` requires a pinned/empty `search_path`;
+- current guidance says a security-definer function in an exposed schema is callable over the Data API with creator privileges and recommends placing privileged helpers in a non-exposed schema where possible.
+
+The prepared F1 migrations already do several things correctly: RLS is explicitly enabled, anonymous table access is revoked, direct authenticated writes are revoked for canonical document/revision tables, privileged functions explicitly check `auth.uid()`, `search_path=''` is used, relation names are schema-qualified, PUBLIC/anon execute is revoked, and authenticated execute is granted narrowly.
+
+**Pre-activation change required:** review moving `pisac_ensure_document`, `pisac_commit_document` and checkpoint privileged RPC implementation into a non-exposed schema, or document/test why an exposed-schema RPC is intentionally required. If an exposed wrapper is needed for PostgREST RPC, use the smallest invoker/exposed surface possible and keep privileged implementation private. Also review `(select auth.uid())` policy form/indexing for scale and run advisors after migration.
+
+G1-BE-002 is DONE as a documentation review. G1-BE-003..005 remain open until SQL is patched/re-reviewed.
+
+## H5 — Netlify deployment reality
+
+Run 36861506779 on main was green only because the token gate succeeded. Checkout, setup-node, install and **Build and deploy were all skipped**. The current repository therefore does not have evidence that GitHub Actions deployed commit `eab8b517...` to Netlify.
+
+P0-AUD-013 is classified: **BLOCKED — NETLIFY_AUTH_TOKEN absent from GitHub Actions environment**. A green gated job must not be represented as a successful deployment.
+
+## H6 — Pilot operational/privacy acceptance criteria
+
+Before FPZG pilot:
+- monitoring must capture actionable server/auth/sync failures without logging document content unnecessarily;
+- alerts must have an owner and a tested trigger path;
+- backup policy must state RPO/RTO and pass a restore drill;
+- authorization must pass owner/cross-user/cross-mentor/direct-API adversarial tests;
+- event collection must have a field-level data inventory and minimization rationale;
+- retention/deletion/export rules must cover document content, revisions, forensic events, comments and audit metadata;
+- exact-writing-event retention must be separately justified from ordinary document retention;
+- user-facing claims must distinguish integrity/process evidence from authorship judgment;
+- privacy/legal-basis/DPIA need assessment must be reviewed with appropriate FPZG privacy/institutional roles before real-student collection;
+- a synthetic-data internal pilot must precede real-student pilot;
+- pilot rollback/incident/contact procedure must exist.
+
+## H7 — Phase 0 gate
+
+Completed:
+- [x] master plan
+- [x] baseline capability inventory
+- [x] 100+ executable task roadmap
+- [x] open PR topology
+- [x] exact consolidation order
+- [x] red PR CI causes classified
+- [x] current Supabase guidance reviewed
+- [x] deployment reality verified
+- [x] pilot operations/privacy acceptance criteria
+
+**PHASE 0: COMPLETE.**
+
+Next phase: **Phase 1 / Gate 1 backend activation**, beginning with migration hardening before any database write. Restoring the inactive Pisač Supabase project is a state-changing owner action and is not performed as part of this audit.
