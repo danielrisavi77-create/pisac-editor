@@ -49,7 +49,9 @@ function renderNode(node: PMNode, key: string): ReactNode {
 }
 
 /** Same F1 editor; capture is opt-in and entirely separate from the durable journal. */
-function announceLifecycleUpdate(){if(typeof window!=="undefined")window.dispatchEvent(new Event("pisac:lifecycle-updated"));}\n\nexport default function LiveProcessEditor(props: EditorProps) {
+function announceLifecycleUpdate(){if(typeof window!=="undefined")window.dispatchEvent(new Event("pisac:lifecycle-updated"));}
+
+export default function LiveProcessEditor(props: EditorProps) {
   const [editor, setEditor] = useState<Editor | null>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [count, setCount] = useState(0);
