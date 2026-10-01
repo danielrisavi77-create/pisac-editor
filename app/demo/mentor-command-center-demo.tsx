@@ -1,11 +1,18 @@
 "use client";
 
-import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { buildMentorQueue, groupMentorQueue, type MentorProjectInput, type WaitingOn } from "@/domain/mentor-command";
 import { applyReviewAction, buildCoverageMap, buildMentorReviewDelta, createReviewQueue, currentReviewItem, type ObjectChange, type ReviewCoverageRecord, type ReviewQueueItem, type ReviewQueueState } from "@/domain/mentor-review";
 import { traceAcademicPaths, type AcademicGraph } from "@/domain/academic-graph";
 import { evaluateAcademicReadiness } from "@/domain/readiness";
 import MentorReviewContextDemo from "./mentor-review-context-demo";
+import { openAcademicObjectRegistry, loadAcademicObjectRegistry } from "@/lib/academic-object-registry/academic-object-registry-db";
+import { openAcademicRevisionStore, loadAcademicRevisionLedger } from "@/lib/academic-revision/academic-revision-db";
+import { openEvidenceBasisStore, loadEvidenceBasisLedger } from "@/lib/evidence-basis/evidence-basis-db";
+import { openReviewCoverageStore, loadReviewCoverage } from "@/lib/mentor-review/review-coverage-db";
+import { currentAcademicObjectBinding } from "@/domain/academic-graph/academic-object-registry";
+import { evidenceReadinessInput } from "@/domain/academic-graph/evidence-readiness-adapter";
+import { projectMentorProjectState } from "@/domain/mentor-command/revision-projector";
 
 const INPUTS: MentorProjectInput[] = [
   {projectId:"p-daniel",studentId:"s-daniel",studentLabel:"Daniel Rišavi",workLabel:"Diplomski rad",lastActivityAt:"2026-09-29T10:41:00Z",reviewDeltaCount:6,studentResponseCount:2,neverReviewedCount:2,readinessBlockerCount:1,forensicAnomalyCount:0,finalReviewRequested:false,studentWorkPending:false},
@@ -82,6 +89,30 @@ export default function MentorCommandCenterDemo() {
   const [language,setLanguage]=useState(false);
   const [note,setNote]=useState("");
   const [reviewQueue,setReviewQueue]=useState<ReviewQueueState|null>(null);
+  const [liveClaim,setLiveClaim]=useState<null|{revision:number;reviews:ReviewCoverageRecord[];evidence:{id:string;status:"VALID"|"RECHECK_REQUIRED"}[];sealedAt:string|null}>(null);
+  const [liveClaimError,setLiveClaimError]=useState("");
+  useEffect(()=>{let cancelled=false;void(async()=>{
+    const [registryOpen,revisionOpen,evidenceOpen,coverageOpen]=await Promise.all([
+      openAcademicObjectRegistry("pisac-academic-object-registry-demo"),
+      openAcademicRevisionStore("pisac-academic-revisions-demo"),
+      openEvidenceBasisStore("pisac-evidence-basis-demo"),
+      openReviewCoverageStore("pisac-review-coverage-demo")
+    ]);
+    if(cancelled)return;
+    if(!registryOpen.ok||!revisionOpen.ok||!evidenceOpen.ok||!coverageOpen.ok){setLiveClaimError("local-lifecycle-unavailable");return;}
+    try{
+      const [registryResult,revisionResult,evidenceResult,reviews]=await Promise.all([
+        loadAcademicObjectRegistry(registryOpen.db),loadAcademicRevisionLedger(revisionOpen.db),loadEvidenceBasisLedger(evidenceOpen.db),loadReviewCoverage(coverageOpen.db)
+      ]);
+      if(cancelled)return;
+      if(!registryResult.ok||!revisionResult.ok||!evidenceResult.ok){setLiveClaimError("local-lifecycle-invalid");return;}
+      const binding=currentAcademicObjectBinding(registryResult.registry,"CLAIM-014");
+      if(!binding){setLiveClaim(null);return;}
+      const sealed=revisionResult.ledger.revisions.filter(x=>x.objectId==="CLAIM-014").sort((a,b)=>a.revision-b.revision).at(-1)??null;
+      setLiveClaim({revision:binding.objectRevision,reviews:reviews.filter(x=>x.objectId==="CLAIM-014"),evidence:evidenceReadinessInput(evidenceResult.ledger,"CLAIM-014",binding.objectRevision),sealedAt:sealed?.sealedAt??null});
+    }catch{if(!cancelled)setLiveClaimError("local-lifecycle-read-failed");}
+    finally{registryOpen.db.close();revisionOpen.db.close();evidenceOpen.db.close();coverageOpen.db.close();}
+  })();return()=>{cancelled=true;};},[]);
   const reviews=useMemo(()=>[...REVIEWS,...(reviewQueue?.coverage??[])],[reviewQueue]);
   const coverage=useMemo(()=>buildCoverageMap(GRAPH,reviews,"mentor"),[reviews]);
   const delta=useMemo(()=>buildMentorReviewDelta(GRAPH,reviews,"mentor",CHANGES,{includeLanguageOnly:language}),[reviews,language]);
@@ -90,11 +121,13 @@ export default function MentorCommandCenterDemo() {
     protectedFacts:[{id:"N-001",status:"UNCHANGED"},{id:"STAT-001",status:"UNCHANGED"}],
     analysis:[{id:"RESULT-031",status:"CURRENT"}],instructionIssues:[],lekta:{status:"not-run",findingCount:0}}),[coverage]);
   // The card, detail and readiness view read the SAME derived state.
+  const liveClaimProjection=useMemo(()=>liveClaim?projectMentorProjectState({projectId:"p-daniel",studentId:"s-daniel",studentLabel:"Daniel Rišavi",workLabel:"Diplomski rad",lastActivityAt:liveClaim.sealedAt??"2026-09-29T10:41:00Z",reviewerId:"mentor",object:{id:"CLAIM-014",type:"claim",label:"CLAIM-014 · stvarni lokalni lifecycle",revision:liveClaim.revision},reviews:liveClaim.reviews,changes:[{objectId:"CLAIM-014",revision:liveClaim.revision,kind:"content"}],evidence:liveClaim.evidence,evidenceRecheckOwner:"student"}):null,[liveClaim]);
   const queue=useMemo(()=>buildMentorQueue(INPUTS.map(input=>input.projectId==="p-daniel"?{
-    ...input,reviewDeltaCount:buildMentorReviewDelta(GRAPH,reviews,"mentor",CHANGES).length,
-    neverReviewedCount:coverage.filter(x=>x.state==="NEVER_REVIEWED").length,
-    readinessBlockerCount:readiness.findings.filter(x=>x.severity==="blocker").length,
-  }:input)),[reviews,coverage,readiness]);
+    ...input,reviewDeltaCount:liveClaimProjection?Math.max(0,buildMentorReviewDelta(GRAPH,reviews,"mentor",CHANGES).filter(x=>x.object.id!=="CLAIM-014").length)+liveClaimProjection.input.reviewDeltaCount:buildMentorReviewDelta(GRAPH,reviews,"mentor",CHANGES).length,
+    neverReviewedCount:liveClaimProjection?coverage.filter(x=>x.object.id!=="CLAIM-014"&&x.state==="NEVER_REVIEWED").length+liveClaimProjection.input.neverReviewedCount:coverage.filter(x=>x.state==="NEVER_REVIEWED").length,
+    readinessBlockerCount:liveClaimProjection?Math.max(0,readiness.findings.filter(x=>x.severity==="blocker").length-1)+liveClaimProjection.input.readinessBlockerCount:readiness.findings.filter(x=>x.severity==="blocker").length,
+    studentWorkPending:liveClaimProjection?.queue.waitingOn==="student"||input.studentWorkPending,
+  }:input)),[reviews,coverage,readiness,liveClaimProjection]);
   const groups=useMemo(()=>groupMentorQueue(queue),[queue]);
   const shown=view==="all"?queue:groups[view];
   const project=queue.find(x=>x.projectId===selected)??null;
@@ -116,7 +149,7 @@ export default function MentorCommandCenterDemo() {
     setDetails("queue");setNote("");
   }
   return <section className="card mentor-command-demo" aria-label="Mentor Command Center">
-    <div><strong>Mentor Command Center</strong><p className="hint">Lokalna demonstracija sa sintetskim podacima. Nema risk scorea ni procjene akademskog poštenja. Novi zapisi nisu trajno spremljeni.</p></div>
+    <div><strong>Mentor Command Center</strong><p className="hint">Hibridni lokalni demo: CLAIM-014 koristi trajni revision/coverage/evidence lifecycle kada postoji; ostali akademski objekti još su sintetski fixturei. Nema risk scorea ni procjene akademskog poštenja.</p>{liveClaim?<p data-testid="command-live-claim"><b>CLAIM-014 live:</b> rev. {liveClaim.revision} · {liveClaimProjection?.coverage[0]?.state} · delta {liveClaimProjection?.delta.length} · čeka {liveClaimProjection?.queue.waitingOn}</p>:null}{liveClaimError?<p role="alert">Live CLAIM-014 projekcija nije dostupna ({liveClaimError}).</p>:null}</div>
     <div className="row">{(["mentor","student","none","all"] as const).map(v=><button key={v} className={"btn "+(view===v?"btn-primary":"")} aria-pressed={view===v} onClick={()=>{setView(v);setSelected(null);setDetails("summary")}}>{LABEL[v]} ({v==="all"?queue.length:groups[v].length})</button>)}</div>
     {!project?<div style={{marginTop:".75rem"}}>{shown.map(item=><button key={item.projectId} className="card" style={{display:"block",width:"100%",textAlign:"left"}} onClick={()=>openProject(item.projectId)}>
       <strong>{item.studentLabel} · {item.workLabel}</strong><p className="hint">Zadnja aktivnost: {item.lastActivityAt.slice(0,10)}</p>
