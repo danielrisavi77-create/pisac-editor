@@ -21,3 +21,22 @@ Object evolution does not search prose or infer that an event “looks related�
 A binding records object ID/type, revision, node ID, session ID, ordered event indexes and evidence IDs. Invalid/missing events, conflicting duplicate revisions and ambiguous event order are rejected.
 
 The current demo evolution card remains explicitly synthetic because the production editor/Academic Graph does not yet persist a real objectId→nodeId registry. The next integration step is that registry; until it exists, the UI must not present synthetic lineage as automatic evidence.
+
+
+## Academic revision lifecycle
+
+Verified activity on the current object binding opens or extends one draft for base revision N. Individual transactions do not increment the academic revision. Only explicit seal creates revision N+1 and records the binding ID plus verified session/event references.
+
+Revision persistence is separate from the object registry. Sealing is therefore a two-phase local operation: persist the sealed revision, then append a new registry binding version for the same canonical node at revision N+1. A narrowly constrained recovery may finish phase two after reload only when the sealed revision is exactly current binding revision + 1 and references that binding.
+
+## Revision-specific EvidenceBasis
+
+Evidence links are append-only and verifications are revision-specific. A verification for CLAIM rev.4 does not automatically cover rev.5. The rev.5 projection is `RECHECK_REQUIRED` until a new verification for rev.5 exists.
+
+Freshness and substantive verdict are separate axes:
+- `VALID / RECHECK_REQUIRED` means whether the evidence was checked for that exact claim revision.
+- `supports / challenges / insufficient` records the substantive result of that check.
+
+Therefore `RECHECK_REQUIRED` does not mean the source is false, and `VALID` does not mean it necessarily supports the claim. Readiness consumes freshness; evidence-quality policy can separately consume the verdict.
+
+Evidence persistence is append-only: historical links and verifications are never deleted by saving a later projection.
