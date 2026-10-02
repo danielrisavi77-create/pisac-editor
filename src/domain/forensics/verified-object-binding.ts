@@ -1,6 +1,6 @@
 import type{Schema,Node as PMNode}from"@tiptap/pm/model";
 import{replayCapturedProcess,verifyCapturedProcess,type CapturedProcess}from"@/editor/process-capture";
-export type VerifiedAcademicObjectBinding={documentId:string;objectId:string;objectType:string;revision:number;sessionId:string;nodeId:string;eventIndexes:readonly number[];beforeText:string;afterText:string};
+export type VerifiedAcademicObjectBinding={documentId:string;objectId:string;objectType:string;revision:number;sessionId:string;nodeId:string;eventIndexes:readonly number[];beforeText:string;afterText:string|null};
 function textForNode(doc:PMNode,nodeId:string):string|null{let found:string|null=null;doc.descendants(node=>{if(found!==null)return false;if(node.attrs?.nodeId===nodeId){found=node.textContent;return false;}return true;});return found;}
 export async function deriveVerifiedObjectBinding(bundle:CapturedProcess,schema:Schema,input:{documentId:string;objectId:string;objectType:string;nodeId:string;revision:number;effectiveFrom:string;effectiveUntil?:string|null}):Promise<VerifiedAcademicObjectBinding|null>{
  if(!input.documentId||bundle.documentId!==input.documentId||!input.objectId||!input.nodeId||!Number.isSafeInteger(input.revision)||input.revision<1||!Number.isFinite(Date.parse(input.effectiveFrom))||(input.effectiveUntil!=null&&(!Number.isFinite(Date.parse(input.effectiveUntil))||Date.parse(input.effectiveUntil)<=Date.parse(input.effectiveFrom))))throw new Error("deriveObjectBinding: invalid identity");
@@ -9,6 +9,6 @@ export async function deriveVerifiedObjectBinding(bundle:CapturedProcess,schema:
  for(let i=0;i<bundle.events.length;i++){const event=bundle.events[i].event;const at=Date.parse(event.occurredAt);const ids=event.touchedNodeIds;if(at>from&&at<until&&ids?.includes(input.nodeId))eventIndexes.push(i);}
  if(!eventIndexes.length)return null;
  const first=eventIndexes[0],last=eventIndexes.at(-1)!;const before=textForNode(replayCapturedProcess(bundle,schema,first),input.nodeId);const after=textForNode(replayCapturedProcess(bundle,schema,last+1),input.nodeId);
- if(before===null||after===null)throw new Error("deriveObjectBinding: node snapshot missing");
+ if(before===null)throw new Error("deriveObjectBinding: node snapshot missing");
  return{documentId:input.documentId,objectId:input.objectId,objectType:input.objectType,revision:input.revision,sessionId:bundle.sessionId,nodeId:input.nodeId,eventIndexes,beforeText:before,afterText:after};
 }
