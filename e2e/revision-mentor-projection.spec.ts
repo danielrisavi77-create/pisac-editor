@@ -1,0 +1,15 @@
+import{test,expect}from"@playwright/test";
+test.describe("revision-driven mentor projection",()=>{
+ test("coverage, evidence freshness and next actor remain separate across revisions",async({page})=>{
+  await page.goto("/demo");const editor=page.getByRole("textbox",{name:"Tekst rada"});const registry=page.getByRole("region",{name:"Academic Object Registry"});const bind=registry.getByRole("button",{name:"Poveži CLAIM-014 s ovim odlomkom"});await expect(bind).toBeEnabled();await editor.click();await bind.click();
+  const evidence=registry.getByLabel("EvidenceBasis CLAIM-014");await expect(evidence).toContainText("RECHECK_REQUIRED");
+  let mentor=registry.getByLabel("Mentor projection CLAIM-014");await expect(mentor).toContainText("Coverage: NEVER_REVIEWED");await expect(mentor).toContainText("Review Delta: 1");await expect(mentor).toContainText("student readiness: 1");await expect(mentor).toContainText("čeka: mentor");
+  await mentor.getByRole("button",{name:"Mentor označi rev. 4 pregledanom"}).click();await expect(mentor).toContainText("Coverage: CURRENTLY_COVERED");await expect(mentor).toContainText("Review Delta: 0");await expect(mentor).toContainText("student readiness: 1");await expect(mentor).toContainText("čeka: student");
+  await evidence.getByRole("button",{name:"Potvrdi provjeru za rev. 4"}).click();await expect(mentor).toContainText("readiness blockeri ukupno: 0");await expect(mentor).toContainText("čeka: none");
+  const panel=page.getByRole("region",{name:"Stvarni proces pisanja"});await panel.getByRole("button",{name:"Pokreni lokalno bilježenje"}).click();await editor.pressSequentially("A");await expect(panel.getByTestId("persisted-count")).toHaveText("1");await expect(page.locator('[data-sync-state="LOCAL_DURABLE"]')).toBeVisible();await panel.getByRole("button",{name:"Završi i provjeri sesiju"}).click();await registry.getByLabel("Draft akademske revizije").getByRole("button",{name:"Zaključi akademsku reviziju"}).click();
+  mentor=registry.getByLabel("Mentor projection CLAIM-014");await expect(mentor).toContainText("Coverage: CHANGED_SINCE_REVIEW");await expect(mentor).toContainText("Review Delta: 1");await expect(mentor).toContainText("student readiness: 1");await expect(mentor).toContainText("čeka: mentor");
+  await mentor.getByRole("button",{name:"Mentor označi rev. 5 pregledanom"}).click();await expect(mentor).toContainText("Coverage: CURRENTLY_COVERED");await expect(mentor).toContainText("Review Delta: 0");await expect(mentor).toContainText("čeka: student");
+  await registry.getByLabel("EvidenceBasis CLAIM-014").getByRole("button",{name:"Potvrdi provjeru za rev. 5"}).click();await expect(mentor).toContainText("student readiness: 0");await expect(mentor).toContainText("čeka: none");
+  await page.reload();const restored=page.getByRole("region",{name:"Academic Object Registry"}).getByLabel("Mentor projection CLAIM-014");await expect(restored).toContainText("Coverage: CURRENTLY_COVERED");await expect(restored).toContainText("čeka: none");
+ });
+});
