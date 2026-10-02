@@ -1,11 +1,20 @@
 "use client";
 
-import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { buildMentorQueue, groupMentorQueue, type MentorProjectInput, type WaitingOn } from "@/domain/mentor-command";
 import { applyReviewAction, buildCoverageMap, buildMentorReviewDelta, createReviewQueue, currentReviewItem, type ObjectChange, type ReviewCoverageRecord, type ReviewQueueItem, type ReviewQueueState } from "@/domain/mentor-review";
 import { traceAcademicPaths, type AcademicGraph } from "@/domain/academic-graph";
 import { evaluateAcademicReadiness } from "@/domain/readiness";
 import MentorReviewContextDemo from "./mentor-review-context-demo";
+import { currentAcademicObjectBinding, type AcademicObjectNodeBinding } from "@/domain/academic-graph/academic-object-registry";
+import { openAcademicObjectRegistry, loadAcademicObjectRegistry } from "@/lib/academic-object-registry/academic-object-registry-db";
+import { openAcademicRevisionStore, loadAcademicRevisionLedger } from "@/lib/academic-revision/academic-revision-db";
+import { evidenceReviewAssessmentForClaimRevision } from "@/domain/academic-graph/evidence-basis-lifecycle";
+import { evidenceReadinessInput } from "@/domain/academic-graph/evidence-readiness-adapter";
+import { openEvidenceBasisStore, loadEvidenceReviewLedger } from "@/lib/evidence-basis/evidence-basis-db";
+import { projectRevisionMentorState } from "@/domain/mentor-command/revision-projector";
+import { reviewCoverageForCurrentBinding } from "@/domain/mentor-review/revision-coverage";
+import { appendReviewCoverage, loadReviewCoverage, openReviewCoverageStore } from "@/lib/mentor-review/review-coverage-db";
 
 const INPUTS: MentorProjectInput[] = [
   {projectId:"p-daniel",studentId:"s-daniel",studentLabel:"Daniel Rišavi",workLabel:"Diplomski rad",lastActivityAt:"2026-09-29T10:41:00Z",reviewDeltaCount:6,studentResponseCount:2,neverReviewedCount:2,readinessBlockerCount:1,forensicAnomalyCount:0,finalReviewRequested:false,studentWorkPending:false},
@@ -36,6 +45,7 @@ type View = "all" | WaitingOn;
 type Detail = "summary" | "review" | "revisions" | "arguments" | "checks" | "queue";
 const LABEL: Record<View,string> = {all:"Svi",mentor:"Treba moju pažnju",student:"Čeka studenta",none:"Bez otvorene akcije"};
 const REASON: Record<string,string> = {"review-delta":"akademski relevantne promjene","student-responses":"odgovori na dorade","never-reviewed":"nikad pregledani objekti","readiness-blockers":"blokeri za predaju","forensic-anomalies":"anomalije integriteta/procesa za tehnički pregled","final-review-requested":"zatražen završni pregled"};
+type LiveClaimState={binding:AcademicObjectNodeBinding;projection:ReturnType<typeof projectRevisionMentorState>};
 
 function ReviewQueuePanel({state,note,setNote,setState}:{
   state:ReviewQueueState|null;note:string;setNote:(v:string)=>void;
@@ -82,19 +92,45 @@ export default function MentorCommandCenterDemo() {
   const [language,setLanguage]=useState(false);
   const [note,setNote]=useState("");
   const [reviewQueue,setReviewQueue]=useState<ReviewQueueState|null>(null);
+  const [liveClaim,setLiveClaim]=useState<LiveClaimState|null>(null);
+  const [liveClaimError,setLiveClaimError]=useState("");
+  const [liveClaimBusy,setLiveClaimBusy]=useState(false);
+  useEffect(()=>{let cancelled=false;let generation=0;const load=async()=>{const request=++generation;setLiveClaimError("");
+    const [registryOpen,revisionOpen,evidenceOpen,coverageOpen]=await Promise.all([
+      openAcademicObjectRegistry("pisac-academic-object-registry-demo"),
+      openAcademicRevisionStore("pisac-academic-revisions-demo"),
+      openEvidenceBasisStore("pisac-evidence-basis-demo"),
+      openReviewCoverageStore("pisac-review-coverage-demo")
+    ]);
+    const close=()=>{if(registryOpen.ok)registryOpen.db.close();if(revisionOpen.ok)revisionOpen.db.close();if(evidenceOpen.ok)evidenceOpen.db.close();if(coverageOpen.ok)coverageOpen.db.close();};
+    if(cancelled||request!==generation){close();return;}
+    if(!registryOpen.ok||!revisionOpen.ok||!evidenceOpen.ok||!coverageOpen.ok){close();setLiveClaim(null);setLiveClaimError("local-lifecycle-unavailable");return;}
+    try{
+      const [registryResult,revisionResult,evidenceResult,coverageResult]=await Promise.all([loadAcademicObjectRegistry(registryOpen.db),loadAcademicRevisionLedger(revisionOpen.db),loadEvidenceReviewLedger(evidenceOpen.db),loadReviewCoverage(coverageOpen.db)]);
+      if(cancelled||request!==generation)return;
+      if(!registryResult.ok||!revisionResult.ok||!evidenceResult.ok||!coverageResult.ok){setLiveClaim(null);setLiveClaimError("local-lifecycle-invalid");return;}
+      const binding=currentAcademicObjectBinding(registryResult.registry,"demo","CLAIM-014");if(!binding){setLiveClaim(null);return;}
+      const assessment=evidenceReviewAssessmentForClaimRevision(evidenceResult.ledger,"demo","EB-DEMO-1",binding.objectRevision);
+      const validity=assessment?.basisId?[{basisId:assessment.basisId,status:"VALID" as const}]:[];
+      const evidence=evidenceReadinessInput(evidenceResult.ledger,"demo","CLAIM-014",binding.objectRevision,validity);
+      const projection=projectRevisionMentorState({projectId:"p-daniel",studentId:"s-daniel",studentLabel:"Daniel Rišavi",workLabel:"Diplomski rad",reviewerId:"mentor",documentId:"demo",objectLabel:"CLAIM-014 · stvarni lokalni lifecycle",binding,revisions:revisionResult.ledger.revisions,reviews:coverageResult.rows,evidence,evidenceRecheckOwner:"student"});
+      setLiveClaim({binding,projection});
+    }catch{if(!cancelled&&request===generation){setLiveClaim(null);setLiveClaimError("local-lifecycle-read-failed");}}
+    finally{close();}
+  };void load();const onUpdate=()=>{if(!cancelled)void load()};window.addEventListener("pisac:lifecycle-updated",onUpdate);return()=>{cancelled=true;generation++;window.removeEventListener("pisac:lifecycle-updated",onUpdate);};},[]);
   const reviews=useMemo(()=>[...REVIEWS,...(reviewQueue?.coverage??[])],[reviewQueue]);
   const coverage=useMemo(()=>buildCoverageMap(GRAPH,reviews,"mentor"),[reviews]);
-  const delta=useMemo(()=>buildMentorReviewDelta(GRAPH,reviews,"mentor",CHANGES,{includeLanguageOnly:language}),[reviews,language]);
-  const readiness=useMemo(()=>evaluateAcademicReadiness({graphIssues:[],coverage,
-    evidence:[{id:"EB-014",status:"RECHECK_REQUIRED"}],
+  const allDelta=useMemo(()=>buildMentorReviewDelta(GRAPH,reviews,"mentor",CHANGES,{includeLanguageOnly:language}),[reviews,language]);
+  const delta=useMemo(()=>liveClaim?allDelta.filter(x=>x.object.id!=="CLAIM-014"):allDelta,[allDelta,liveClaim]);
+  const readiness=useMemo(()=>evaluateAcademicReadiness({graphIssues:[],coverage:liveClaim?coverage.filter(x=>x.object.id!=="CLAIM-014"):coverage,
+    evidence:liveClaim?[]:[{id:"EB-014",status:"RECHECK_REQUIRED"}],
     protectedFacts:[{id:"N-001",status:"UNCHANGED"},{id:"STAT-001",status:"UNCHANGED"}],
-    analysis:[{id:"RESULT-031",status:"CURRENT"}],instructionIssues:[],lekta:{status:"not-run",findingCount:0}}),[coverage]);
-  // The card, detail and readiness view read the SAME derived state.
-  const queue=useMemo(()=>buildMentorQueue(INPUTS.map(input=>input.projectId==="p-daniel"?{
-    ...input,reviewDeltaCount:buildMentorReviewDelta(GRAPH,reviews,"mentor",CHANGES).length,
-    neverReviewedCount:coverage.filter(x=>x.state==="NEVER_REVIEWED").length,
-    readinessBlockerCount:readiness.findings.filter(x=>x.severity==="blocker").length,
-  }:input)),[reviews,coverage,readiness]);
+    analysis:[{id:"RESULT-031",status:"CURRENT"}],instructionIssues:[],lekta:{status:"not-run",findingCount:0}}),[coverage,liveClaim]);
+  // Synthetic objects and the live CLAIM-014 projection remain separate inputs, then share the existing queue model.
+  const queue=useMemo(()=>buildMentorQueue(INPUTS.map(input=>{if(input.projectId!=="p-daniel")return input;if(!liveClaim)return{...input,reviewDeltaCount:buildMentorReviewDelta(GRAPH,reviews,"mentor",CHANGES).length,neverReviewedCount:coverage.filter(x=>x.state==="NEVER_REVIEWED").length,readinessBlockerCount:readiness.findings.filter(x=>x.severity==="blocker").length};
+    const nonClaimCoverage=coverage.filter(x=>x.object.id!=="CLAIM-014");const nonClaimDelta=buildMentorReviewDelta(GRAPH,reviews,"mentor",CHANGES).filter(x=>x.object.id!=="CLAIM-014");const nonClaimReadiness=evaluateAcademicReadiness({graphIssues:[],coverage:nonClaimCoverage,evidence:[],protectedFacts:[{id:"N-001",status:"UNCHANGED"},{id:"STAT-001",status:"UNCHANGED"}],analysis:[{id:"RESULT-031",status:"CURRENT"}],instructionIssues:[],lekta:{status:"not-run",findingCount:0}});
+    return{...input,lastActivityAt:liveClaim.projection.input.lastActivityAt,reviewDeltaCount:nonClaimDelta.length+liveClaim.projection.input.reviewDeltaCount,neverReviewedCount:nonClaimCoverage.filter(x=>x.state==="NEVER_REVIEWED").length+liveClaim.projection.input.neverReviewedCount,readinessBlockerCount:nonClaimReadiness.findings.filter(x=>x.severity==="blocker").length+liveClaim.projection.input.readinessBlockerCount,studentWorkPending:input.studentWorkPending||liveClaim.projection.input.studentWorkPending};
+  })),[reviews,coverage,readiness,liveClaim]);
   const groups=useMemo(()=>groupMentorQueue(queue),[queue]);
   const shown=view==="all"?queue:groups[view];
   const project=queue.find(x=>x.projectId===selected)??null;
@@ -115,8 +151,15 @@ export default function MentorCommandCenterDemo() {
     });
     setDetails("queue");setNote("");
   }
+  async function reviewLiveClaim(){
+    if(!liveClaim||liveClaimBusy)return;setLiveClaimBusy(true);setLiveClaimError("");
+    const opened=await openReviewCoverageStore("pisac-review-coverage-demo");if(!opened.ok){setLiveClaimError("review-coverage-unavailable");setLiveClaimBusy(false);return;}
+    try{const reviewedAt=new Date(Math.max(Date.now(),Date.parse(liveClaim.binding.boundAt))).toISOString();const row=reviewCoverageForCurrentBinding(liveClaim.binding,{id:crypto.randomUUID(),reviewerId:"mentor",reviewedAt,status:"reviewed"});await appendReviewCoverage(opened.db,row);window.dispatchEvent(new Event("pisac:lifecycle-updated"));}
+    catch{setLiveClaimError("review-write-failed");}
+    finally{opened.db.close();setLiveClaimBusy(false);}
+  }
   return <section className="card mentor-command-demo" aria-label="Mentor Command Center">
-    <div><strong>Mentor Command Center</strong><p className="hint">Lokalna demonstracija sa sintetskim podacima. Nema risk scorea ni procjene akademskog poštenja. Novi zapisi nisu trajno spremljeni.</p></div>
+    <div><strong>Mentor Command Center</strong><p className="hint">Hibridni lokalni demo: CLAIM-014 koristi trajni revision/coverage/evidence lifecycle kada postoji; ostali akademski objekti i generička review queue ostaju sintetski fixturei. Nema risk scorea ni procjene akademskog poštenja.</p>{liveClaim?<div className="card" data-testid="command-live-claim"><p><b>CLAIM-014 live:</b> rev. {liveClaim.binding.objectRevision} · {liveClaim.projection.coverage[0]?.state} · delta {liveClaim.projection.delta.length} · mentor readiness {liveClaim.projection.actionState.mentor.readinessBlockerCount} · student readiness {liveClaim.projection.actionState.student.readinessBlockerCount} · student dorada {liveClaim.projection.actionState.student.revisionRequestPending?1:0} · čeka {liveClaim.projection.actionState.waitingOn}</p>{liveClaim.projection.coverage[0]?.state!=="CURRENTLY_COVERED"?<button className="btn" disabled={liveClaimBusy} onClick={()=>void reviewLiveClaim()}>Mentor pregledaj live rev. {liveClaim.binding.objectRevision}</button>:null}<p className="hint">Mentorski coverage i studentski evidence recheck ostaju odvojene obveze.</p></div>:null}{liveClaimError?<p role="alert">Live CLAIM-014 projekcija nije dostupna ({liveClaimError}).</p>:null}</div>
     <div className="row">{(["mentor","student","none","all"] as const).map(v=><button key={v} className={"btn "+(view===v?"btn-primary":"")} aria-pressed={view===v} onClick={()=>{setView(v);setSelected(null);setDetails("summary")}}>{LABEL[v]} ({v==="all"?queue.length:groups[v].length})</button>)}</div>
     {!project?<div style={{marginTop:".75rem"}}>{shown.map(item=><button key={item.projectId} className="card" style={{display:"block",width:"100%",textAlign:"left"}} onClick={()=>openProject(item.projectId)}>
       <strong>{item.studentLabel} · {item.workLabel}</strong><p className="hint">Zadnja aktivnost: {item.lastActivityAt.slice(0,10)}</p>
@@ -134,13 +177,13 @@ export default function MentorCommandCenterDemo() {
       </div>:<p className="hint">Detaljni dokument i događaji ovog demo projekta nisu učitani; drugi projekt nije korišten kao zamjena.</p>}
       {project.projectId!=="p-daniel"||details==="summary"?project.reasons.map(r=><p key={r.kind}><b>{r.count}</b> · {REASON[r.kind]}</p>):details==="review"?<div>
         <label className="row"><input type="checkbox" checked={language} onChange={e=>setLanguage(e.target.checked)}/> Uključi čisto jezične promjene</label>
-        <h4>Promijenjeno od zadnjeg pregleda</h4><p aria-live="polite">Preostalo za pregled: {delta.length}</p>
-        <div data-mentor-delta="">{delta.map(x=><p key={x.object.id}><b>{x.object.label}</b> · {x.kind==="new"?"novo za pregled":`revizija ${x.lastReviewedRevision} → ${x.currentRevision}`} · {x.changeKinds.join(", ")||"nova stavka"}</p>)}</div>
-        <h4>Coverage Map</h4><div data-mentor-coverage="">{coverage.map(x=><p key={x.object.id}>{x.object.label} · <b>{x.state==="CURRENTLY_COVERED"?"aktualno pregledano":x.state==="CHANGED_SINCE_REVIEW"?"promijenjeno nakon pregleda":"nikad pregledano"}</b></p>)}</div>
+        <h4>Promijenjeno od zadnjeg pregleda</h4><p aria-live="polite">Preostalo za pregled: {delta.length+(liveClaim?.projection.delta.length??0)}</p>
+        <div data-mentor-delta="">{liveClaim?.projection.delta.map(x=><p key={`live:${x.object.id}`}><b>{x.object.label}</b> · {x.kind==="new"?"novo za pregled":`revizija ${x.lastReviewedRevision} → ${x.currentRevision}`} · trajni lifecycle</p>)}{delta.map(x=><p key={x.object.id}><b>{x.object.label}</b> · {x.kind==="new"?"novo za pregled":`revizija ${x.lastReviewedRevision} → ${x.currentRevision}`} · {x.changeKinds.join(", ")||"nova stavka"}</p>)}</div>
+        <h4>Coverage Map</h4><div data-mentor-coverage="">{liveClaim?<p><b>{liveClaim.projection.coverage[0]?.object.label}</b> · <b>{liveClaim.projection.coverage[0]?.state==="CURRENTLY_COVERED"?"aktualno pregledano":liveClaim.projection.coverage[0]?.state==="CHANGED_SINCE_REVIEW"?"promijenjeno nakon pregleda":"nikad pregledano"}</b> · trajni lifecycle</p>:null}{(liveClaim?coverage.filter(x=>x.object.id!=="CLAIM-014"):coverage).map(x=><p key={x.object.id}>{x.object.label} · <b>{x.state==="CURRENTLY_COVERED"?"aktualno pregledano":x.state==="CHANGED_SINCE_REVIEW"?"promijenjeno nakon pregleda":"nikad pregledano"}</b></p>)}</div>
       </div>:details==="revisions"?<div><h4>Dorade</h4><p><b>2</b> odgovora studenta čekaju mentorski pregled.</p><p className="hint">Početni demonstracijski odgovori nisu automatski riješeni oznakom pregleda.</p>
         {reviewQueue?.audits.filter(a=>a.action==="revision-requested").map(a=><p key={a.id}>Lokalni zahtjev za {a.itemObjectId}: {a.note}</p>)}
       </div>:details==="arguments"?<div><h4>Argumentacijski put</h4>{argumentPath.map(x=><p key={x.target.id}>{x.target.label}</p>)}</div>:details==="checks"?<div>
-        <h4>Academic Readiness</h4><p><b>{readiness.readyForSubmission?"Nema blokera":"Postoje otvoreni blokeri"}</b></p>
+        <h4>Academic Readiness</h4><p><b>{readiness.readyForSubmission?"Nema blokera":"Postoje otvoreni blokeri"}</b></p><p className="hint">Donji popis odnosi se na sintetske demo objekte; live CLAIM-014 je prikazan zasebno.</p>{liveClaim?<p><b>Live CLAIM-014:</b> ukupno {liveClaim.projection.readiness.findings.filter(x=>x.severity==="blocker").length} readiness blokera · mentor-actionable {liveClaim.projection.actionState.mentor.readinessBlockerCount} · student-actionable {liveClaim.projection.actionState.student.readinessBlockerCount}</p>:null}
         {readiness.findings.map(x=><p key={x.id}><b>{x.severity==="blocker"?"BLOKER":"UPOZORENJE"}</b> · {x.message}</p>)}
       </div>:<ReviewQueuePanel state={reviewQueue} note={note} setNote={setNote} setState={setReviewQueue}/>}
     </div>}
