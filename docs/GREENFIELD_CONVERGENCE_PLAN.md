@@ -326,7 +326,44 @@ Control plane owns only routing/configuration/public metadata.
 
 Test future tenant migration as an explicit maintenance operation, not implicit multi-master behavior.
 
-## 12. Current-to-target matrix
+## 12. Workstream J — Research rights, retrieval and citation
+
+### Goal
+
+Prove the research plane can retrieve useful context without ever letting unauthorized or rights-incompatible source content enter an AI request.
+
+### Rights fixtures
+
+For representative SourceVersions, test each operation independently:
+
+- local parse;
+- private storage;
+- text extraction;
+- embedding;
+- external AI processing;
+- mentor sharing;
+- excerpt export.
+
+UNKNOWN and stale rights state fail closed for external transmission.
+
+### Retrieval adversarial tests
+
+- unauthorized source never appears in lexical candidates;
+- unauthorized source never appears in vector candidates;
+- tenant A source never appears in tenant B context;
+- revoked shared source disappears before the next high-consistency request;
+- prompt injection inside an authorized source cannot widen tools, rights or source scope;
+- reranker receives only already-authorized candidates.
+
+### Citation fixtures
+
+Use CSL/citeproc against a real style corpus. Formatting correctness and source/metadata validity remain separate tests.
+
+### Adoption
+
+Postgres FTS/pgvector remains default until measured scale or ranking quality justifies a dedicated search service.
+
+## 13. Current-to-target matrix
 
 | Current component | Target | Action |
 | --- | --- | --- |
@@ -345,7 +382,7 @@ Test future tenant migration as an explicit maintenance operation, not implicit 
 | JS DOCX | high-fidelity conversion service | preserve F1; benchmark Open XML path |
 | mentor demo/local persistence | authorized institution mentor workflow | build only after ReBAC + backend evidence boundaries |
 
-## 13. Branch/PR discipline
+## 14. Branch/PR discipline
 
 Recommended branch families:
 
@@ -371,7 +408,7 @@ Each spike PR includes:
 - rollback/removal plan;
 - final ADOPT / REJECT / DEFER recommendation.
 
-## 14. Immediate priority
+## 15. Immediate priority
 
 Recommended order:
 
@@ -387,7 +424,7 @@ Recommended order:
 
 Reason: Evidence and authorization define the trust boundary. C2PA and local-first can then build on a stable trust model. Institutional protocols follow without forcing their schemas into the core.
 
-## 15. No-big-bang rule
+## 16. No-big-bang rule
 
 At no point is the existing Pisač replaced wholesale.
 
