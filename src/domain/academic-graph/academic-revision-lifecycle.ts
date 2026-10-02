@@ -28,7 +28,7 @@ export function beginAcademicRevisionDraft(ledger:AcademicRevisionLedger,input:A
  const sealed=currentSealedRevision(ledger,input.documentId,input.objectId);if(sealed&&input.baseRevision!==sealed)throw new Error("academic-revision: stale base");
  const existing=ledger.drafts.find(x=>x.documentId===input.documentId&&x.objectId===input.objectId);
  if(existing){
-  if(existing.baseRevision!==input.baseRevision||existing.bindingId!==input.bindingId||existing.openedAt!==input.openedAt)throw new Error("academic-revision: conflicting draft");
+  if(existing.baseRevision!==input.baseRevision||existing.bindingId!==input.bindingId||existing.openedAt!==input.openedAt)throw new Error("academic-revision: conflicting draft");if(Date.parse(normalized.lastActivityAt)<Date.parse(existing.lastActivityAt))throw new Error("academic-revision: activity time rollback");
   if(!activityContains(normalized.activity,existing.activity))throw new Error("academic-revision: stale activity");
   const merged=mergeActivity(existing.activity,normalized.activity);
   if(activityContains(existing.activity,normalized.activity)&&existing.afterText!==normalized.afterText)throw new Error("academic-revision: conflicting snapshot");
@@ -42,7 +42,7 @@ export function beginAcademicRevisionDraft(ledger:AcademicRevisionLedger,input:A
 export function sealAcademicRevisionDraft(ledger:AcademicRevisionLedger,input:{draftId:string;revisionId:string;sealedAt:string}):AcademicRevisionLedger{
  const draft=ledger.drafts.find(x=>x.draftId===input.draftId);if(!draft)throw new Error("academic-revision: missing draft");
  if(!input.revisionId||ledger.revisions.some(x=>x.revisionId===input.revisionId)||ledger.drafts.some(x=>x.draftId===input.revisionId))throw new Error("academic-revision: duplicate revision id");
- if(!Number.isFinite(Date.parse(input.sealedAt))||Date.parse(input.sealedAt)<Date.parse(draft.lastActivityAt))throw new Error("academic-revision: invalid seal time");
+ if(!Number.isFinite(Date.parse(input.sealedAt))||Date.parse(input.sealedAt)<=Date.parse(draft.lastActivityAt))throw new Error("academic-revision: invalid seal time");
  const latest=currentSealedRevision(ledger,draft.documentId,draft.objectId);if(latest&&latest!==draft.baseRevision)throw new Error("academic-revision: stale base");
  const revision:SealedAcademicRevision={revisionId:input.revisionId,documentId:draft.documentId,objectId:draft.objectId,revision:draft.baseRevision+1,baseRevision:draft.baseRevision,bindingId:draft.bindingId,openedAt:draft.openedAt,lastActivityAt:draft.lastActivityAt,sealedAt:input.sealedAt,activity:draft.activity,afterText:draft.afterText};
  return{revisions:[...ledger.revisions,revision],drafts:ledger.drafts.filter(x=>x.draftId!==draft.draftId)};
@@ -52,7 +52,7 @@ export function validateAcademicRevisionLedger(ledger:AcademicRevisionLedger):bo
  try{
   const revisionIds=new Set<string>(),draftIds=new Set<string>(),byObject=new Map<string,SealedAcademicRevision[]>();
   for(const r of ledger.revisions){
-   if(revisionIds.has(r.revisionId)||!r.revisionId||!r.documentId||!r.objectId||!r.bindingId||r.revision!==r.baseRevision+1||r.baseRevision<1||!Number.isFinite(Date.parse(r.openedAt))||!Number.isFinite(Date.parse(r.lastActivityAt))||Date.parse(r.lastActivityAt)<Date.parse(r.openedAt)||!Number.isFinite(Date.parse(r.sealedAt))||Date.parse(r.sealedAt)<Date.parse(r.lastActivityAt)||!r.activity.some(x=>x.eventIndexes.length)||!validText(r.afterText))return false;
+   if(revisionIds.has(r.revisionId)||!r.revisionId||!r.documentId||!r.objectId||!r.bindingId||r.revision!==r.baseRevision+1||r.baseRevision<1||!Number.isFinite(Date.parse(r.openedAt))||!Number.isFinite(Date.parse(r.lastActivityAt))||Date.parse(r.lastActivityAt)<Date.parse(r.openedAt)||!Number.isFinite(Date.parse(r.sealedAt))||Date.parse(r.sealedAt)<=Date.parse(r.lastActivityAt)||!r.activity.some(x=>x.eventIndexes.length)||!validText(r.afterText))return false;
    revisionIds.add(r.revisionId);mergeActivity([],r.activity);const k=key(r.documentId,r.objectId),xs=byObject.get(k)??[];xs.push(r);byObject.set(k,xs);
   }
   for(const xs of byObject.values()){xs.sort((a,b)=>a.revision-b.revision);for(let i=1;i<xs.length;i++)if(xs[i].baseRevision!==xs[i-1].revision||Date.parse(xs[i].openedAt)<=Date.parse(xs[i-1].sealedAt))return false;}
@@ -60,7 +60,7 @@ export function validateAcademicRevisionLedger(ledger:AcademicRevisionLedger):bo
   for(const d of ledger.drafts){
    const k=key(d.documentId,d.objectId);
    if(draftIds.has(d.draftId)||revisionIds.has(d.draftId)||draftKeys.has(k)||!d.draftId||!d.documentId||!d.objectId||!d.bindingId||d.baseRevision<1||!Number.isFinite(Date.parse(d.openedAt))||!Number.isFinite(Date.parse(d.lastActivityAt))||Date.parse(d.lastActivityAt)<Date.parse(d.openedAt)||!d.activity.some(x=>x.eventIndexes.length)||!validText(d.afterText))return false;
-   draftIds.add(d.draftId);draftKeys.add(k);mergeActivity([],d.activity);const latest=currentSealedRevision(ledger,d.documentId,d.objectId);if(latest&&d.baseRevision!==latest)return false;
+   draftIds.add(d.draftId);draftKeys.add(k);mergeActivity([],d.activity);const latest=currentSealedRevision(ledger,d.documentId,d.objectId);if(latest&&d.baseRevision!==latest)return false;const previous=ledger.revisions.filter(x=>x.documentId===d.documentId&&x.objectId===d.objectId&&x.revision===d.baseRevision).at(0);if(previous&&Date.parse(d.openedAt)<=Date.parse(previous.sealedAt))return false;
   }
   return true;
  }catch{return false;}
