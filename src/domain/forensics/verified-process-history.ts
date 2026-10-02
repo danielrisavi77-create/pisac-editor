@@ -8,5 +8,6 @@ export async function verifyAndBuildProcessHistory(records:readonly ProcessSegme
  const invalidSessionIds=[...invalid].sort();
  const extra=[...invalidSessionIds.map(sessionId=>({kind:"invalid-bundle" as const,sessionId})),...activeSessionIds.map(sessionId=>({kind:"active-segment" as const,sessionId}))];
  const history:ProcessHistory=extra.length?{...built,valid:false,issues:[...built.issues,...extra]}:built;
- return{verified:history.valid,history,segments:history.valid?valid:[],invalidSessionIds};
+ const bySession=new Map(valid.map(x=>[x.record.sessionId,x]));const orderedSegments=history.valid?history.segments.map(x=>bySession.get(x.sessionId)).filter((x):x is VerifiedHistorySegment=>x!==undefined):[];
+ return{verified:history.valid,history,segments:orderedSegments,invalidSessionIds};
 }
