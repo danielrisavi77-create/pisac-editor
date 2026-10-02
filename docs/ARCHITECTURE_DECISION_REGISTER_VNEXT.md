@@ -30,6 +30,9 @@
 | ADR-VN-012 | Authorization | owner-only RLS / role checks | ReBAC/OpenFGA-style fine-grained authorization | ADD | adversarial cross-user/course/institution suite; high-consistency fail-closed evidence/private checks; revoke proven before access is considered removed; RLS remains defence-in-depth |
 | ADR-VN-012A | Enterprise provisioning | none | optional SCIM 2.0 for account/group lifecycle | ADD WHEN REQUIRED | adopt only for institutional directory provisioning; never substitute SCIM groups for academic course truth by default |
 | ADR-VN-013 | Academic policy | domain-specific policies planned | separate Policy Engine | KEEP/EVOLVE | do not encode academic policy as access-control tuples |
+| ADR-VN-013A | Research rights | planned operation-level rights | explicit operation-level Rights Engine; UNKNOWN fails closed for external processing | KEEP/EVOLVE | rights/version/operation fixture matrix |
+| ADR-VN-013B | Search / RAG | deferred | authorized candidate set before FTS/vector retrieval; Postgres FTS + pgvector first | ADD LATER | prove no unauthorized SourceVersion can enter model context |
+| ADR-VN-013C | Citation formatting | deferred | deterministic CSL/citeproc layer | ADD LATER | fixture corpus across required faculty styles; LLM never formatter authority |
 | ADR-VN-014 | LMS integration | none | LTI 1.3 Advantage first | ADD | certified/reference-platform interoperability tests |
 | ADR-VN-015 | Higher-ed SIS integration | generic AcademicSystemProvider / ISVU interest | Edu-API-oriented higher-ed adapter + ISVU fallback | WATCH/ADD | Edu-API maturity/institution support; ISVU used only for missing Croatia-specific facts |
 | ADR-VN-016 | OneRoster | not used | do not make higher-ed core dependency | REJECT | reconsider only for a concrete customer with OneRoster as source |
