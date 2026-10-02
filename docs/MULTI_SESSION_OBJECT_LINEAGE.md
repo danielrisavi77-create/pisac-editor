@@ -14,9 +14,10 @@ Older `pisac-f1-pm-v1` events without `touchedNodeIds` remain replayable and pro
 
 ## Persistent AcademicObjectRegistry
 
-An academic object is associated explicitly with an existing canonical editor `nodeId`. No prose matching or semantic guessing creates a binding.
+An academic object is associated explicitly with an existing canonical editor `nodeId` inside one `documentId`. Academic object IDs are graph-local, so registry identity is the pair `documentId + objectId`; identical IDs in different works remain independent. No prose matching or semantic guessing creates a binding.
 
 Bindings are append-only records containing:
+- `documentId`
 - `bindingId`
 - academic `objectId` and type
 - the object's current graph revision
@@ -25,7 +26,7 @@ Bindings are append-only records containing:
 - monotonic `bindingVersion`
 - `previousBindingId`
 
-The registry has its own IndexedDB lifecycle, separate from the document journal and process ledger. A unique `[objectId+bindingVersion]` index prevents two persisted rows from occupying the same version of one object's binding history.
+The registry has its own IndexedDB lifecycle, separate from the document journal and process ledger. A unique `[documentId+objectId+bindingVersion]` index prevents two persisted rows from occupying the same version of one object's binding history while allowing the same academic object ID in different documents.
 
 Loading replays persisted rows through the domain validator. Corrupt or impossible registry history is surfaced as `invalid-registry`; rows are not silently repaired or deleted.
 
@@ -36,10 +37,11 @@ Rebindings require a strictly later `boundAt`. Equal timestamps are rejected bec
 A historical binding is effective from its `boundAt` until the next binding for that object.
 
 Only process events that:
-1. belong to a fully valid verified process history,
-2. cryptographically verify,
-3. contain recomputed `touchedNodeIds` for the bound node, and
-4. occur strictly inside the binding's effective interval
+1. belong to the same `documentId` as the registry binding,
+2. belong to a fully valid verified process history,
+3. cryptographically verify,
+4. contain recomputed `touchedNodeIds` for the bound node, and
+5. occur strictly inside the binding's effective interval
 
 may appear as verified object activity.
 
