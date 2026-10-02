@@ -1,4 +1,4 @@
-import"fake-indexeddb/auto";import{afterEach,describe,expect,it}from"vitest";import Dexie from"dexie";import{markProcessInterrupted,openProcessLedger,saveProcessCheckpoint}from"./process-ledger";import type{CapturedProcess}from"@/editor/process-capture";
+import"fake-indexeddb/auto";import{afterEach,describe,expect,it}from"vitest";import Dexie from"dexie";import{loadProcessLedger,markProcessInterrupted,openProcessLedger,saveProcessCheckpoint}from"./process-ledger";import type{CapturedProcess}from"@/editor/process-capture";
 const name="pisac-process-ledger-link-test";afterEach(async()=>Dexie.delete(name));
 const b=(id:string,head:string):CapturedProcess=>({format:"pisac-local-transactions-v1",schema:"pisac-f1-pm-v1",documentId:"d",sessionId:id,initialDocument:{type:"doc",content:[{type:"paragraph"}]},genesisHash:head,events:[],receipt:{eventCount:0,headHash:head,finalDocumentHash:"f"}});
 describe("process ledger continuation integrity",()=>{
@@ -23,7 +23,15 @@ describe("process ledger continuation integrity",()=>{
   await saveProcessCheckpoint(o.db,{bundle:b("a-child","h2"),status:"active",startedAt:"2026-09-29T20:00:00Z",updatedAt:"2026-09-29T20:00:00Z",previousSessionHead:"h1"});
   await markProcessInterrupted(o.db,"d","a-child","2026-09-29T20:00:00Z");
   await saveProcessCheckpoint(o.db,{bundle:b("m-tail","h3"),status:"active",startedAt:"2026-09-29T20:00:00Z",updatedAt:"2026-09-29T20:00:00Z",previousSessionHead:"h2"});
-  const rows=await o.db.segments.where("documentId").equals("d").toArray();expect(rows).toHaveLength(3);
+  const rows=await loadProcessLedger(o.db,"d");expect(rows.segments.map(x=>x.sessionId)).toEqual(["z-parent","a-child","m-tail"]);
+  o.db.close();
+ });
+ it("does not allow an active session to rewrite its parent link",async()=>{
+  const o=await openProcessLedger(name);if(!o.ok)throw new Error("open");
+  await saveProcessCheckpoint(o.db,{bundle:b("s1","h1"),status:"active",startedAt:"2026-09-29T20:00:00Z",updatedAt:"2026-09-29T20:01:00Z",previousSessionHead:null});
+  await markProcessInterrupted(o.db,"d","s1","2026-09-29T20:01:00Z");
+  await saveProcessCheckpoint(o.db,{bundle:b("s2","h2"),status:"active",startedAt:"2026-09-29T20:02:00Z",updatedAt:"2026-09-29T20:02:00Z",previousSessionHead:"h1"});
+  await expect(saveProcessCheckpoint(o.db,{bundle:b("s2","h2"),status:"active",startedAt:"2026-09-29T20:02:00Z",updatedAt:"2026-09-29T20:03:00Z",previousSessionHead:null})).rejects.toThrow("session-identity");
   o.db.close();
  });
  it("rejects a continuation whose start overlaps the terminal parent",async()=>{
