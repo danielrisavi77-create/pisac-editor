@@ -256,7 +256,7 @@ describe("sanitizeReturnPath", () => {
 describe("middleware redirects", () => {
   async function runMiddleware(path: string, user: { id: string } | null) {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://project.supabase.test");
-    vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-key");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "publishable-key");
 
     const { createServerClient } = await import("@supabase/ssr");
     vi.mocked(createServerClient).mockImplementation(

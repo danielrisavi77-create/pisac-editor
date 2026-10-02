@@ -19,16 +19,18 @@ export default function PostavljanjePage() {
     <main className="page">
       <h1 style={{ fontSize: "2rem", margin: "0 0 0.5rem" }}>Postavljanje</h1>
       <p style={{ color: "var(--muted)", margin: "0 0 2rem" }}>
-        Supabase još nije konfiguriran. Prijava radi tek kad su postavljene ove
-        dvije varijable okoline:
+        Supabase nije konfiguriran za ovu aplikacijsku instancu. Prijava radi tek
+        kad su postavljene ove dvije javne varijable okoline:
       </p>
 
       <code style={code}>NEXT_PUBLIC_SUPABASE_URL</code>
-      <code style={code}>NEXT_PUBLIC_SUPABASE_ANON_KEY</code>
+      <code style={code}>NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY</code>
 
       <p style={{ color: "var(--muted)" }}>
-        Vrijednosti se nikad ne zapisuju u repozitorij. Predložak je u
-        datoteci <code>.env.example</code>.
+        Vrijednosti se ne zapisuju u repozitorij. Za postojeće starije deployeve
+        podržan je i privremeni <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code>
+        fallback; novi deploy koristi publishable key. Predložak je u datoteci
+        <code>.env.example</code>.
       </p>
 
       <p style={{ marginTop: "2rem" }}>
