@@ -1,5 +1,5 @@
 import type{Schema}from"@tiptap/pm/model";import type{AcademicObjectBindingInterval}from"@/domain/academic-graph/academic-object-registry";import type{VerifiedHistorySegment}from"./verified-process-history";import{deriveVerifiedObjectBinding}from"./verified-object-binding";
-export type VerifiedObjectActivity={documentId:string;objectId:string;bindingId:string;nodeId:string;sessionId:string;eventIndexes:readonly number[];beforeText:string;afterText:string;startedAt:string};
+export type VerifiedObjectActivity={documentId:string;objectId:string;bindingId:string;nodeId:string;sessionId:string;eventIndexes:readonly number[];beforeText:string;afterText:string|null;startedAt:string};
 export async function deriveVerifiedObjectActivity(intervals:readonly AcademicObjectBindingInterval[],segments:readonly VerifiedHistorySegment[],schema:Schema):Promise<VerifiedObjectActivity[]>{
  const out:VerifiedObjectActivity[]=[];
  for(const s of segments){
