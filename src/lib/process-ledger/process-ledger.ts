@@ -90,7 +90,7 @@ export async function markProcessInterrupted(db:ProcessLedgerDatabase,documentId
  });
 }
 export async function loadProcessLedger(db:ProcessLedgerDatabase,documentId:string):Promise<{segments:ProcessSegmentRecord[];invalidSessionIds:string[]}>{
- const rows=await db.segments.where("documentId").equals(documentId).toArray();let segments:ProcessSegmentRecord[]=[],invalidSessionIds:string[]=[];
+ const rows=await db.segments.where("documentId").equals(documentId).toArray();let segments:ProcessSegmentRecord[]=[];const invalidSessionIds:string[]=[];
  for(const r of rows){if(structurallyValid(r))segments.push(structuredClone(r));else invalidSessionIds.push(r.sessionId);}
  const ordered=chainOrder(segments);if(ordered)segments=ordered;else segments.sort((a,b)=>Date.parse(a.startedAt)-Date.parse(b.startedAt)||a.sessionId.localeCompare(b.sessionId));
  invalidSessionIds.sort();return{segments,invalidSessionIds};
