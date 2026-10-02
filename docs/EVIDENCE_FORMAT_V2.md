@@ -51,6 +51,8 @@ A v2 segment contains:
 
 Structural validation also requires the per-event document hash chain to connect from `initialDocumentHash` to `finalDocumentHash`.
 
+For Evidence v2, `initialDocumentHash`, every event before/after document hash, and `finalDocumentHash` are intended to be SHA-256 hashes of the corresponding document JSON serialized with the same RFC 8785 JCS rules. A later v1→v2 projection must therefore replay the legacy process and recompute these hashes; it must not copy historic v1 document hashes merely because the algorithms happen to coincide for many inputs.
+
 ## Cryptographic identity
 
 The segment digest is:
