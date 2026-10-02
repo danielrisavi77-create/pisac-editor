@@ -102,7 +102,7 @@ create policy pisac_documents_select_own
       select p.id
       from public.pisac_projects p
       join public.pisac_workspaces w on w.id = p.workspace_id
-      where w.owner_id = auth.uid()
+      where w.owner_id = (select auth.uid())
     )
   );
 
@@ -116,7 +116,7 @@ create policy pisac_document_revisions_select_own
       from public.pisac_documents d
       join public.pisac_projects p on p.id = d.project_id
       join public.pisac_workspaces w on w.id = p.workspace_id
-      where w.owner_id = auth.uid()
+      where w.owner_id = (select auth.uid())
     )
   );
 
@@ -366,6 +366,10 @@ comment on function public.pisac_ensure_document(uuid) is
   'Get-or-create the single F1 document of a project. Security definer, so ownership is checked in the body against auth.uid().';
 comment on function public.pisac_commit_document(uuid, bigint, jsonb, text) is
   'Compare-and-set commit of one canonical document revision. Idempotent per (document_id, auth.uid(), client_transaction_id). A stale base is reported, never overwritten.';
+
+-- Explicit Data API read privilege. Writes remain RPC-only below.
+grant select on table public.pisac_documents to authenticated;
+grant select on table public.pisac_document_revisions to authenticated;
 
 -- Belt and braces: the policies above already gate reads, but these revokes
 -- make the "no anonymous access" rule explicit rather than assumed.
