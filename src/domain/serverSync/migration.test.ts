@@ -42,6 +42,7 @@ function splitStatements(source: string): string[] {
     .toLowerCase()
     .replace(/\/\*[\s\S]*?\*\//g, " ")
     .replace(/\$\$[\s\S]*?\$\$/g, " $body$ ")
+    .replace(/\r\n?/g, "\n")
     .split("\n")
     .map((line) => line.replace(/--.*$/, ""))
     .join("\n")
@@ -359,6 +360,18 @@ describe("migration tripwires fire on bad SQL", () => {
 
   it("accepts a revoke naming anon", () => {
     expect(anonStatements("revoke all on table public.pisac_documents from anon;")).toEqual([]);
+  });
+
+  it("parses Windows CRLF around comments, policies and function grants", () => {
+    const windowsSql =
+      "-- explicit denial for anon\r\n" +
+      "revoke all on table public.pisac_documents from anon;\r\n" +
+      "create policy p on public.pisac_documents for select using (true);\r\n" +
+      "revoke all on function public.pisac_ensure_document(uuid) from anon;\r\n";
+    expect(anonStatements(windowsSql)).toEqual([]);
+    expect(policies(windowsSql)).toEqual([
+      { table: "pisac_documents", command: "select" },
+    ]);
   });
 
   it("does not let a line comment hide a grant to anon", () => {

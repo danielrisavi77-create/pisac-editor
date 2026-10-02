@@ -33,6 +33,7 @@ function splitStatements(source: string): string[] {
     .toLowerCase()
     .replace(/\/\*[\s\S]*?\*\//g, " ")
     .replace(/\$\$[\s\S]*?\$\$/g, " $body$ ")
+    .replace(/\r\n?/g, "\n")
     .split("\n")
     .map((line) => line.replace(/--.*$/, ""))
     .join("\n")
@@ -279,6 +280,17 @@ describe("migration tripwires fire on bad SQL", () => {
     expect(anonStatements("revoke all on table public.pisac_checkpoints from anon;")).toEqual(
       [],
     );
+  });
+
+  it("parses Windows CRLF without attaching a comment to the following revoke", () => {
+    const windowsSql =
+      "-- no anonymous checkpoint access\r\n" +
+      "revoke all on table public.pisac_checkpoints from anon;\r\n" +
+      "create policy p on public.pisac_checkpoints for select using (true);\r\n";
+    expect(anonStatements(windowsSql)).toEqual([]);
+    expect(policies(windowsSql)).toEqual([
+      { table: "pisac_checkpoints", command: "select" },
+    ]);
   });
 
   it("reads the policy target and command from the create policy clause", () => {
