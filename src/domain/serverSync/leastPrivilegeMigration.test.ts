@@ -8,13 +8,19 @@ const MIGRATION_FILENAME = "20261002185020_gate1_least_privilege.sql";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const migrationPath = path.join(repoRoot, "supabase/migrations", MIGRATION_FILENAME);
 const sql = readFileSync(migrationPath, "utf8").toLowerCase();
-const statements = sql
-  .split("\n")
-  .map((line) => line.replace(/--.*$/, ""))
-  .join("\n")
-  .split(";")
-  .map((statement) => statement.trim().replace(/\s+/g, " "))
-  .filter(Boolean);
+
+function splitStatements(source: string): string[] {
+  return source
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/--.*$/, ""))
+    .join("\n")
+    .split(";")
+    .map((statement) => statement.trim().replace(/\s+/g, " "))
+    .filter(Boolean);
+}
+
+const statements = splitStatements(sql);
 
 const CRUD = ["pisac_workspaces", "pisac_projects"] as const;
 const READ_ONLY = [
@@ -55,6 +61,17 @@ describe(MIGRATION_FILENAME, () => {
       );
     }
     expect(sql).not.toMatch(/grant\s+[^;]*(insert|update|delete|truncate|references|trigger|maintain)[^;]*pisac_(documents|document_revisions|checkpoints)/);
+  });
+
+  it("parses the same revoke contract from Windows CRLF input", () => {
+    const windowsSql =
+      "-- least privilege\r\n" +
+      "revoke all on table public.pisac_workspaces from anon, authenticated;\r\n" +
+      "grant select, insert, update, delete on table public.pisac_workspaces to authenticated;\r\n";
+    expect(splitStatements(windowsSql)).toEqual([
+      "revoke all on table public.pisac_workspaces from anon, authenticated",
+      "grant select, insert, update, delete on table public.pisac_workspaces to authenticated",
+    ]);
   });
 
   it("does not modify the canonical RPC execute contract", () => {

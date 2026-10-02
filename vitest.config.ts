@@ -4,11 +4,15 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   resolve: {
-    // Mirrors the `@/*` path mapping in tsconfig.json, so a test may import a
-    // module (such as `middleware.ts`) that uses the alias.
-    alias: {
-      "@/": fileURLToPath(new URL("./src/", import.meta.url)),
-    },
+    // Mirrors the `@/*` path mapping in tsconfig.json. A regex + normalized
+    // forward-slash replacement is deliberate: Vite's string alias worked on
+    // Linux CI but resolved `@/` imports as packages on Windows.
+    alias: [
+      {
+        find: /^@\//,
+        replacement: `${fileURLToPath(new URL("./src/", import.meta.url)).replaceAll("\\", "/")}/`,
+      },
+    ],
   },
   test: {
     environment: "node",
