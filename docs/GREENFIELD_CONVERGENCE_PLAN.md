@@ -260,6 +260,10 @@ SATOSA/equivalent standards-based federation proxy.
 - revoked/changed affiliation does not silently preserve stale Pisač authorization;
 - eduGAIN path proven separately from local AAI where required.
 
+### Optional enterprise provisioning
+
+If an institution requires directory-driven lifecycle provisioning, add a separate SCIM 2.0 spike for Users/Groups. SCIM account/group lifecycle is not allowed to silently become the academic enrollment source; LTI/Edu-API/SIS mappings remain explicit.
+
 ## 10. Workstream H — DOCX fidelity
 
 ### Baseline
