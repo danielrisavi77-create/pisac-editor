@@ -4,7 +4,7 @@ export async function deriveVerifiedObjectActivity(intervals:readonly AcademicOb
  const out:VerifiedObjectActivity[]=[];
  for(const s of segments){
   for(const interval of intervals){
-   const b=await deriveVerifiedObjectBinding(s.bundle,schema,{objectId:interval.binding.objectId,objectType:interval.binding.objectType,nodeId:interval.binding.nodeId,revision:interval.binding.objectRevision,evidenceIds:[],effectiveFrom:interval.effectiveFrom,effectiveUntil:interval.effectiveUntil});
+   const b=await deriveVerifiedObjectBinding(s.bundle,schema,{objectId:interval.binding.objectId,objectType:interval.binding.objectType,nodeId:interval.binding.nodeId,revision:interval.binding.objectRevision,effectiveFrom:interval.effectiveFrom,effectiveUntil:interval.effectiveUntil});
    if(!b)continue;
    const firstIndex=b.eventIndexes[0];const firstEvent=s.bundle.events[firstIndex]?.event;if(!firstEvent)throw new Error("verified-object-activity: missing first event");
    out.push({objectId:b.objectId,bindingId:interval.binding.bindingId,nodeId:b.nodeId,sessionId:b.sessionId,eventIndexes:b.eventIndexes,beforeText:b.beforeText,afterText:b.afterText,startedAt:firstEvent.occurredAt});
