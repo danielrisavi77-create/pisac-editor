@@ -235,7 +235,7 @@ Entra ID ----------/
 
 SATOSA or an equivalent standards-based broker is a candidate implementation. It is not mandatory until multiple serious institutional identity providers justify an operational broker.
 
-### 6.3 Enterprise identity lifecycle (optional SCIM 2.0)
+### 6.4 Enterprise identity lifecycle (optional SCIM 2.0)
 
 For institutions that require central account/group provisioning from enterprise directories, expose an optional SCIM 2.0 service boundary (RFC 7643 / RFC 7644).
 
@@ -249,7 +249,7 @@ SCIM is **not** the source of truth for academic enrollment unless an institutio
 
 A deprovisioned external account triggers relationship re-evaluation/revocation; it does not directly rewrite academic history.
 
-### 6.4 Fine-grained authorization
+### 6.5 Fine-grained authorization
 
 Owner-only RLS is not sufficient for the target product.
 
@@ -296,9 +296,25 @@ mark relationship REVOKING / stop issuing new share capability
 
 A grant may be delayed by an authorization outage. A revoke must prefer temporary denial over continued sensitive access.
 
+#### Break-glass access
+
+There is no hidden content-reading superadmin role.
+
+Exceptional support/security access requires:
+
+- an explicit BREAK_GLASS relationship/capability;
+- step-up authentication;
+- a structured reason/ticket reference;
+- narrow resource scope;
+- automatic expiration;
+- immutable audit event;
+- optional institution/student notification according to incident policy.
+
+Normal support tooling operates on diagnostics and metadata without raw document/evidence access.
+
 If an outbox/projection is used between application state and an external ReBAC store, it may not be the only enforcement mechanism for immediate revocation of evidence/private-content access.
 
-### 6.5 Academic Policy Engine is separate
+### 6.6 Academic Policy Engine is separate
 
 Access control answers **who may perform an operation**.
 
