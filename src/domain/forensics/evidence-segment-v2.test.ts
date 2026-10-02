@@ -113,6 +113,19 @@ describe("EvidenceSegmentV2", () => {
     expect(isEvidenceSegmentV2(source)).toBe(false);
   });
 
+
+  it("rejects unknown envelope fields so future semantics cannot be smuggled into v2", () => {
+    const segment = fixture() as EvidenceSegmentV2 & { futureMeaning?: string };
+    segment.futureMeaning = "do-not-ignore";
+    expect(isEvidenceSegmentV2(segment)).toBe(false);
+
+    const event = fixture();
+    (event.events[0] as EvidenceSegmentV2["events"][number] & {
+      futureMeaning?: string;
+    }).futureMeaning = "do-not-ignore";
+    expect(isEvidenceSegmentV2(event)).toBe(false);
+  });
+
   it("rejects schema-marker drift rather than guessing how bytes should be interpreted", () => {
     const segment = fixture() as EvidenceSegmentV2 & {
       canonicalization: string;
