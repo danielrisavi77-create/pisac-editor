@@ -6,8 +6,8 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 - F1 authoring kernel is implemented on main: auth/workspace, canonical document/editor, Dexie durability, sync state machine, CAS server store, explicit conflict/recovery, checkpoints, DOCX, CI/Playwright, security/perf/quality passes.
 - Dedicated Supabase project `Pisac` (`cxwxxcwrgushfkisfpxz`, eu-central-1) is `ACTIVE_HEALTHY`.
 - Live database has five F1 public tables with RLS enabled and zero rows before synthetic authenticated verification.
-- Live migration history has seven entries: six original F1 migrations plus `f1_live_hardening`.
-- Supabase advisors were re-run after hardening. Remaining security findings are only the three intentional authenticated-callable SECURITY DEFINER RPCs; remaining performance findings are unused-index INFO on the empty database.
+- Live migration history has eight entries: six original F1 migrations plus `f1_live_hardening` and `gate1_least_privilege`.
+- Post-hardening ACL proof: workspace/project = SELECT/INSERT/UPDATE/DELETE only; documents/revisions/checkpoints = SELECT only; `TRUNCATE/REFERENCES/TRIGGER/MAINTAIN` removed; anon table access remains denied. RPC EXECUTE remains authenticated-only. Advisors still show only the three intentional SECURITY DEFINER WARNs + unused-index INFO.
 - Lekta staging remains paused to keep the Pisač project active on the current plan; production Lekta was not changed.
 - Supabase publishable keys are now preferred. `NEXT_PUBLIC_SUPABASE_ANON_KEY` is compatibility fallback only.
 - Definition ≠ PASS: backend activation alone does not make authenticated F1 fixtures PASS.
@@ -22,6 +22,7 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 - DONE G1-BE-006 Pisač backend restored and healthy.
 - DONE G1-BE-007 existing live migration history preserved; forward-only `f1_live_hardening` applied.
 - DONE G1-BE-008 security/performance advisors run and triaged.
+- DONE DB-HARD-001 least-privilege migration `gate1_least_privilege` applied and live ACL/RPC contract re-verified.
 
 ## Queue — top = next
 
@@ -48,8 +49,8 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 
 ## Active stacked product work
 
-- PR #33 Academic Revision Lifecycle — open, non-draft.
-- PR #34 revision-specific EvidenceBasis — draft, stacked on #33.
+- PR #33 Academic Revision Lifecycle — MERGED to main.
+- PR #34 revision-specific EvidenceBasis — draft, now based on main.
 - PR #35 persistent ReviewCoverage + mentor revision projection — draft, stacked on #34.
 - Finish/reconcile this stack in order; do not let it replace Gate 1 live-backend evidence.
 
@@ -58,4 +59,5 @@ Updated by the orchestrator after each iteration. Keep ≤80 lines.
 - Public `/demo` is local-only evidence; it never proves server sync, RLS, canonical revisions or mentor authorization.
 - AI Architect stays frozen during F1 except keeping its tests green.
 - No production live AI endpoint until identity/quota/distributed-abuse gates exist.
-- Local Node mismatch is tooling only; CI remains authoritative on the pinned Node version.
+- Windows local test parity issue is tracked in #39 (Vitest alias + CRLF SQL parser + noisy perf p95); GitHub CI remains authoritative until fixed.
+- Dependency audit issue #40 tracks vulnerable PostCSS transitively pinned by Next 15.5.25.
