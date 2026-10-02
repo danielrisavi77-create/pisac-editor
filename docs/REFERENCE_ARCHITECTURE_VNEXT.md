@@ -822,6 +822,24 @@ Service-role credentials never reach browsers. Parser and AI worker identities h
 
 Do not invent custom encryption primitives. Provider KMS/HSM and established envelope-encryption patterns are the default.
 
+### 20.3 Protocol and schema evolution
+
+Offline clients make backwards compatibility a correctness requirement, not a convenience.
+
+Rules:
+
+- every durable client/server payload declares a schema/protocol version;
+- Evidence schemas are immutable once receipts exist; new meaning requires a new version;
+- server changes follow expand -> migrate -> contract rather than destructive same-release changes;
+- local database migrations are explicit and recoverable;
+- an offline client reconnecting after a long period is either upgraded/migrated safely or rejected with a recoverable upgrade-required state;
+- unknown enum/status/schema values fail closed when guessing could alter academic state;
+- minSupportedClientVersion and compatibility windows are explicit deployment configuration;
+- canonical document commits are validated by the current server regardless of client version;
+- no server deploy may reinterpret already-persisted bytes under changed semantics.
+
+Compatibility tests include at least N-1 clients and any still-supported long-offline client version against the current server.
+
 ## 21. Target component map
 
 | Capability | Target choice | Status |
