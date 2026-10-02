@@ -189,7 +189,7 @@ export default function LiveProcessEditor(props: EditorProps) {
     const $from=editor.state.selection.$from;let nodeId:string|null=null;
     for(let d=$from.depth;d>=0;d--){const raw:unknown=$from.node(d).attrs?.nodeId;if(typeof raw==="string"&&raw.trim()){nodeId=raw;break;}}
     if(!nodeId){setRegistryError("selection-has-no-node-id");return;}
-    try{const current=currentAcademicObjectBinding(objectRegistry,"CLAIM-014");if(current?.nodeId===nodeId&&current.objectRevision===4)return;const next=await appendPersistedAcademicBinding(registryDb.current,{bindingId:crypto.randomUUID(),objectId:"CLAIM-014",objectType:"claim",objectRevision:current?.objectRevision??4,nodeId,boundAt:new Date().toISOString()});setObjectRegistry(r=>({bindings:[...r.bindings,next]}));}
+    try{const current=currentAcademicObjectBinding(objectRegistry,"CLAIM-014");if(current?.nodeId===nodeId&&current.objectRevision===4)return;await appendPersistedAcademicBinding(registryDb.current,{bindingId:crypto.randomUUID(),objectId:"CLAIM-014",objectType:"claim",objectRevision:current?.objectRevision??4,nodeId,boundAt:new Date().toISOString()});const loaded=await loadAcademicObjectRegistry(registryDb.current);if(!loaded.ok)throw new Error("invalid-registry");setObjectRegistry(loaded.registry);}
     catch{setRegistryError("binding-write-failed");}
   }
 
