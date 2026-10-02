@@ -65,26 +65,26 @@ create policy pisac_workspaces_select_own
   on public.pisac_workspaces
   for select
   to authenticated
-  using (owner_id = auth.uid());
+  using (owner_id = (select auth.uid()));
 
 create policy pisac_workspaces_insert_own
   on public.pisac_workspaces
   for insert
   to authenticated
-  with check (owner_id = auth.uid());
+  with check (owner_id = (select auth.uid()));
 
 create policy pisac_workspaces_update_own
   on public.pisac_workspaces
   for update
   to authenticated
-  using (owner_id = auth.uid())
-  with check (owner_id = auth.uid());
+  using (owner_id = (select auth.uid()))
+  with check (owner_id = (select auth.uid()));
 
 create policy pisac_workspaces_delete_own
   on public.pisac_workspaces
   for delete
   to authenticated
-  using (owner_id = auth.uid());
+  using (owner_id = (select auth.uid()));
 
 create policy pisac_projects_select_own
   on public.pisac_projects
@@ -92,7 +92,7 @@ create policy pisac_projects_select_own
   to authenticated
   using (
     workspace_id in (
-      select w.id from public.pisac_workspaces w where w.owner_id = auth.uid()
+      select w.id from public.pisac_workspaces w where w.owner_id = (select auth.uid())
     )
   );
 
@@ -102,7 +102,7 @@ create policy pisac_projects_insert_own
   to authenticated
   with check (
     workspace_id in (
-      select w.id from public.pisac_workspaces w where w.owner_id = auth.uid()
+      select w.id from public.pisac_workspaces w where w.owner_id = (select auth.uid())
     )
   );
 
@@ -112,12 +112,12 @@ create policy pisac_projects_update_own
   to authenticated
   using (
     workspace_id in (
-      select w.id from public.pisac_workspaces w where w.owner_id = auth.uid()
+      select w.id from public.pisac_workspaces w where w.owner_id = (select auth.uid())
     )
   )
   with check (
     workspace_id in (
-      select w.id from public.pisac_workspaces w where w.owner_id = auth.uid()
+      select w.id from public.pisac_workspaces w where w.owner_id = (select auth.uid())
     )
   );
 
@@ -127,9 +127,14 @@ create policy pisac_projects_delete_own
   to authenticated
   using (
     workspace_id in (
-      select w.id from public.pisac_workspaces w where w.owner_id = auth.uid()
+      select w.id from public.pisac_workspaces w where w.owner_id = (select auth.uid())
     )
   );
+
+-- Explicit Data API privileges: RLS decides rows, grants decide operations.
+-- Do not rely on dashboard/default grants for SQL-created tables.
+grant select, insert, update, delete on table public.pisac_workspaces to authenticated;
+grant select, insert, update, delete on table public.pisac_projects to authenticated;
 
 -- Belt and braces: the policies above already gate access, but these revokes
 -- make the "no anonymous access" rule explicit rather than assumed.
