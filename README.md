@@ -17,7 +17,7 @@ npm run dev
 Otvori http://localhost:3000.
 
 - `/demo` radi bez ikakve konfiguracije — lokalni uređivač bez prijave i bez servera.
-- Puna aplikacija (prijava, `/workspace`, `/d/[id]`) traži `NEXT_PUBLIC_SUPABASE_URL` i `NEXT_PUBLIC_SUPABASE_ANON_KEY` (+ opcionalno `NEXT_PUBLIC_SITE_URL` za magic-link redirect). Bez njih aplikacija poštenu obavještava korisnika umjesto da tiho pukne — vidi `.env.example` za sve varijable i objašnjenja (uključujući granice rate limitinga).
+- Puna aplikacija (prijava, `/workspace`, `/d/[id]`) traži `NEXT_PUBLIC_SUPABASE_URL` i `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (+ opcionalno `NEXT_PUBLIC_SITE_URL` za magic-link redirect). Bez njih aplikacija poštenu obavještava korisnika umjesto da tiho pukne — vidi `.env.example` za sve varijable i objašnjenja (uključujući granice rate limitinga).
 
 ## Testovi
 
@@ -35,14 +35,14 @@ npm run check:bundle
 - `src/domain/` — čista domenska logika bez frameworka: `document/`, `sync/`, `workspace/`, `docx/`, `serverSync/`
 - `src/lib/` — `journal/` (Dexie), `sync/` (drain runner), `supabase/`, `i18n/`, `rate/`
 - `src/editor/` — Tiptap shema i interop s kanonskim modelom dokumenta
-- `supabase/migrations/` — pripremljene, **nisu primijenjene** na produkciju
+- `supabase/migrations/` — F1 schema je aktivna u dedicated Pisač projektu; daljnje promjene moraju ići forward-only migracijama
 - `tools/ai-architect/` — AI Architect, zamrznut tijekom F1 (dossier §30)
 - `docs/` — arhitekturni dossier, F1 plan, stanje petlje (`F1_STATE.md`), performance budžet
 - `e2e/` — Playwright specovi + `EVIDENCE.md`
 
 ## Stanje projekta
 
-F1 Authoring Kernel je implementiran i testiran (kanonski model dokumenta, Tiptap uređivač, Dexie journal + sync reducer, server document store s CAS-om, eksplicitno razrješavanje konflikata, recovery flow, checkpointi, DOCX izvoz, E2E pokrivenost). Supabase migracije su pripremljene, ali čekaju aktivaciju Supabase projekta prije primjene. AI Architect je zamrznut po `docs/ARCHITECTURE_DOSSIER_2026-09-19.md` §30 — samo se održavaju njegovi testovi, bez proširenja. PR #7 je aktivna grana ovog rada.
+F1 Authoring Kernel je implementiran i testiran (kanonski model dokumenta, Tiptap uređivač, Dexie journal + sync reducer, server document store s CAS-om, eksplicitno razrješavanje konflikata, recovery flow, checkpointi, DOCX izvoz, E2E pokrivenost). Dedicated Pisač Supabase projekt je aktivan i F1 schema je primijenjena; sljedeći Gate 1 dokaz je deployed environment + authenticated server-backed E2E. AI Architect je zamrznut po `docs/ARCHITECTURE_DOSSIER_2026-09-19.md` §30 — samo se održavaju njegovi testovi, bez proširenja. PR #7 je aktivna grana ovog rada.
 
 ## Deploy
 
