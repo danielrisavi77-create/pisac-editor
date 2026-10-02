@@ -1,0 +1,8 @@
+import{describe,expect,it}from"vitest";import{legacyCoverageRecord,reviewCoverageForCurrentBinding}from"./revision-coverage";
+const binding={documentId:"doc",bindingId:"b5",objectId:"CLAIM-014",objectType:"claim"as const,objectRevision:5,nodeId:"n1",boundAt:"2026-10-02T11:00:00Z",bindingVersion:2,previousBindingId:"b4"};
+describe("document-scoped revision review coverage",()=>{
+ it("derives document object revision and binding identity from the current registry binding",()=>{expect(reviewCoverageForCurrentBinding(binding,{id:"r5",reviewerId:"mentor",reviewedAt:"2026-10-02T11:01:00Z",status:"reviewed"})).toEqual({documentId:"doc",bindingId:"b5",id:"r5",reviewerId:"mentor",objectId:"CLAIM-014",reviewedRevision:5,reviewedAt:"2026-10-02T11:01:00Z",status:"reviewed"});});
+ it("rejects a backdated review before the current binding became effective",()=>expect(()=>reviewCoverageForCurrentBinding(binding,{id:"r",reviewerId:"mentor",reviewedAt:"2026-10-02T10:59:59Z",status:"reviewed"})).toThrow("invalid review"));
+ it("rejects an unknown runtime review status",()=>expect(()=>reviewCoverageForCurrentBinding(binding,{id:"r",reviewerId:"mentor",reviewedAt:"2026-10-02T11:01:00Z",status:"bogus" as never})).toThrow("invalid review"));
+ it("projects the binding-scoped record into the legacy coverage shape without leaking binding metadata",()=>{const row=reviewCoverageForCurrentBinding(binding,{id:"r5",reviewerId:"mentor",reviewedAt:"2026-10-02T11:01:00Z",status:"reviewed"});expect(legacyCoverageRecord(row)).toEqual({id:"r5",reviewerId:"mentor",objectId:"CLAIM-014",reviewedRevision:5,reviewedAt:"2026-10-02T11:01:00Z",status:"reviewed"});});
+});
