@@ -73,12 +73,23 @@ export interface AuthorizationPort {
 
 const HIGH_CONSISTENCY_ACTIONS = new Set<AuthorizationAction>([
   "read_private_draft",
+  "read_shared_revision",
   "write_document",
+  "comment",
+  "request_revision",
+  "mark_reviewed",
+  "submit",
+  "manage_sharing",
+  "read_submission",
   "finalize_submission",
+  "review_submission",
   "append_evidence",
   "read_evidence",
   "export_evidence",
   "manage_policy",
+  "read_policy",
+  "read_audit",
+  "view_roster",
 ]);
 
 const STEP_UP_ACTIONS = new Set<AuthorizationAction>([
