@@ -235,7 +235,21 @@ Entra ID ----------/
 
 SATOSA or an equivalent standards-based broker is a candidate implementation. It is not mandatory until multiple serious institutional identity providers justify an operational broker.
 
-### 6.3 Fine-grained authorization
+### 6.3 Enterprise identity lifecycle (optional SCIM 2.0)
+
+For institutions that require central account/group provisioning from enterprise directories, expose an optional SCIM 2.0 service boundary (RFC 7643 / RFC 7644).
+
+SCIM is for lifecycle provisioning such as:
+
+- creating/deactivating Pisač institutional identities;
+- synchronizing enterprise groups;
+- updating directory attributes under an explicit mapping.
+
+SCIM is **not** the source of truth for academic enrollment unless an institution explicitly models that information there. Course/assignment context remains LTI/Edu-API/SIS territory.
+
+A deprovisioned external account triggers relationship re-evaluation/revocation; it does not directly rewrite academic history.
+
+### 6.4 Fine-grained authorization
 
 Owner-only RLS is not sufficient for the target product.
 
@@ -254,7 +268,7 @@ Operations such as read-private-draft, read-shared-revision, read-evidence, comm
 
 PostgreSQL RLS remains defence-in-depth and tenant containment. It is not the complete authorization model.
 
-### 6.4 Academic Policy Engine is separate
+### 6.5 Academic Policy Engine is separate
 
 Access control answers **who may perform an operation**.
 
@@ -660,6 +674,7 @@ Service-role credentials never reach browsers. Parser and AI worker identities h
 | Academic policy | dedicated Policy Engine | KEEP/EVOLVE |
 | Identity | Federation Gateway + normalized Principal | ADD WHEN NEEDED |
 | Croatian identity | AAI@EduHr | ADD |
+| Enterprise identity provisioning | SCIM 2.0 (optional) | ADD WHEN REQUIRED |
 | LMS integration | LTI 1.3 Advantage | ADD |
 | Higher-ed SIS standard | Edu-API | WATCH/ADD |
 | Croatia SIS fallback | ISVU adapter | ADD LATER |
@@ -849,6 +864,7 @@ Primary references for this architecture:
 - AAI@EduHr: https://www.aaiedu.hr/
 - eduGAIN: https://edugain.org/
 - OpenFGA documentation: https://openfga.dev/docs
+- RFC 7643 / RFC 7644 SCIM 2.0: https://www.rfc-editor.org/rfc/rfc7643 and https://www.rfc-editor.org/rfc/rfc7644
 - EU Trusted List/QTSP information: https://digital-strategy.ec.europa.eu/en/policies/eu-trusted-lists
 - GDPR Article 5: https://eur-lex.europa.eu/eli/reg/2016/679/oj
 
