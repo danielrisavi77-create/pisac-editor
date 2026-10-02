@@ -29,6 +29,7 @@
 | ADR-VN-011 | Federation | none | AAI@EduHr / eduGAIN / university SAML/OIDC | ADD | sandbox then production federation tests |
 | ADR-VN-012 | Authorization | owner-only RLS / role checks | ReBAC/OpenFGA-style fine-grained authorization | ADD | adversarial cross-user/course/institution suite; high-consistency fail-closed evidence/private checks; revoke proven before access is considered removed; RLS remains defence-in-depth |
 | ADR-VN-012A | Enterprise provisioning | none | optional SCIM 2.0 for account/group lifecycle | ADD WHEN REQUIRED | adopt only for institutional directory provisioning; never substitute SCIM groups for academic course truth by default |
+| ADR-VN-012B | Sensitive actions | ordinary session auth | policy-driven step-up for submission/evidence export/admin/break-glass | ADD | fresh-auth tests; no hidden raw-content superadmin; break-glass is scoped, expiring and audited |
 | ADR-VN-013 | Academic policy | domain-specific policies planned | separate Policy Engine | KEEP/EVOLVE | do not encode academic policy as access-control tuples |
 | ADR-VN-013A | Research rights | planned operation-level rights | explicit operation-level Rights Engine; UNKNOWN fails closed for external processing | KEEP/EVOLVE | rights/version/operation fixture matrix |
 | ADR-VN-013B | Search / RAG | deferred | authorized candidate set before FTS/vector retrieval; Postgres FTS + pgvector first | ADD LATER | prove no unauthorized SourceVersion can enter model context |
