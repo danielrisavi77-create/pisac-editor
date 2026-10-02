@@ -10,7 +10,7 @@
 
 Pisač is not a frontend-only prototype. Main contains a substantial F1 authoring kernel: Next.js, Tiptap canonical editor, Dexie local journal, explicit sync state machine, server-sync contracts, live Supabase/Postgres schema with RLS and privileged RPC boundaries, conflict/recovery logic, checkpoints, DOCX export, CI and Playwright coverage.
 
-The dedicated Pisač Supabase project is now ACTIVE_HEALTHY. The original six F1 migrations were already live and the forward-only `f1_live_hardening` migration has been applied. The principal Gate 1 blocker is now **deployed application environment + authenticated server-backed E2E/adversarial evidence**, not database restoration.
+The dedicated Pisač Supabase project is now ACTIVE_HEALTHY. The original six F1 migrations were already live; forward-only `f1_live_hardening` and `gate1_least_privilege` migrations have now been applied. The principal Gate 1 blocker is now **deployed application environment + authenticated server-backed E2E/adversarial evidence**, not database restoration.
 
 Collaboration/mentor domain logic and demo UI already exist on main, but F2 explicitly says real UI/server persistence follows backend activation. Newer forensic/process-history work exists in open draft/stacked PRs and is not counted as production-ready main functionality.
 
@@ -34,8 +34,8 @@ DONE; REVIEWED; E2E VERIFIED; INTEGRATION VERIFIED; UNIT VERIFIED; IMPLEMENTED; 
 | P0-010 | DOCX export | UNIT VERIFIED | P1 | F1 serializer/fidelity tests; browser export E2E missing |
 | P0-011 | Supabase auth | IMPLEMENTED / BACKEND ACTIVE | P0 | SSR auth/guards/routes; deployed env + live login/session E2E missing |
 | P0-012 | Workspace/project persistence | IMPLEMENTED / LIVE SCHEMA | P0 | schema/actions/UI live-capable; authenticated create/list E2E missing |
-| P0-013 | Owner-only RLS | LIVE / ADVERSE PROOF PENDING | P0 | RLS enabled on live F1 tables; cross-user/direct-API evidence missing |
-| P0-014 | Privileged write RPC boundary | LIVE / REVIEWED | P0 | advisors re-run; three intentional authenticated SECURITY DEFINER warnings remain; live adversarial RPC proof missing |
+| P0-013 | Owner-only RLS | LIVE / ACL HARDENED / ADVERSE PROOF PENDING | P0 | RLS enabled; authenticated table privileges reduced to exact CRUD/SELECT surface; cross-user/direct-API evidence still missing |
+| P0-014 | Privileged write RPC boundary | LIVE / REVIEWED / ACL VERIFIED | P0 | anon EXECUTE false, authenticated EXECUTE true on exactly three canonical write RPCs; three intentional SECURITY DEFINER advisor WARNs remain; adversarial identity proof pending |
 | P0-015 | Security headers | E2E VERIFIED public scope | P0 | authenticated route proof later |
 | P0-016 | App auth rate limiter | UNIT VERIFIED/LIMITED | P1 | per-process only; edge/Supabase limits required |
 | P0-017 | CI quality gates | E2E VERIFIED baseline | P0 | lint/typecheck/unit/build/bundle/Chromium |
@@ -389,9 +389,25 @@ No synthetic or real student rows were inserted during this step.
 # K. 2026-10-02 execution reconciliation
 
 - Live project rechecked through the Supabase connection: `cxwxxcwrgushfkisfpxz` is ACTIVE_HEALTHY on Postgres 17.
-- Seven live migrations are present; all five F1 public tables have RLS enabled and remain empty before synthetic auth verification.
+- Eight live migrations are present; all five F1 public tables have RLS enabled and remain empty before synthetic auth verification.
 - Security advisors currently report only the three intentional authenticated-callable SECURITY DEFINER RPC warnings.
 - Performance advisors currently report five unused-index INFO findings on the empty database; those indexes are not removed based on zero-row statistics.
 - Current Supabase guidance prefers `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`; the code migration uses it first with a temporary legacy anon fallback.
+- `gate1_least_privilege` removed authenticated TRUNCATE/REFERENCES/TRIGGER/MAINTAIN from all five F1 tables while preserving workspace/project CRUD, canonical-state SELECT, anon denial and authenticated-only RPC EXECUTE.
 - The next product proof is deploy configuration + authenticated synthetic E2E. Do not repeat restore/apply-old-migrations work.
 - The quality/research expansion is now bounded: dependency-cruiser, Knip, Renovate and one Alloy spike are accepted additions; broad tool discovery stops unless a concrete failure/gap requires it.
+
+
+# L. 2026-10-02 least-privilege closure
+
+- PR #38 merged as `bfd93ba8fd4a55104ab73b693c6164a3be564926`.
+- Supabase migration `gate1_least_privilege` applied successfully; live migration history now has eight entries.
+- Live ACL verification confirms exact application privileges:
+  - workspace/project: authenticated CRUD only;
+  - canonical documents/revisions/checkpoints: authenticated SELECT only;
+  - no authenticated TRUNCATE/REFERENCES/TRIGGER/MAINTAIN;
+  - anon table access remains denied.
+- Canonical RPC contract is unchanged: anon EXECUTE=false, authenticated EXECUTE=true on the three reviewed SECURITY DEFINER write paths.
+- Advisors rerun after apply: only the same three intentional definer WARNs and five unused-index INFO findings remain.
+- Issue #37 is closed.
+- Windows local test-harness drift is tracked separately in #39; vulnerable Next→PostCSS dependency is tracked in #40.
