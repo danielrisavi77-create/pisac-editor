@@ -262,6 +262,15 @@ describe("Pisač vNext reference authorization", () => {
     }
 
     expect(requiredAuthorizationConsistency("read_shared_revision")).toBe(
+      "higher-consistency",
+    );
+    expect(requiredAuthorizationConsistency("read_submission")).toBe(
+      "higher-consistency",
+    );
+    expect(requiredAuthorizationConsistency("view_roster")).toBe(
+      "higher-consistency",
+    );
+    expect(requiredAuthorizationConsistency("manage_course")).toBe(
       "minimize-latency",
     );
     expect(requiresStepUpAuthentication("finalize_submission")).toBe(true);
