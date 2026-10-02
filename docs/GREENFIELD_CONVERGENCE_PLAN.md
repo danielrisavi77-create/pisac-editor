@@ -150,6 +150,9 @@ Do not put canonical document commits or evidence payloads in the first spike.
 - 10k/100k local rows;
 - sync cancellation;
 - auth expiry;
+- client reconnect after N-1/server schema upgrade;
+- client reconnect after the maximum supported offline compatibility window;
+- unsupported client receives an explicit recoverable upgrade-required state rather than ambiguous sync failure;
 - tenant filter changes;
 - bundle/startup impact.
 
