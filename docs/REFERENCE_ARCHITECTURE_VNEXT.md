@@ -528,7 +528,100 @@ Candidate production implementation: .NET + Open XML SDK for high-fidelity OOXML
 
 JavaScript docx export remains acceptable for the explicitly supported F1 subset.
 
-## 13. AI plane
+## 13. Research, rights, search and citation plane
+
+### 13.1 Canonical research objects
+
+Pisač stores a provider-neutral research model:
+
+~~~text
+SourceRecord
+  -> SourceVersion
+       -> metadata
+       -> content/blob reference
+       -> rights/provenance
+       -> derived text/chunks
+       -> embeddings/search projections
+~~~
+
+A DOI/provider record is evidence about metadata, not a universal truth source. Provider-native payloads are preserved where useful but do not become the canonical domain model.
+
+### 13.2 Operation-level Rights Engine
+
+Rights are evaluated per operation, not as one boolean on a source.
+
+Examples:
+
+- LOCAL_PARSE;
+- STORE_PRIVATE_COPY;
+- EXTRACT_TEXT;
+- EMBEDDING;
+- SEND_TO_EXTERNAL_AI;
+- SHARE_WITH_MENTOR;
+- EXPORT_EXCERPT;
+- PUBLISH_PROVENANCE_METADATA.
+
+Possible decisions:
+
+~~~text
+ALLOW
+ALLOW_WITH_CONDITIONS
+REVIEW
+DENY
+UNKNOWN
+~~~
+
+UNKNOWN does not silently become ALLOW for external processing.
+
+Rights decisions are versioned and explainable: source/version + operation + rule/policy basis + time.
+
+### 13.3 Search / RAG
+
+Initial search stack remains deliberately simple:
+
+- PostgreSQL full-text search;
+- pgvector where semantic retrieval is justified;
+- hybrid lexical/vector retrieval;
+- fusion/reranking only after the authorized candidate set is known.
+
+Security order is mandatory:
+
+~~~text
+Principal
+ -> Authorization
+ -> Rights
+ -> permitted SourceVersions
+ -> lexical/vector retrieval
+ -> fusion/rerank
+ -> bounded context
+ -> AI Gateway
+~~~
+
+Never retrieve globally, send content to a model, and filter permissions afterward.
+
+A dedicated search engine/vector service is adopted only when measured corpus/query scale or ranking quality exceeds what the regional PostgreSQL cell can provide.
+
+### 13.4 Citation engine
+
+Citation formatting is deterministic infrastructure, not an LLM task.
+
+Target:
+
+- canonical citation/source object model;
+- CSL/citeproc-based formatting;
+- institution/faculty styles as configuration/profile;
+- explicit provenance of imported metadata;
+- validation separate from formatting.
+
+An LLM may help explain or suggest metadata corrections, but it does not become the citation formatter or source-verification authority.
+
+### 13.5 Research provider adapters
+
+Federated adapters may include Crossref, DataCite, OpenAlex, Semantic Scholar, Europe PMC, Unpaywall and Zotero where useful.
+
+No provider is treated as a universal truth source. Merge logic retains provider/source provenance and conflicts rather than silently choosing one value.
+
+## 14. AI plane
 
 AI remains optional infrastructure:
 
@@ -555,9 +648,9 @@ Requirements:
 - AI assistance records are distinct from AI-presence judgments;
 - final artifact may expose relevant disclosure through C2PA.
 
-## 14. Multi-tenancy and regionalization
+## 15. Multi-tenancy and regionalization
 
-### 14.1 Tenant hierarchy
+### 15.1 Tenant hierarchy
 
 ~~~text
 Institution
@@ -570,7 +663,7 @@ Institution
 
 Personal Pisač remains a valid mode. Institution context is attached rather than replacing the user's personal workspace concept.
 
-### 14.2 Home region
+### 15.2 Home region
 
 Each institutional tenant has a home region:
 
@@ -580,7 +673,7 @@ tenant.home_region = eu-central
 
 Student content, canonical documents, evidence payloads and authorization data remain in the home-region cell unless an explicit lawful migration is performed.
 
-### 14.3 Global control plane
+### 15.3 Global control plane
 
 May contain:
 
@@ -593,7 +686,7 @@ May contain:
 
 Must not contain ordinary student document bodies or raw process evidence.
 
-### 14.4 Isolation tiers
+### 15.4 Isolation tiers
 
 Default shared regional cell:
 
@@ -605,7 +698,7 @@ Default shared regional cell:
 
 Dedicated database/storage cell is an enterprise/compliance tier, not the default one-database-per-university model.
 
-## 15. Object storage and immutability
+## 16. Object storage and immutability
 
 Object storage holds:
 
@@ -622,7 +715,7 @@ WORM/object-lock is **policy-specific**, not universal:
 - appropriate for final submissions, legal holds or specific regulated retention;
 - inappropriate as a default for every deleted draft because privacy and storage-limitation obligations still apply.
 
-## 16. Background jobs
+## 17. Background jobs
 
 Keep asynchronous work outside request/commit critical paths:
 
@@ -639,7 +732,7 @@ Keep asynchronous work outside request/commit critical paths:
 
 A simple durable queue is the default. Temporal-class workflow infrastructure is justified only when long-running, multi-step institutional workflows with retries/human approval become materially hard to model with the normal job system.
 
-## 17. Observability and operations
+## 18. Observability and operations
 
 Use OpenTelemetry-compatible traces/metrics/logs.
 
@@ -658,7 +751,7 @@ Security-sensitive audit events are immutable domain records, not merely applica
 
 No raw student document text in ordinary logs.
 
-## 18. Backup and disaster recovery
+## 19. Backup and disaster recovery
 
 Per regional cell:
 
@@ -674,9 +767,9 @@ DR target is explicitly defined per service. A green dashboard is not evidence o
 
 Tenant failover must not silently move regulated data outside the permitted jurisdiction.
 
-## 19. Security boundaries
+## 20. Security boundaries
 
-### 19.1 Key and secret separation
+### 20.1 Key and secret separation
 
 Do not use one key hierarchy for every cryptographic purpose.
 
@@ -696,7 +789,7 @@ A compromise of an application runtime credential must not automatically yield t
 
 Secrets are held in a managed secret system and never shipped in client bundles.
 
-### 19.2 Trust boundaries
+### 20.2 Trust boundaries
 
 High-value boundaries are separated even inside the modular monolith:
 
@@ -713,7 +806,7 @@ Service-role credentials never reach browsers. Parser and AI worker identities h
 
 Do not invent custom encryption primitives. Provider KMS/HSM and established envelope-encryption patterns are the default.
 
-## 20. Target component map
+## 21. Target component map
 
 | Capability | Target choice | Status |
 | --- | --- | --- |
@@ -746,9 +839,9 @@ Do not invent custom encryption primitives. Provider KMS/HSM and established env
 | Kafka/full event sourcing | no default adoption | REJECT FOR NOW |
 | Blockchain provenance | no adoption | REJECT |
 
-## 21. Critical end-to-end flows
+## 22. Critical end-to-end flows
 
-### 21.1 Student authoring
+### 22.1 Student authoring
 
 ~~~text
 edit -> ProseMirror transaction
@@ -764,7 +857,7 @@ edit -> ProseMirror transaction
      -> SYNCED
 ~~~
 
-### 21.2 Evidence anchoring
+### 22.2 Evidence anchoring
 
 ~~~text
 local verified segment
@@ -779,7 +872,7 @@ local verified segment
  -> inclusion proof available
 ~~~
 
-### 21.3 Mentor review
+### 22.3 Mentor review
 
 ~~~text
 student shares exact revision
@@ -790,7 +883,7 @@ student shares exact revision
  -> student/mentor next-action projection
 ~~~
 
-### 21.4 Submission
+### 22.4 Submission
 
 ~~~text
 submission request
@@ -804,7 +897,7 @@ submission request
  -> receipt returned to student/institution
 ~~~
 
-## 22. What Pisač must never claim
+## 23. What Pisač must never claim
 
 Pisač does not claim:
 
@@ -825,7 +918,7 @@ Product language uses:
 - exact revision reviewed;
 - evidence available / unavailable / incomplete.
 
-## 23. Greenfield vs current code
+## 24. Greenfield vs current code
 
 The existing codebase is not discarded. It is the executable semantic baseline against which greenfield candidates are tested.
 
@@ -846,7 +939,7 @@ candidate
 
 No big-bang rewrite.
 
-## 24. Immediate implementation sequence
+## 25. Immediate implementation sequence
 
 ### R0 — Canonical architecture
 
@@ -899,7 +992,7 @@ No big-bang rewrite.
 - Edu-API compatibility mapping;
 - ISVU adapter only for missing Croatian administrative facts.
 
-## 25. Sources and standards baseline
+## 26. Sources and standards baseline
 
 Primary references for this architecture:
 
@@ -918,11 +1011,12 @@ Primary references for this architecture:
 - AAI@EduHr: https://www.aaiedu.hr/
 - eduGAIN: https://edugain.org/
 - OpenFGA documentation: https://openfga.dev/docs
+- Citation Style Language: https://citationstyles.org/
 - RFC 7643 / RFC 7644 SCIM 2.0: https://www.rfc-editor.org/rfc/rfc7643 and https://www.rfc-editor.org/rfc/rfc7644
 - EU Trusted List/QTSP information: https://digital-strategy.ec.europa.eu/en/policies/eu-trusted-lists
 - GDPR Article 5: https://eur-lex.europa.eu/eli/reg/2016/679/oj
 
-## 26. Final architecture judgment
+## 27. Final architecture judgment
 
 The best target is **not** a maximally distributed, microservice-heavy system.
 
