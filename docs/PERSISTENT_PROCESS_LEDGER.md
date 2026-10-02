@@ -12,9 +12,11 @@ A segment record contains the captured-process bundle plus `startedAt`, `updated
 
 ## Checkpoint and append-only rules
 
-`LocalProcessCapture.checkpoint()` waits for a stable serialized hash tail and returns a self-consistent prefix without stopping capture. The UI persists these prefixes. A later checkpoint must extend the already persisted prefix; rollback or rewriting an earlier event is rejected. A sealed segment cannot be overwritten.
+`LocalProcessCapture.checkpoint()` waits for a stable serialized hash tail and returns a self-consistent prefix without stopping capture. The UI persists these prefixes. A later checkpoint must extend the exact already-persisted prefix: prior event envelopes, segment identity, start time and parent link cannot be rewritten even if a caller reuses the same event-hash strings. Checkpoint time cannot move backwards.
 
-A continuation must reference the head of the latest prior segment. The first segment alone has no parent.
+Only an `active` segment accepts checkpoints. `interrupted` and `sealed` are terminal storage states: an interrupted segment cannot be resumed or sealed later, and a sealed segment cannot be overwritten.
+
+A continuation must reference the head of the latest prior terminal segment. The first segment alone has no parent. A new child is rejected while the latest prior segment is still active, and its start time cannot overlap the terminal parent.
 
 ## Reload / interruption semantics
 
@@ -22,7 +24,7 @@ Reload never resumes an old `sessionId` as though nothing happened. Stored bundl
 
 This link proves only local data-structure continuity. It does not prove that no activity occurred during the gap. The interruption remains visible in the ledger.
 
-Invalid or chain-inconsistent records are surfaced and retained; they are not silently deleted or repaired.
+Invalid or chain-inconsistent records are surfaced and retained; they are not silently deleted, repaired or bypassed by appending a new continuation.
 
 ## Failure behavior
 
@@ -30,6 +32,6 @@ IndexedDB/process-ledger failures do not block ordinary editing or document jour
 
 ## Verification targets
 
-Unit coverage includes reload through a fresh DB handle, immutable sealing, exact continuation links, corrupt-record retention, append-only checkpoint rules and stable active checkpoints. Browser coverage separates document `LOCAL_DURABLE` from process-checkpoint durability, then exercises sealed reload and interrupted-session continuation.
+Unit coverage includes reload through a fresh DB handle, immutable sealing, terminal interruption, exact continuation links, rejection of continuation from an active/overlapping parent, corrupt-record retention, exact append-only checkpoint-prefix rules and monotonic durable timestamps. Browser coverage separates document `LOCAL_DURABLE` from process-checkpoint durability, then exercises sealed reload and interrupted-session continuation.
 
 The remaining production gap is remote sharing/server anchoring and durable authorization. Those are intentionally outside F5-D.
