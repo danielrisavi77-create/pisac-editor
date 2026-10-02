@@ -6,7 +6,7 @@ export async function deriveVerifiedObjectBinding(bundle:CapturedProcess,schema:
  if(!input.objectId||!input.nodeId||!Number.isSafeInteger(input.revision)||input.revision<1||!Number.isFinite(Date.parse(input.effectiveFrom))||(input.effectiveUntil!=null&&(!Number.isFinite(Date.parse(input.effectiveUntil))||Date.parse(input.effectiveUntil)<=Date.parse(input.effectiveFrom))))throw new Error("deriveObjectBinding: invalid identity");
  if(!(await verifyCapturedProcess(bundle,schema)))throw new Error("deriveObjectBinding: unverified bundle");
  const from=Date.parse(input.effectiveFrom),until=input.effectiveUntil==null?Infinity:Date.parse(input.effectiveUntil);const eventIndexes:number[]=[];
- for(let i=0;i<bundle.events.length;i++){const event=bundle.events[i].event;const at=Date.parse(event.occurredAt);const ids=event.touchedNodeIds;if(at>=from&&at<until&&ids?.includes(input.nodeId))eventIndexes.push(i);}
+ for(let i=0;i<bundle.events.length;i++){const event=bundle.events[i].event;const at=Date.parse(event.occurredAt);const ids=event.touchedNodeIds;if(at>from&&at<until&&ids?.includes(input.nodeId))eventIndexes.push(i);}
  if(!eventIndexes.length)return null;
  const first=eventIndexes[0],last=eventIndexes.at(-1)!;const before=textForNode(replayCapturedProcess(bundle,schema,first),input.nodeId);const after=textForNode(replayCapturedProcess(bundle,schema,last+1),input.nodeId);
  if(before===null||after===null)throw new Error("deriveObjectBinding: node snapshot missing");
