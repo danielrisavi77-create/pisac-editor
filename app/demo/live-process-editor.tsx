@@ -69,7 +69,7 @@ export default function LiveProcessEditor(props: EditorProps) {
   const generation = useRef(0);
   const ready = useCallback((instance: Editor | null) => setEditor(instance), []);
   useEffect(() => () => { generation.current++; cleanup.current(); capture.current = null; ledger.current?.close(); ledger.current = null; registryDb.current?.close(); registryDb.current=null; }, []);
-  useEffect(()=>{let cancelled=false;void(async()=>{const opened=await openAcademicObjectRegistry("pisac-academic-object-registry-demo");if(cancelled)return;if(!opened.ok){setRegistryError(opened.reason);return;}registryDb.current=opened.db;const loaded=await loadAcademicObjectRegistry(opened.db);if(cancelled)return;if(!loaded.ok){setRegistryError(loaded.reason);return;}setObjectRegistry(loaded.registry);})().catch(()=>{if(!cancelled)setRegistryError("open-failed")});return()=>{cancelled=true;};},[]);
+  useEffect(()=>{let cancelled=false;void(async()=>{const opened=await openAcademicObjectRegistry("pisac-academic-object-registry-demo");if(cancelled){if(opened.ok)opened.db.close();return;}if(!opened.ok){setRegistryError(opened.reason);return;}registryDb.current=opened.db;const loaded=await loadAcademicObjectRegistry(opened.db);if(cancelled){opened.db.close();if(registryDb.current===opened.db)registryDb.current=null;return;}if(!loaded.ok){setRegistryError(loaded.reason);return;}setObjectRegistry(loaded.registry);})().catch(()=>{if(!cancelled)setRegistryError("open-failed")});return()=>{cancelled=true;};},[]);
   useEffect(() => {
     if (!editor) return;
     let cancelled=false;
