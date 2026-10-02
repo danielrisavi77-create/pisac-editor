@@ -25,7 +25,7 @@ export async function refreshSession(
     return { response, user: null, isConfigured: false };
   }
 
-  const supabase = createServerClient(config.url, config.anonKey, {
+  const supabase = createServerClient(config.url, config.publicKey, {
     cookies: {
       getAll() {
         return request.cookies.getAll();
