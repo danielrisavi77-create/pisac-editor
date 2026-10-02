@@ -1,23 +1,56 @@
-# F5-E — multi-session history and academic-object lineage
+# F5-F — verified node lineage and AcademicObjectRegistry
 
-## Verified session history
+## Scope
 
-History is built only from durable process bundles that pass capture verification. Every segment boundary remains first-class. A boundary can have a positive or zero-duration gap; neither case is interpreted as continuous writing.
+This layer extends the verified multi-session process history from F5-E with explicit node-level academic-object lineage. It remains local-only. It does not add Academic Revision Lifecycle, EvidenceBasis, mentor projection, server attestation, identity proof, or an AI/human score.
 
-Global navigation addresses `session-start`, concrete `event`, and `gap` states. Gap states never reconstruct or interpolate a document.
+## Stable touched-node metadata
 
-Descriptive analytics report segment/session/event facts only. Segment duration is not labelled active work. Short inter-transaction spans are reported separately and are not an authorship or AI score.
+New capture events include `touchedNodeIds`, derived from ProseMirror StepMaps over the before/after documents. The field is part of the hashed event envelope.
 
-## Stable node touch metadata
+Verification does not trust the stored metadata by itself: it replays the captured steps, recomputes the touched stable node IDs and rejects mismatches.
 
-New capture events include `touchedNodeIds`, derived from ProseMirror StepMaps over the before/after documents. The field is part of the hashed event. Verification recomputes the touched IDs from the captured steps and rejects a mismatch.
+Older `pisac-f1-pm-v1` events without `touchedNodeIds` remain replayable and process-verifiable for backward compatibility, but they cannot produce node-level academic-object activity.
 
-The field is backward-compatible: older `pisac-f1-pm-v1` events without `touchedNodeIds` remain replayable/verifiable, but they cannot provide node-level academic-object lineage.
+## Persistent AcademicObjectRegistry
 
-## Academic-object binding
+An academic object is associated explicitly with an existing canonical editor `nodeId`. No prose matching or semantic guessing creates a binding.
 
-Object evolution does not search prose or infer that an event “looks related” to a claim. A binding requires an explicit Academic Graph mapping from `objectId` to stable document `nodeId`. For a verified bundle, the binding helper selects only events whose verified `touchedNodeIds` include that node. Before/after text is reconstructed from the node immediately before the first and after the last bound event.
+Bindings are append-only records containing:
+- `bindingId`
+- academic `objectId` and type
+- the object's current graph revision
+- canonical editor `nodeId`
+- `boundAt`
+- monotonic `bindingVersion`
+- `previousBindingId`
 
-A binding records object ID/type, revision, node ID, session ID, ordered event indexes and evidence IDs. Invalid/missing events, conflicting duplicate revisions and ambiguous event order are rejected.
+The registry has its own IndexedDB lifecycle, separate from the document journal and process ledger. A unique `[objectId+bindingVersion]` index prevents two persisted rows from occupying the same version of one object's binding history.
 
-The current demo evolution card remains explicitly synthetic because the production editor/Academic Graph does not yet persist a real objectId→nodeId registry. The next integration step is that registry; until it exists, the UI must not present synthetic lineage as automatic evidence.
+Loading replays persisted rows through the domain validator. Corrupt or impossible registry history is surfaced as `invalid-registry`; rows are not silently repaired or deleted.
+
+Rebindings require a strictly later `boundAt`. Equal timestamps are rejected because process events and bindings use millisecond wall-clock timestamps and their relative order would otherwise be ambiguous.
+
+## Temporal attribution
+
+A historical binding is effective from its `boundAt` until the next binding for that object.
+
+Only process events that:
+1. belong to a fully valid verified process history,
+2. cryptographically verify,
+3. contain recomputed `touchedNodeIds` for the bound node, and
+4. occur strictly inside the binding's effective interval
+
+may appear as verified object activity.
+
+An event whose timestamp exactly equals a binding boundary is excluded rather than guessed into either side of the boundary.
+
+Verified object activity retains the exact `bindingId`, session ID, ordered event indexes, before/after node text and the timestamp of its first actually attributed event. It preserves the verified process-history lineage order rather than re-sorting sessions by IDs or wall-clock ties.
+
+## UI boundary
+
+The demo lets the user explicitly bind `CLAIM-014` to the currently selected canonical editor block and then shows only verified activity occurring after that binding.
+
+The registry is reloaded from its durable store after a successful write so the UI consumes the canonical persisted history rather than assuming its prior React state was complete.
+
+This UI does not call an edit a new academic revision. Creating/sealing academic revisions is intentionally deferred to the next lifecycle layer.
