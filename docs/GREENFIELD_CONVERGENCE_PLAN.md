@@ -207,6 +207,8 @@ Actions:
 - mentor sees only assigned/shared project;
 - course teacher does not automatically see private drafts unless policy/relationship grants it;
 - revoked mentor loses evidence access;
+- evidence/private-content checks use high-consistency/fail-closed mode;
+- grant may remain pending if authz propagation fails, but revoke must deny first and only then finalize the domain relationship;
 - support operator has no content access by default;
 - institution admin powers are explicit, not implied by tenancy;
 - cross-institution IDs cannot collide into access.
