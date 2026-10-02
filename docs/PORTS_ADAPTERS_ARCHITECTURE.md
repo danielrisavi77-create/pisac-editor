@@ -166,3 +166,67 @@ Those changes can be implemented incrementally behind these contracts.
 3. Add an explicit application authorization boundary before external identity/institution providers.
 4. Add institution/course/assignment context only when the FPZG institutional pilot needs it.
 5. Integrate AAI@EduHr/ISVU as adapters, never as dependencies of Pisač core.
+
+
+---
+
+## vNext refinement — 2026-10-02
+
+The original port decision remains valid, but the greenfield/red-team architecture research narrows how two ports should evolve.
+
+### IdentityProvider is the application seam, not one adapter per identity ecosystem
+
+Do not let Pisač Core accumulate permanent branches such as AAIIdentityProvider, EduGainIdentityProvider, UniversitySamlIdentityProvider and EntraIdentityProvider.
+
+The target is:
+
+~~~text
+AAI@EduHr ----\
+eduGAIN -------\
+University SAML ---> Federation Gateway ---> normalized Pisač Principal
+University OIDC ---/
+Entra ------------/
+~~~
+
+For the controlled FPZG pilot, direct AAI/Supabase integration is acceptable. A dedicated federation gateway is introduced only when multiple institutional identity sources make it operationally worthwhile.
+
+Identity assertions remain inputs to authorization. They are not authorization decisions.
+
+### AcademicSystemProvider is a transitional facade
+
+The generic provider interface is useful while no real institutional integration exists, but the target protocol boundaries are more specific:
+
+- LtiPlatformAdapter — LTI 1.3 / LTI Advantage launch, roles, NRPS, AGS and Deep Linking where required.
+- HigherEdDataAdapter — Edu-API-style higher-education enterprise data exchange.
+- LegacySisAdapter — narrow institution/country-specific mappings such as ISVU when standards do not expose the required facts.
+
+Do not refactor the current interface only to match this naming. The first real integration should prove the exact contracts before runtime migration.
+
+### DocumentRepository remains a strong permanent boundary
+
+The red-team review strengthened, rather than weakened, the DocumentRepository decision. The canonical document service still needs explicit compare-and-set, idempotency and stale-base semantics that generic local-first sync products do not replace.
+
+### EvidenceIngestPort becomes the entry to a dedicated Evidence Trust Plane
+
+The target implementation is no longer just Postgres metadata plus object storage. It adds:
+
+~~~text
+EvidenceIngestPort
+  -> validation / authorization / idempotency
+  -> encrypted raw segment storage
+  -> receipt metadata
+  -> KMS/HSM signed receipt
+  -> append receipt digest to transparency log
+  -> signed/witnessed checkpoint
+  -> trusted timestamp according to assurance profile
+~~~
+
+New evidence formats use versioned deterministic canonicalization (target: RFC 8785 JCS + SHA-256). Existing evidence remains verifiable under its historic format.
+
+See:
+
+- docs/REFERENCE_ARCHITECTURE_VNEXT.md
+- docs/EVIDENCE_TRUST_MODEL_VNEXT.md
+- docs/ARCHITECTURE_DECISION_REGISTER_VNEXT.md
+
+These vNext documents are the target reference when this earlier foundation document and the target architecture differ.
