@@ -85,7 +85,7 @@ create policy pisac_checkpoints_select_own
       from public.pisac_documents d
       join public.pisac_projects p on p.id = d.project_id
       join public.pisac_workspaces w on w.id = p.workspace_id
-      where w.owner_id = auth.uid()
+      where w.owner_id = (select auth.uid())
     )
   );
 
