@@ -181,6 +181,15 @@ evidence_segments
 
 Object storage payload is immutable after acceptance, but retention deletion remains possible unless a specific legal/institutional hold applies.
 
+Encryption and signing use separate key purposes:
+
+- raw evidence encryption: regional KMS-backed envelope encryption where required;
+- evidence receipt signing: non-exportable asymmetric signing key;
+- transparency checkpoint signing: separate log identity key;
+- final C2PA signing: separate credential/key lifecycle.
+
+No one compromised key should decrypt raw evidence and also forge historical evidence receipts.
+
 ## 9. Signed server receipt
 
 Receipt conceptual payload:
