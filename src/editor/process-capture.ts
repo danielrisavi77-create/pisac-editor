@@ -48,7 +48,7 @@ function source(tr: Transaction): CaptureSource {
 function addNodeId(node:PMNode|null|undefined,out:Set<string>){if(!node)return;const id:unknown=node.attrs?.nodeId;if(typeof id==="string"&&id.trim())out.add(id);}
 function collectAt(doc:PMNode,from:number,to:number,out:Set<string>){
  const max=doc.content.size;const a=Math.max(0,Math.min(from,max)),b=Math.max(a,Math.min(to,max));
- for(const pos of new Set([a,b])){try{const r=doc.resolve(pos);for(let d=0;d<=r.depth;d++)addNodeId(r.node(d),out);addNodeId(doc.nodeAt(pos),out);}catch{/* invalid boundary contributes no invented id */}}
+ for(const pos of new Set([a,b])){try{const r=doc.resolve(pos);for(let d=0;d<=r.depth;d++)addNodeId(r.node(d),out);}catch{/* invalid boundary contributes no invented id */}}
  if(b>a)doc.nodesBetween(a,b,node=>{addNodeId(node,out);return true;});
 }
 function collectStepTouched(step:Step,before:PMNode,after:PMNode,out:Set<string>){
@@ -58,7 +58,7 @@ function collectStepTouched(step:Step,before:PMNode,after:PMNode,out:Set<string>
  // Use only explicit numeric coordinates serialized by the Step itself; do not infer from prose.
  const raw=step.toJSON() as JsonObject;const from=raw.from,to=raw.to,pos=raw.pos;
  if(typeof from==="number"&&typeof to==="number"){collectAt(before,from,to,out);collectAt(after,from,to,out);return;}
- if(typeof pos==="number"){collectAt(before,pos,pos,out);collectAt(after,pos,pos,out);}
+ if(typeof pos==="number"){collectAt(before,pos,pos,out);collectAt(after,pos,pos,out);addNodeId(before.nodeAt(Math.max(0,Math.min(pos,before.content.size))),out);addNodeId(after.nodeAt(Math.max(0,Math.min(pos,after.content.size))),out);}
 }
 export function collectTouchedNodeIds(tr:Transaction):string[]{
  const out=new Set<string>();
