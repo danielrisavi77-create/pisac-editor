@@ -210,6 +210,8 @@ Actions:
 - evidence/private-content checks use high-consistency/fail-closed mode;
 - grant may remain pending if authz propagation fails, but revoke must deny first and only then finalize the domain relationship;
 - support operator has no content access by default;
+- break-glass access requires step-up, reason, narrow scope, expiry and immutable audit;
+- final submission and raw evidence export reject stale/insufficient authentication context when policy requires step-up;
 - institution admin powers are explicit, not implied by tenancy;
 - cross-institution IDs cannot collide into access.
 
