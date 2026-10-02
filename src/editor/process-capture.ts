@@ -45,20 +45,29 @@ function source(tr: Transaction): CaptureSource {
   // Includes keyboard, dictation, autocorrect, commands and history. Do not guess.
   return "editor";
 }
-function addNodeId(node:PMNode,out:Set<string>){const id:unknown=node.attrs?.nodeId;if(typeof id==="string"&&id.trim())out.add(id);}
+function addNodeId(node:PMNode|null|undefined,out:Set<string>){if(!node)return;const id:unknown=node.attrs?.nodeId;if(typeof id==="string"&&id.trim())out.add(id);}
 function collectAt(doc:PMNode,from:number,to:number,out:Set<string>){
  const max=doc.content.size;const a=Math.max(0,Math.min(from,max)),b=Math.max(a,Math.min(to,max));
- for(const pos of new Set([a,b])){try{const r=doc.resolve(pos);for(let d=0;d<=r.depth;d++)addNodeId(r.node(d),out);}catch{/* invalid boundary contributes no invented id */}}
+ for(const pos of new Set([a,b])){try{const r=doc.resolve(pos);for(let d=0;d<=r.depth;d++)addNodeId(r.node(d),out);addNodeId(doc.nodeAt(pos),out);}catch{/* invalid boundary contributes no invented id */}}
  if(b>a)doc.nodesBetween(a,b,node=>{addNodeId(node,out);return true;});
+}
+function collectStepTouched(step:Step,before:PMNode,after:PMNode,out:Set<string>){
+ let mapped=false;step.getMap().forEach((oldStart,oldEnd,newStart,newEnd)=>{mapped=true;collectAt(before,oldStart,oldEnd,out);collectAt(after,newStart,newEnd,out);});
+ if(mapped)return;
+ // Mark/node-metadata steps can change the document while having an empty StepMap.
+ // Use only explicit numeric coordinates serialized by the Step itself; do not infer from prose.
+ const raw=step.toJSON() as JsonObject;const from=raw.from,to=raw.to,pos=raw.pos;
+ if(typeof from==="number"&&typeof to==="number"){collectAt(before,from,to,out);collectAt(after,from,to,out);return;}
+ if(typeof pos==="number"){collectAt(before,pos,pos,out);collectAt(after,pos,pos,out);}
 }
 export function collectTouchedNodeIds(tr:Transaction):string[]{
  const out=new Set<string>();
- tr.steps.forEach((step,i)=>{const before=tr.docs[i]??tr.before;const after=i+1<tr.docs.length?tr.docs[i+1]:tr.doc;step.getMap().forEach((oldStart,oldEnd,newStart,newEnd)=>{collectAt(before,oldStart,oldEnd,out);collectAt(after,newStart,newEnd,out);});});
+ tr.steps.forEach((step,i)=>{const before=tr.docs[i]??tr.before;const after=i+1<tr.docs.length?tr.docs[i+1]:tr.doc;collectStepTouched(step,before,after,out);});
  return[...out].sort();
 }
 function applyStepsWithTouched(doc:PMNode,steps:readonly JsonObject[]):{doc:PMNode;touchedNodeIds:string[]}{
  let next=doc;const out=new Set<string>();
- for(const raw of steps){const step=Step.fromJSON(doc.type.schema,raw);const result=step.apply(next);if(result.failed||!result.doc)throw new Error("capture-invalid-step");step.getMap().forEach((oldStart,oldEnd,newStart,newEnd)=>{collectAt(next,oldStart,oldEnd,out);collectAt(result.doc!,newStart,newEnd,out);});next=result.doc;}
+ for(const raw of steps){const step=Step.fromJSON(doc.type.schema,raw);const result=step.apply(next);if(result.failed||!result.doc)throw new Error("capture-invalid-step");collectStepTouched(step,next,result.doc,out);next=result.doc;}
  next.check();return{doc:next,touchedNodeIds:[...out].sort()};
 }
 function applySteps(doc: PMNode, steps: readonly JsonObject[]): PMNode {
