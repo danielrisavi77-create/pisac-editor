@@ -10,7 +10,7 @@ export type CaptureSource = "editor" | "paste" | "cut" | "drop" | "composition" 
 type CaptureEvent = {
   sequence: number; documentId: string; sessionId: string;
   occurredAt: string; elapsedMs: number; source: CaptureSource;
-  steps: JsonObject[]; beforeHash: string; afterHash: string;
+  steps: JsonObject[]; touchedNodeIds?: string[]; beforeHash: string; afterHash: string;
 };
 type Entry = { event: CaptureEvent; previousHash: string; eventHash: string };
 export type CapturedProcess = {
@@ -44,6 +44,31 @@ function source(tr: Transaction): CaptureSource {
   if (tr.getMeta("preventUpdate") === true) return "system-replacement";
   // Includes keyboard, dictation, autocorrect, commands and history. Do not guess.
   return "editor";
+}
+function addNodeId(node:PMNode|null|undefined,out:Set<string>){if(!node)return;const id:unknown=node.attrs?.nodeId;if(typeof id==="string"&&id.trim())out.add(id);}
+function collectAt(doc:PMNode,from:number,to:number,out:Set<string>){
+ const max=doc.content.size;const a=Math.max(0,Math.min(from,max)),b=Math.max(a,Math.min(to,max));
+ for(const pos of new Set([a,b])){try{const r=doc.resolve(pos);for(let d=0;d<=r.depth;d++)addNodeId(r.node(d),out);}catch{/* invalid boundary contributes no invented id */}}
+ if(b>a)doc.nodesBetween(a,b,node=>{addNodeId(node,out);return true;});
+}
+function collectStepTouched(step:Step,before:PMNode,after:PMNode,out:Set<string>){
+ let mapped=false;step.getMap().forEach((oldStart,oldEnd,newStart,newEnd)=>{mapped=true;collectAt(before,oldStart,oldEnd,out);collectAt(after,newStart,newEnd,out);});
+ if(mapped)return;
+ // Mark/node-metadata steps can change the document while having an empty StepMap.
+ // Use only explicit numeric coordinates serialized by the Step itself; do not infer from prose.
+ const raw=step.toJSON() as JsonObject;const from=raw.from,to=raw.to,pos=raw.pos;
+ if(typeof from==="number"&&typeof to==="number"){collectAt(before,from,to,out);collectAt(after,from,to,out);return;}
+ if(typeof pos==="number"){collectAt(before,pos,pos,out);collectAt(after,pos,pos,out);addNodeId(before.nodeAt(Math.max(0,Math.min(pos,before.content.size))),out);addNodeId(after.nodeAt(Math.max(0,Math.min(pos,after.content.size))),out);}
+}
+export function collectTouchedNodeIds(tr:Transaction):string[]{
+ const out=new Set<string>();
+ tr.steps.forEach((step,i)=>{const before=tr.docs[i]??tr.before;const after=i+1<tr.docs.length?tr.docs[i+1]:tr.doc;collectStepTouched(step,before,after,out);});
+ return[...out].sort();
+}
+function applyStepsWithTouched(doc:PMNode,steps:readonly JsonObject[]):{doc:PMNode;touchedNodeIds:string[]}{
+ let next=doc;const out=new Set<string>();
+ for(const raw of steps){const step=Step.fromJSON(doc.type.schema,raw);const result=step.apply(next);if(result.failed||!result.doc)throw new Error("capture-invalid-step");collectStepTouched(step,next,result.doc,out);next=result.doc;}
+ next.check();return{doc:next,touchedNodeIds:[...out].sort()};
 }
 function applySteps(doc: PMNode, steps: readonly JsonObject[]): PMNode {
   let next = doc;
@@ -106,9 +131,9 @@ export class LocalProcessCapture {
       const steps = copy(tr.steps.map(step => step.toJSON() as JsonObject));
       const after = json(tr.doc);
       if (!steps.length || !applySteps(tr.before, steps).eq(tr.doc)) throw new Error("capture-invalid-step");
-      const size = bytes(steps) + 512, snapshotBytes = bytes(after);
+      const touchedNodeIds=collectTouchedNodeIds(tr);const size = bytes(steps) + bytes(touchedNodeIds) + 512, snapshotBytes = bytes(after);
       if (this.reserved >= (this.options.maxEvents ?? MAX_EVENTS) || this.usedBytes + size + this.pendingBytes + snapshotBytes > (this.options.maxBytes ?? MAX_BYTES) || snapshotBytes > MAX_DOCUMENT_BYTES) throw new Error("capture-limit");
-      const header = { sequence: ++this.reserved, documentId: this.options.documentId, sessionId: this.options.sessionId, ...stamp, source: source(tr), steps };
+      const header = { sequence: ++this.reserved, documentId: this.options.documentId, sessionId: this.options.sessionId, ...stamp, source: source(tr), steps, touchedNodeIds };
       this.usedBytes += size; this.pendingBytes += snapshotBytes; this.lastElapsed = stamp.elapsedMs; this.expected = tr.doc;
       // Serialize before awaiting; only one writer updates the chain head.
       this.pending = this.pending.then(async () => {
@@ -175,7 +200,7 @@ export async function verifyCapturedProcess(bundle: CapturedProcess, schema: Sch
       const entry = bundle.events[i], event = entry.event;
       if (event.sequence !== i + 1 || event.documentId !== bundle.documentId || event.sessionId !== bundle.sessionId || !event.steps.length || !SOURCES.includes(event.source) || !Number.isFinite(event.elapsedMs) || event.elapsedMs < elapsed || !Number.isFinite(Date.parse(event.occurredAt)) || entry.previousHash !== head || event.beforeHash !== documentHash) return false;
       if (entry.eventHash !== await hash(canonicalize({ previousHash: head, event }))) return false;
-      doc = applySteps(doc, event.steps); documentHash = await hash(canonicalize(json(doc)));
+      const applied=applyStepsWithTouched(doc,event.steps);if(event.touchedNodeIds!==undefined&&(!Array.isArray(event.touchedNodeIds)||JSON.stringify(applied.touchedNodeIds)!==JSON.stringify(event.touchedNodeIds)))return false;doc=applied.doc; documentHash = await hash(canonicalize(json(doc)));
       if (documentHash !== event.afterHash) return false;
       head = entry.eventHash; elapsed = event.elapsedMs;
     }

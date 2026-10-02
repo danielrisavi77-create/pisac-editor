@@ -9,6 +9,9 @@ import { verifyAndBuildProcessHistory, type VerifiedHistorySegment } from "@/dom
 import type { ProcessHistory } from "@/domain/forensics/process-history";
 import { buildGlobalHistorySteps, moveGlobalHistoryCursor } from "@/domain/forensics/global-history-navigation";
 import { buildProcessAnalytics } from "@/domain/forensics/process-analytics";
+import { academicObjectBindingIntervals, currentAcademicObjectBinding, type AcademicObjectRegistry } from "@/domain/academic-graph/academic-object-registry";
+import { deriveVerifiedObjectActivity, type VerifiedObjectActivity } from "@/domain/forensics/verified-object-activity";
+import { appendPersistedAcademicBinding, loadAcademicObjectRegistry, openAcademicObjectRegistry, type AcademicObjectRegistryDatabase } from "@/lib/academic-object-registry/academic-object-registry-db";
 import { loadProcessLedger, markProcessInterrupted, openProcessLedger, saveProcessCheckpoint, sealProcessSegment, type ProcessLedgerDatabase } from "@/lib/process-ledger/process-ledger";
 
 type Status = "idle" | "recording" | "verifying" | "verified-local" | "failed";
@@ -53,6 +56,11 @@ export default function LiveProcessEditor(props: EditorProps) {
   const [historySession,setHistorySession]=useState<string|null>(null);
   const [historyPosition,setHistoryPosition]=useState(0);
   const [globalCursor,setGlobalCursor]=useState(-1);
+  const [objectRegistry,setObjectRegistry]=useState<AcademicObjectRegistry>({bindings:[]});
+  const [registryError,setRegistryError]=useState("");
+  const [registryReady,setRegistryReady]=useState(false);
+  const [claimActivity,setClaimActivity]=useState<VerifiedObjectActivity[]>([]);
+  const registryDb=useRef<AcademicObjectRegistryDatabase|null>(null);
   const ledger = useRef<ProcessLedgerDatabase | null>(null);
   const previousHead = useRef<string | null>(null);
   const startedAt = useRef("");
@@ -61,7 +69,8 @@ export default function LiveProcessEditor(props: EditorProps) {
   const cleanup = useRef<() => void>(() => {});
   const generation = useRef(0);
   const ready = useCallback((instance: Editor | null) => setEditor(instance), []);
-  useEffect(() => () => { generation.current++; cleanup.current(); capture.current = null; ledger.current?.close(); ledger.current = null; }, []);
+  useEffect(() => () => { generation.current++; cleanup.current(); capture.current = null; ledger.current?.close(); ledger.current = null; registryDb.current?.close(); registryDb.current=null; }, []);
+  useEffect(()=>{let cancelled=false;void(async()=>{const opened=await openAcademicObjectRegistry("pisac-academic-object-registry-demo");if(cancelled){if(opened.ok)opened.db.close();return;}if(!opened.ok){setRegistryError(opened.reason);return;}registryDb.current=opened.db;const loaded=await loadAcademicObjectRegistry(opened.db);if(cancelled){opened.db.close();if(registryDb.current===opened.db)registryDb.current=null;return;}if(!loaded.ok){setRegistryError(loaded.reason);return;}setObjectRegistry(loaded.registry);setRegistryReady(true);})().catch(()=>{if(!cancelled)setRegistryError("open-failed")});return()=>{cancelled=true;};},[]);
   useEffect(() => {
     if (!editor) return;
     let cancelled=false;
@@ -170,12 +179,20 @@ export default function LiveProcessEditor(props: EditorProps) {
   const selectedHistory=historySegments.find(x=>x.record.sessionId===historySession)??null;
   const historyReplay=useMemo(()=>{if(!selectedHistory||!editor)return null;try{return replayCapturedProcess(selectedHistory.bundle,editor.schema,historyPosition);}catch{return null;}},[selectedHistory,editor,historyPosition]);
   const analytics=useMemo(()=>history?.valid?buildProcessAnalytics(history.segments.map(s=>{const verified=historySegments.find(x=>x.record.sessionId===s.sessionId);if(!verified)throw new Error("verified history segment missing");return{sessionId:s.sessionId,startedAt:s.startedAt,updatedAt:s.updatedAt,eventCount:s.eventCount,status:s.status,eventElapsedMs:verified.bundle.events.map(e=>e.event.elapsedMs)}}),{idleThresholdMs:15000}):null,[history,historySegments]);
+  useEffect(()=>{if(!editor||registryError||!history?.valid){setClaimActivity([]);return;}let cancelled=false;const intervals=academicObjectBindingIntervals(objectRegistry,"demo","CLAIM-014");void deriveVerifiedObjectActivity(intervals,historySegments,editor.schema).then(x=>{if(!cancelled)setClaimActivity(x)}).catch(()=>{if(!cancelled)setRegistryError("activity-verification-failed")});return()=>{cancelled=true;};},[editor,history?.valid,historySegments,objectRegistry,registryError]);
   const globalSteps=useMemo(()=>history?buildGlobalHistorySteps(history):[],[history]);
   const globalStep=globalCursor>=0?globalSteps[globalCursor]??null:null;
   const globalSegment=globalStep&&globalStep.kind!=="gap"?historySegments.find(x=>x.record.sessionId===globalStep.sessionId)??null:null;
   const globalReplay=useMemo(()=>{if(!globalStep||globalStep.kind==="gap"||!globalSegment||!editor)return null;const p=globalStep.kind==="session-start"?0:globalStep.eventIndex+1;try{return replayCapturedProcess(globalSegment.bundle,editor.schema,p);}catch{return null;}},[globalStep,globalSegment,editor]);
   function moveGlobal(direction:-1|1){const next=moveGlobalHistoryCursor(globalSteps,globalCursor,direction);if(next>=0)setGlobalCursor(next);}
-
+  async function bindDemoClaimToSelection(){
+    if(!editor||!registryReady||!registryDb.current||registryError)return;
+    const $from=editor.state.selection.$from;let nodeId:string|null=null;
+    for(let d=$from.depth;d>=0;d--){const raw:unknown=$from.node(d).attrs?.nodeId;if(typeof raw==="string"&&raw.trim()){nodeId=raw;break;}}
+    if(!nodeId){setRegistryError("selection-has-no-node-id");return;}
+    try{const current=currentAcademicObjectBinding(objectRegistry,"demo","CLAIM-014");if(current?.nodeId===nodeId&&current.objectRevision===4)return;await appendPersistedAcademicBinding(registryDb.current,{documentId:"demo",bindingId:crypto.randomUUID(),objectId:"CLAIM-014",objectType:"claim",objectRevision:current?.objectRevision??4,nodeId,boundAt:new Date().toISOString()});const loaded=await loadAcademicObjectRegistry(registryDb.current);if(!loaded.ok)throw new Error("invalid-registry");setObjectRegistry(loaded.registry);}
+    catch{setRegistryError("binding-write-failed");}
+  }
 
   return <>
     <DocumentEditor {...props} onReady={ready} />
@@ -192,6 +209,7 @@ export default function LiveProcessEditor(props: EditorProps) {
         {status === "verified-local" ? <button className="btn" onClick={download}>Preuzmi zapis procesa</button> : null}
         {status === "verified-local" || status === "failed" ? <button className="btn" onClick={begin}>Odbaci ovaj zapis i započni novu sesiju</button> : null}
       </div>
+      <div className="card" role="region" aria-label="Academic Object Registry"><h3>Academic Object Registry</h3><p className="hint">Eksplicitno povezuje akademski objekt s postojećim stabilnim nodeId-em od trenutka povezivanja nadalje. Ne pripisuje retroaktivno ranije događaje.</p><button className="btn" disabled={!editor||!registryReady||!!registryError} onClick={()=>void bindDemoClaimToSelection()}>Poveži CLAIM-014 s ovim odlomkom</button>{currentAcademicObjectBinding(objectRegistry,"demo","CLAIM-014")?<p data-testid="claim-binding">CLAIM-014 → {currentAcademicObjectBinding(objectRegistry,"demo","CLAIM-014")!.nodeId} · binding v{currentAcademicObjectBinding(objectRegistry,"demo","CLAIM-014")!.bindingVersion}</p>:<p className="hint">CLAIM-014 još nije povezan s dokumentnim nodeom.</p>}{registryError?<p role="alert">Registry nije potvrđen ({registryError}).</p>:null}{currentAcademicObjectBinding(objectRegistry,"demo","CLAIM-014")?<div aria-label="Verificirana aktivnost CLAIM-014"><h4>Verificirana aktivnost nakon bindinga</h4>{claimActivity.length?claimActivity.map(a=><div key={a.bindingId+":"+a.sessionId+":"+a.eventIndexes.join("-")}><p><b>Sesija {a.sessionId.slice(0,8)}</b> · binding v{objectRegistry.bindings.find(x=>x.bindingId===a.bindingId)?.bindingVersion??"?"} · eventi {a.eventIndexes.map(i=>i+1).join(", ")}</p><p>{a.beforeText||"(prazan node)"} → {a.afterText===null?"∅ (node obrisan)":a.afterText||"(prazan node)"}</p></div>):<p className="hint">Nema verificiranih događaja koji su dotaknuli povezani node nakon trenutka bindinga.</p>}</div>:null}</div>
       {history&&history.valid&&historySegments.length?<div className="card" role="region" aria-label="Povijest procesa pisanja" style={{marginTop:"1rem"}}><h3>Povijest procesa pisanja</h3>{analytics?<div className="card" aria-label="Analitika procesa pisanja"><p><b>{analytics.sessions}</b> sesija · <b>{analytics.events}</b> dokumentnih transakcija · <b>{analytics.interruptedSegments}</b> prekinutih segmenata</p><p className="hint">Trajanje zabilježenih segmenata: {Math.round(analytics.segmentDurationMs/60000)} min. Zbroj kratkih intervala između zabilježenih transakcija (≤15 s): {Math.round(analytics.activeTransactionSpanMs/1000)} s. To nije mjera ukupnog aktivnog rada ni autorstva.</p>{analytics.byRecordedDate.map(d=><p key={d.date} className="hint">{d.date}: {d.sessions} sesija · {d.events} transakcija</p>)}</div>:null}<p className="hint">Svaki segment je zasebno kriptografski provjeren. Razdoblje između segmenata prikazuje se kao prekid; nije dokaz aktivnosti ni neaktivnosti tijekom tog razdoblja.</p><div className="card" role="region" aria-label="Globalna navigacija procesa"><div className="row"><button className="btn" disabled={globalCursor<=0} onClick={()=>moveGlobal(-1)}>Prethodno</button><button className="btn" disabled={!globalSteps.length||globalCursor>=globalSteps.length-1} onClick={()=>moveGlobal(1)}>Sljedeće</button></div>{globalStep?globalStep.kind==="gap"?<div data-testid="global-gap"><b>Prekid između sesija</b><p>Nema zabilježene dokumentne transakcije za ovaj interval. Pisač ne rekonstruira niti interpolira sadržaj kroz prekid.</p></div>:<div><p className="hint">{globalStep.kind==="session-start"?"Početni snimak sesije":`Događaj ${globalStep.eventIndex+1} sesije`}</p><div className="editor-surface" data-testid="global-history-replay" style={{minHeight:"4rem"}}>{globalReplay?renderNode(globalReplay,"global-doc"):"Rekonstrukcija nije dostupna."}</div></div>:<p className="hint">Odaberi Sljedeće za početak globalne navigacije.</p>}</div>{history.timeline.map(item=>item.kind==="gap"?<div key={`gap:${item.fromSessionId}:${item.toSessionId}`} className="card"><b>Prekid između sesija</b><p className="hint">{Math.round(item.durationMs/60000)} min · {item.precededByInterruption?"prethodna sesija prekinuta":"prethodna sesija završena"}</p></div>:<button key={item.sessionId} data-session-id={item.sessionId} className="card" style={{display:"block",width:"100%",textAlign:"left"}} onClick={()=>{setHistorySession(item.sessionId);setHistoryPosition(0)}}><b>Sesija {item.sessionId.slice(0,8)}</b><p className="hint">{item.status==="interrupted"?"Prekinuta":"Završena"} · {item.eventCount} događaja · {new Date(item.startedAt).toLocaleDateString("hr-HR")}</p></button>)}{selectedHistory?<div className="card" aria-label="Replay odabrane trajne sesije"><label htmlFor="history-position">Događaj odabrane sesije: {historyPosition}/{selectedHistory.bundle.events.length}</label><input id="history-position" className="input" type="range" min={0} max={selectedHistory.bundle.events.length} value={historyPosition} onChange={e=>setHistoryPosition(Number(e.target.value))}/><div className="editor-surface" data-testid="history-replay" style={{minHeight:"4rem"}}>{historyReplay?renderNode(historyReplay,"history-doc"):"Rekonstrukcija nije dostupna."}</div></div>:null}</div>:null}
       {bundle ? <div style={{ marginTop: "1rem" }}>
         <p className="hint">Lokalni pregled procesa za mentora — nije podijeljen drugom korisniku. Provjera vrijedi za završenu sesiju, ne za kasnije izmjene dokumenta.</p>
