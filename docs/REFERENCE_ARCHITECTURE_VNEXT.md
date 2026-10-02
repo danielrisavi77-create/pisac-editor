@@ -646,6 +646,28 @@ Tenant failover must not silently move regulated data outside the permitted juri
 
 ## 19. Security boundaries
 
+### 19.1 Key and secret separation
+
+Do not use one key hierarchy for every cryptographic purpose.
+
+At minimum separate:
+
+- application secrets/session credentials;
+- data-encryption key-encryption keys;
+- evidence-receipt signing keys;
+- transparency-log/checkpoint signing keys;
+- final C2PA signing credentials.
+
+Raw evidence objects use provider-standard encryption at rest plus regional KMS-backed envelope encryption when the evidence profile requires application-managed protection. Signing private keys are non-exportable KMS/HSM keys where supported.
+
+Keys are region-scoped by default. Enterprise customer-managed keys may be offered as an isolation tier only when lifecycle, recovery and revocation semantics are fully defined.
+
+A compromise of an application runtime credential must not automatically yield the long-term receipt-signing key.
+
+Secrets are held in a managed secret system and never shipped in client bundles.
+
+### 19.2 Trust boundaries
+
 High-value boundaries are separated even inside the modular monolith:
 
 1. AuthN / federation.
@@ -658,6 +680,8 @@ High-value boundaries are separated even inside the modular monolith:
 8. Admin/support tooling.
 
 Service-role credentials never reach browsers. Parser and AI worker identities have least privilege and no broad production database access.
+
+Do not invent custom encryption primitives. Provider KMS/HSM and established envelope-encryption patterns are the default.
 
 ## 20. Target component map
 
