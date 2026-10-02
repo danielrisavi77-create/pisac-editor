@@ -73,10 +73,10 @@ export default function LiveProcessEditor(props: EditorProps) {
       const loaded=await loadProcessLedger(opened.db,"demo");
       for(const segment of loaded.segments)if(segment.status==="active")await markProcessInterrupted(opened.db,"demo",segment.sessionId,new Date().toISOString());
       const refreshed=await loadProcessLedger(opened.db,"demo");
-      const verified=await verifyAndBuildProcessHistory(refreshed.segments,editor.schema);
+      const verified=await verifyAndBuildProcessHistory(refreshed.segments,editor.schema,refreshed.invalidSessionIds);
       if(cancelled)return;
-      if(refreshed.invalidSessionIds.length)failPersistence("process-ledger-invalid-record");
-      if(!verified.verified)failPersistence("process-ledger-chain-invalid");
+      if(verified.invalidSessionIds.length)failPersistence("process-ledger-invalid-record");
+      else if(!verified.verified)failPersistence("process-ledger-chain-invalid");
       setGlobalCursor(-1);setHistorySession(null);setHistoryPosition(0);setHistory(verified.history);setHistorySegments(verified.segments);
       setPreviousSegments(verified.verified?verified.segments.length:0);
       previousHead.current=verified.verified?(verified.segments.at(-1)?.bundle.receipt.headHash??null):null;
@@ -146,7 +146,7 @@ export default function LiveProcessEditor(props: EditorProps) {
       await persistTail.current;
       const db=ledger.current;
       if(db&&!persistenceFailure.current){
-        try{await sealProcessSegment(db,result.documentId,result.sessionId,result,new Date().toISOString());previousHead.current=result.receipt.headHash;const loaded=await loadProcessLedger(db,result.documentId);const verified=await verifyAndBuildProcessHistory(loaded.segments,editor.schema);if(!verified.verified)throw new Error("process-ledger-chain-invalid");setGlobalCursor(-1);setHistorySession(null);setHistoryPosition(0);setHistory(verified.history);setHistorySegments(verified.segments);setPreviousSegments(verified.segments.length);}
+        try{await sealProcessSegment(db,result.documentId,result.sessionId,result,new Date().toISOString());previousHead.current=result.receipt.headHash;const loaded=await loadProcessLedger(db,result.documentId);const verified=await verifyAndBuildProcessHistory(loaded.segments,editor.schema,loaded.invalidSessionIds);if(!verified.verified)throw new Error("process-ledger-chain-invalid");setGlobalCursor(-1);setHistorySession(null);setHistoryPosition(0);setHistory(verified.history);setHistorySegments(verified.segments);setPreviousSegments(verified.segments.length);}
         catch{failPersistence("process-ledger-seal-failed");}
       }
     } catch {
