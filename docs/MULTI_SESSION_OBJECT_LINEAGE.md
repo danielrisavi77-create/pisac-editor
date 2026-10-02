@@ -47,7 +47,7 @@ may appear as verified object activity.
 
 An event whose timestamp exactly equals a binding boundary is excluded rather than guessed into either side of the boundary.
 
-Verified object activity retains the exact `bindingId`, session ID, ordered event indexes, before/after node text and the timestamp of its first actually attributed event. It preserves the verified process-history lineage order rather than re-sorting sessions by IDs or wall-clock ties.
+Verified object activity retains the exact `bindingId`, document/session identity, ordered event indexes, before/after node state and the timestamp of its first actually attributed event. If the final attributed event deletes the bound node, `afterText` is `null` rather than turning a legitimate deletion into a verification failure. It preserves the verified process-history lineage order rather than re-sorting sessions by IDs or wall-clock ties.
 
 ## UI boundary
 
