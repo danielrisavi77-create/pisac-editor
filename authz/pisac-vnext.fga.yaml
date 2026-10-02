@@ -68,6 +68,15 @@ tuples:
         grant_time: "2026-10-02T20:00:00Z"
         grant_duration: 10m
 
+  - user: user:forensics
+    relation: break_glass
+    object: evidence_package:evidence-1
+    condition:
+      name: non_expired_grant
+      context:
+        grant_time: "2026-10-02T20:00:00Z"
+        grant_duration: 5m
+
 tests:
   - name: student owns private authoring path
     check:
@@ -187,6 +196,23 @@ tests:
         assertions:
           can_read: true
           can_export: false
+
+  - name: evidence package break glass does not widen to project content
+    check:
+      - user: user:forensics
+        object: evidence_package:evidence-1
+        context:
+          current_time: "2026-10-02T20:04:00Z"
+        assertions:
+          can_read: true
+          can_export: false
+      - user: user:forensics
+        object: document:doc-1
+        context:
+          current_time: "2026-10-02T20:04:00Z"
+        assertions:
+          can_read_private_draft: false
+          can_read_shared_revision: false
 
   - name: expired break glass denies
     check:
