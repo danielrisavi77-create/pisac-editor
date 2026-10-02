@@ -10,9 +10,9 @@
 
 Pisač is not a frontend-only prototype. Main contains a substantial F1 authoring kernel: Next.js, Tiptap canonical editor, Dexie local journal, explicit sync state machine, server-sync contracts, live Supabase/Postgres schema with RLS and privileged RPC boundaries, conflict/recovery logic, checkpoints, DOCX export, CI and Playwright coverage.
 
-The dedicated Pisač Supabase project is now ACTIVE_HEALTHY. The original six F1 migrations were already live and the forward-only `f1_live_hardening` migration has been applied. The principal Gate 1 blocker is now **deployed application environment + authenticated server-backed E2E/adversarial evidence**, not database restoration.
+The dedicated Pisač Supabase project is ACTIVE_HEALTHY. The original six F1 migrations were already live; forward-only `f1_live_hardening` and `gate1_least_privilege` migrations are now applied. The principal Gate 1 blocker is now **deployed application environment + authenticated server-backed E2E/adversarial evidence**, not database restoration.
 
-Collaboration/mentor domain logic and demo UI already exist on main, but F2 explicitly says real UI/server persistence follows backend activation. Newer forensic/process-history work exists in open draft/stacked PRs and is not counted as production-ready main functionality.
+Collaboration/mentor domain logic and demo UI exist on main. The F5 chain through PRs #28–#35 is also now on main: forensic process capture/persistence, multi-session history, AcademicObjectRegistry, Academic Revision Lifecycle, revision-specific EvidenceBasis and persistent mentor ReviewCoverage/projection. These are baseline code/domain/demo capabilities, not proof of production mentor persistence, server attestation or backend authorization.
 
 ## Status legend
 
@@ -34,8 +34,8 @@ DONE; REVIEWED; E2E VERIFIED; INTEGRATION VERIFIED; UNIT VERIFIED; IMPLEMENTED; 
 | P0-010 | DOCX export | UNIT VERIFIED | P1 | F1 serializer/fidelity tests; browser export E2E missing |
 | P0-011 | Supabase auth | IMPLEMENTED / BACKEND ACTIVE | P0 | SSR auth/guards/routes; deployed env + live login/session E2E missing |
 | P0-012 | Workspace/project persistence | IMPLEMENTED / LIVE SCHEMA | P0 | schema/actions/UI live-capable; authenticated create/list E2E missing |
-| P0-013 | Owner-only RLS | LIVE / ADVERSE PROOF PENDING | P0 | RLS enabled on live F1 tables; cross-user/direct-API evidence missing |
-| P0-014 | Privileged write RPC boundary | LIVE / REVIEWED | P0 | advisors re-run; three intentional authenticated SECURITY DEFINER warnings remain; live adversarial RPC proof missing |
+| P0-013 | Owner-only RLS | LIVE / ACL HARDENED / ADVERSE PROOF PENDING | P0 | exact table grants verified live; cross-user/direct-API identity evidence still missing |
+| P0-014 | Privileged write RPC boundary | LIVE / REVIEWED / ACL VERIFIED | P0 | anon EXECUTE=false, authenticated=true on exactly three canonical write RPCs; adversarial identity proof pending |
 | P0-015 | Security headers | E2E VERIFIED public scope | P0 | authenticated route proof later |
 | P0-016 | App auth rate limiter | UNIT VERIFIED/LIMITED | P1 | per-process only; edge/Supabase limits required |
 | P0-017 | CI quality gates | E2E VERIFIED baseline | P0 | lint/typecheck/unit/build/bundle/Chromium |
@@ -49,9 +49,9 @@ DONE; REVIEWED; E2E VERIFIED; INTEGRATION VERIFIED; UNIT VERIFIED; IMPLEMENTED; 
 | P0-025 | Mentor collaboration demo | E2E VERIFIED demo only | P1 | production mentor access absent |
 | P0-026 | Production mentor backend | DESIGNED | P0 after Gate 1 | F2 invariants exist; schema/RLS/routes/E2E absent |
 | P0-027 | Submission/final freeze | DESIGNED | P1 | implementation absent |
-| P0-028 | Forensic Writing Ledger | IN PROGRESS OFF MAIN | P1 | draft PR #28 |
-| P0-029 | Multi-session gap-aware replay | IN PROGRESS OFF MAIN | P1 | draft PR #31 |
-| P0-030 | Academic Graph/Mentor Coverage/Delta | IN PROGRESS OFF MAIN | P2 | draft PR #27; currently non-mergeable |
+| P0-028 | Forensic Writing Ledger | IMPLEMENTED ON MAIN / LOCAL EVIDENCE | P1 | process capture/hash/replay/persistent ledger merged; server attestation/production persistence absent |
+| P0-029 | Multi-session gap-aware replay | IMPLEMENTED ON MAIN / LOCAL EVIDENCE | P1 | verified multi-session history/gaps/replay merged; production evidence backend absent |
+| P0-030 | Academic Graph/Mentor Coverage/Delta | IMPLEMENTED ON MAIN / DOMAIN+DEMO | P2 | graph/readiness/coverage/projection layers exist; production mentor authorization/persistence absent |
 | P0-031 | Protected Facts | PARTIAL/STACKED | P2 | contract/demo work; real Lekta backend absent |
 | P0-032 | Multi-tenant institution model | DESIGNED ONLY | P3 | intentionally post-pilot |
 | P0-033 | Production monitoring/alerting | NOT STARTED / insufficient evidence | P0 pre-pilot | implementation + alert drills needed |
@@ -67,6 +67,9 @@ DONE; REVIEWED; E2E VERIFIED; INTEGRATION VERIFIED; UNIT VERIFIED; IMPLEMENTED; 
 | P0-043 | Architecture/dead-code gates | NOT STARTED | P1 | dependency-cruiser + Knip |
 | P0-044 | Dependency automation | NOT STARTED | P1 | Renovate with normal CI/review |
 | P0-045 | Formal lifecycle model | NOT STARTED / SPIKE | P2 | Alloy model for revision/share/mentor/evidence; not Gate 1 blocker |
+| P0-046 | Academic Revision Lifecycle | IMPLEMENTED ON MAIN / LOCAL | P1 | PR #33 merged; durable local revision registry/recovery; server lifecycle E2E absent |
+| P0-047 | Revision-specific EvidenceBasis | IMPLEMENTED ON MAIN / LOCAL | P1 | PR #34 merged; revision-bound evidence lifecycle; production persistence/E2E absent |
+| P0-048 | Persistent ReviewCoverage + mentor revision projection | IMPLEMENTED ON MAIN / LOCAL | P1 | PR #35 merged; local persistence/projection; production mentor backend/RLS absent |
 
 ## Key findings
 
@@ -79,8 +82,8 @@ Supabase SSR plumbing, workspace/project schema, owner-only RLS, canonical docum
 ### F0-3 — Mentor domain logic is ahead of the production mentor product
 SharePackage, revision-request, review and attention logic exist and have tests/demo coverage. F2 says production UI/server persistence is still future work.
 
-### F0-4 — Forensic work is branch topology, not baseline capability
-PR #28 (forensic ledger), PR #31 (multi-session history) and PR #27 (Academic Graph/Mentor Coverage) are draft/stacked work. Audit them on their exact heads before reconciliation.
+### F0-4 — F5 domain stack is now baseline code, not production proof
+The reconstructed F5 chain through PRs #28–#35 is now merged to main. It adds verified local process lineage, multi-session replay, object/revision lineage, revision-specific evidence and mentor review projection. This materially advances Gate 2/3 domain capability, but local/demo persistence and verified process integrity are not substitutes for production server attestation, real mentor relationships, RLS authorization or authenticated end-to-end evidence.
 
 ### F0-5 — CI is strong but not yet a correctness proof
 Current CI covers lint, typecheck, unit tests, AI tests, production build, bundle budget and Chromium Playwright. Authenticated live-backend E2E remains the major missing product evidence. Property/state-machine testing, mutation testing, architecture-boundary enforcement, dead-code analysis and the planned security toolchain remain additional quality work rather than implied by a green baseline CI.
@@ -389,9 +392,27 @@ No synthetic or real student rows were inserted during this step.
 # K. 2026-10-02 execution reconciliation
 
 - Live project rechecked through the Supabase connection: `cxwxxcwrgushfkisfpxz` is ACTIVE_HEALTHY on Postgres 17.
-- Seven live migrations are present; all five F1 public tables have RLS enabled and remain empty before synthetic auth verification.
+- Eight live migrations are present; all five F1 public tables have RLS enabled and remain empty before synthetic auth verification.
 - Security advisors currently report only the three intentional authenticated-callable SECURITY DEFINER RPC warnings.
 - Performance advisors currently report five unused-index INFO findings on the empty database; those indexes are not removed based on zero-row statistics.
 - Current Supabase guidance prefers `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`; the code migration uses it first with a temporary legacy anon fallback.
+- `gate1_least_privilege` removed authenticated TRUNCATE/REFERENCES/TRIGGER/MAINTAIN from all five F1 tables while preserving workspace/project CRUD, canonical-state SELECT, anon denial and authenticated-only RPC EXECUTE.
 - The next product proof is deploy configuration + authenticated synthetic E2E. Do not repeat restore/apply-old-migrations work.
 - The quality/research expansion is now bounded: dependency-cruiser, Knip, Renovate and one Alloy spike are accepted additions; broad tool discovery stops unless a concrete failure/gap requires it.
+
+
+# L. 2026-10-02 least-privilege and F5 reconciliation
+
+- PR #38 merged as `bfd93ba8fd4a55104ab73b693c6164a3be564926`.
+- Supabase migration `gate1_least_privilege` applied successfully; live migration history now has eight entries.
+- Post-apply ACL verification:
+  - workspace/project: authenticated SELECT/INSERT/UPDATE/DELETE only;
+  - canonical documents/revisions/checkpoints: authenticated SELECT only;
+  - authenticated TRUNCATE/REFERENCES/TRIGGER/MAINTAIN=false everywhere in the F1 table set;
+  - anon table SELECT=false;
+  - canonical RPC contract unchanged: anon EXECUTE=false, authenticated EXECUTE=true.
+- Advisors rerun: only the same three intentional authenticated SECURITY DEFINER WARNs and five unused-index INFO findings remain.
+- Issue #37 is closed.
+- PRs #33, #34 and #35 are merged, so revision lifecycle, revision-specific EvidenceBasis and mentor ReviewCoverage/projection are now baseline code rather than open-stack claims.
+- Windows test-harness parity is addressed in PR #42; local verification on Node 24.14.1 reached 83/83 files and 1,365/1,365 unit tests without raising performance limits.
+- Issue #40 tracks the separate Next 15.5.25 → PostCSS 8.4.31 dependency vulnerability.
