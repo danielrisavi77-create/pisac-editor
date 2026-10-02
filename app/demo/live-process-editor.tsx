@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { Editor, EditorEvents } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import DocumentEditor, { type EditorProps } from "@/editor/Editor";
-import { LocalProcessCapture, replayCapturedProcess, type CapturedProcess } from "@/editor/process-capture";
+import { LocalProcessCapture, replayCapturedProcess, verifyCapturedProcess, type CapturedProcess } from "@/editor/process-capture";
+import { loadProcessLedger, markProcessInterrupted, openProcessLedger, saveProcessCheckpoint, sealProcessSegment, type ProcessLedgerDatabase } from "@/lib/process-ledger/process-ledger";
 
 type Status = "idle" | "recording" | "verifying" | "verified-local" | "failed";
 const LABEL: Record<Status, string> = {
@@ -38,27 +39,80 @@ export default function LiveProcessEditor(props: EditorProps) {
   const [bundle, setBundle] = useState<CapturedProcess | null>(null);
   const [position, setPosition] = useState(0);
   const [error, setError] = useState("");
+  const [persistenceError, setPersistenceError] = useState("");
+  const persistenceFailure = useRef("");
+  const failPersistence = useCallback((code:string)=>{persistenceFailure.current=code;setPersistenceError(code);},[]);
+  const [previousSegments, setPreviousSegments] = useState(0);
+  const [persistedCount, setPersistedCount] = useState(0);
+  const ledger = useRef<ProcessLedgerDatabase | null>(null);
+  const previousHead = useRef<string | null>(null);
+  const startedAt = useRef("");
+  const persistTail = useRef<Promise<void>>(Promise.resolve());
   const capture = useRef<LocalProcessCapture | null>(null);
   const cleanup = useRef<() => void>(() => {});
   const generation = useRef(0);
   const ready = useCallback((instance: Editor | null) => setEditor(instance), []);
-  useEffect(() => () => { generation.current++; cleanup.current(); capture.current = null; }, []);
+  useEffect(() => () => { generation.current++; cleanup.current(); capture.current = null; ledger.current?.close(); ledger.current = null; }, []);
+  useEffect(() => {
+    if (!editor) return;
+    let cancelled=false;
+    void (async()=>{
+      const opened=await openProcessLedger("pisac-process-ledger-demo");
+      if(cancelled)return;
+      if(!opened.ok){failPersistence("process-ledger-unavailable");return;}
+      ledger.current=opened.db;
+      const loaded=await loadProcessLedger(opened.db,"demo");
+      let valid=0;let head:string|null=null;
+      for(const segment of loaded.segments){
+        const bundleValid=await verifyCapturedProcess(segment.bundle,editor.schema);
+        const linkValid=segment.previousSessionHead===null?valid===0:segment.previousSessionHead===head;
+        if(!bundleValid||!linkValid){head=null;failPersistence("process-ledger-chain-invalid");break;}
+        valid++;head=segment.bundle.receipt.headHash;
+        if(segment.status==="active")await markProcessInterrupted(opened.db,"demo",segment.sessionId,new Date().toISOString());
+      }
+      if(cancelled)return;
+      setPreviousSegments(valid);previousHead.current=persistenceFailure.current?null:head;
+      if(loaded.invalidSessionIds.length)failPersistence("process-ledger-invalid-record");
+    })().catch(()=>{if(!cancelled)failPersistence("process-ledger-open-failed")});
+    return()=>{cancelled=true;};
+  },[editor,failPersistence]);
 
   function begin() {
     if (!editor || editor.isDestroyed || !editor.isEditable) return;
+    // A known durable-ledger error must not create a new segment that looks linked/healthy.
+    // In-memory capture still works, but persistence stays disabled until reload/recovery.
+    const persistenceAllowed=!persistenceFailure.current;
     cleanup.current();
     const version = ++generation.current;
-    setBundle(null); setError(""); setCount(0); setPosition(0);
+    setBundle(null); setError(""); setCount(0); setPersistedCount(0); setPosition(0);
     try {
+      const sessionId=crypto.randomUUID(); startedAt.current=new Date().toISOString();
       const session = new LocalProcessCapture(editor.state.doc, {
-        documentId: "demo", sessionId: crypto.randomUUID(),
+        documentId: "demo", sessionId,
         onChange: () => {
           if (version !== generation.current) return;
           setCount(session.count);
-          if (session.error) { setError(session.error); setStatus("failed"); }
+          if (session.error) { setError(session.error); setStatus("failed"); return; }
+          const db=ledger.current;if(!db||!persistenceAllowed)return;
+          const versionAtQueue=version;
+          persistTail.current=persistTail.current.then(async()=>{
+            if(persistenceFailure.current)return;
+            const checkpoint=await session.checkpoint();
+            if(versionAtQueue!==generation.current||persistenceFailure.current)return;
+            await saveProcessCheckpoint(db,{bundle:checkpoint,status:"active",startedAt:startedAt.current,updatedAt:new Date().toISOString(),previousSessionHead:previousHead.current});setPersistedCount(checkpoint.events.length);
+          }).catch(()=>failPersistence("process-ledger-write-failed"));
         },
       });
       capture.current = session;
+      const db=ledger.current;
+      if(db&&persistenceAllowed){
+        persistTail.current=persistTail.current.then(async()=>{
+          if(persistenceFailure.current)return;
+          const checkpoint=await session.checkpoint();
+          if(version!==generation.current||persistenceFailure.current)return;
+          await saveProcessCheckpoint(db,{bundle:checkpoint,status:"active",startedAt:startedAt.current,updatedAt:new Date().toISOString(),previousSessionHead:previousHead.current});setPersistedCount(checkpoint.events.length);
+        }).catch(()=>failPersistence("process-ledger-write-failed"));
+      }
       const onTransaction = ({ transaction, appendedTransactions }: EditorEvents["transaction"]) => {
         // Tiptap applies plugin-appended transactions too; do not omit them.
         for (const tr of [transaction, ...appendedTransactions]) session.record(tr);
@@ -82,6 +136,12 @@ export default function LiveProcessEditor(props: EditorProps) {
       const result = await session.seal(atStop);
       if (version !== generation.current) return;
       setBundle(result); setPosition(result.events.length); setCount(result.events.length); setStatus("verified-local");
+      await persistTail.current;
+      const db=ledger.current;
+      if(db&&!persistenceFailure.current){
+        try{await sealProcessSegment(db,result.documentId,result.sessionId,result,new Date().toISOString());previousHead.current=result.receipt.headHash;setPreviousSegments(x=>x+1);}
+        catch{failPersistence("process-ledger-seal-failed");}
+      }
     } catch {
       if (version !== generation.current) return;
       setError(session.error ?? "capture-verification-failed"); setStatus("failed");
@@ -106,10 +166,10 @@ export default function LiveProcessEditor(props: EditorProps) {
     <section className="card" aria-label="Stvarni proces pisanja" data-capture-status={status} style={{ marginTop: "1rem" }}>
       <h2>Stvarni proces pisanja</h2>
       <p className="hint">Dobrovoljno bilježenje trenutnog dokumenta i svih njegovih zabilježenih izmjena, uključujući izbrisani tekst. Početni tekst je snimak, ne dokaz kako je ranije napisan.</p>
-      <p className="hint">Zapis je samo u memoriji ove stranice. Zatvaranje ili osvježavanje stranice briše ovaj zapis; preuzmi ga prije izlaska. Spremanje samog dokumenta radi odvojeno.</p>
+      <p className="hint">Proces se sprema u zasebni lokalni IndexedDB ledger ovog preglednika. Prekid ili reload završava taj segment kao prekinut; novi segment može se povezati na prethodnu glavu. To nije serverska potvrda ni udaljena mentorska pohrana.</p>
       <p className="hint">Bilježenje ostaje u editoru: nema praćenja drugih aplikacija ni čitanja međuspremnika izvan lijepljenja. Podudaranje zapisa nije dokaz ljudskog autorstva, identiteta ili odsutnosti vanjskog AI-ja.</p>
-      <p role="status">{LABEL[status]} {error ? `(${error})` : ""}</p>
-      <p>Pohranjene transakcije u ovoj memorijskoj sesiji: <b data-testid="capture-count">{count}</b></p>
+      <p role="status">{LABEL[status]} {error ? `(${error})` : ""}</p>{persistenceError?<p role="alert">Trajna lokalna evidencija nije potvrđena ({persistenceError}). Dokument se i dalje uređuje i sprema odvojeno.</p>:null}<p className="hint">Ranije provjerljivi lokalni segmenti ovog dokumenta: <b data-testid="persisted-segments">{previousSegments}</b></p>
+      <p>Pohranjene transakcije u ovoj memorijskoj sesiji: <b data-testid="capture-count">{count}</b> · potvrđene u trajnom lokalnom checkpointu: <b data-testid="persisted-count">{persistedCount}</b></p>
       <div className="row">
         {status === "idle" ? <button className="btn" disabled={!editor} onClick={begin}>Pokreni lokalno bilježenje</button> : null}
         {status === "recording" ? <button className="btn" onClick={() => void finish()}>Završi i provjeri sesiju</button> : null}

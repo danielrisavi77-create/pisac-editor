@@ -124,6 +124,26 @@ export class LocalProcessCapture {
       this.fail(error instanceof Error && error.message.startsWith("capture-") ? error.message : "capture-invalid-transaction");
     }
   }
+  /** Durable-prefix snapshot. Does NOT stop capture and makes no server-attestation claim. */
+  async checkpoint(): Promise<CapturedProcess> {
+    if (this.failure) throw new Error(this.failure);
+    // A record() call can replace this.pending while hashing is in flight.
+    // Wait until the observed barrier is still the current tail, then copy all
+    // receipt fields synchronously so the returned prefix cannot mix versions.
+    let barrier: Promise<void>;
+    do {
+      barrier = this.pending;
+      await barrier;
+      if (this.failure) throw new Error(this.failure);
+    } while (barrier !== this.pending);
+    return {
+      ...genesis({ documentId: this.options.documentId, sessionId: this.options.sessionId, initialDocument: this.initialDocument }),
+      genesisHash: this.root,
+      events: copy(this.entries),
+      receipt: { eventCount: this.entries.length, headHash: this.head, finalDocumentHash: this.documentHash },
+    };
+  }
+
   /** Freezes the segment. Later typing is explicitly outside this capture. */
   async seal(actualDocument: PMNode): Promise<CapturedProcess> {
     this.stopped = true;

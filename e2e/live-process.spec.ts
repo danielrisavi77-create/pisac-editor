@@ -75,7 +75,9 @@ test.describe("Opt-in live editor process", () => {
     await editor.press("ArrowLeft");
     await editor.press("ArrowRight");
     await expect(panel.getByTestId("capture-count")).toHaveText("0");
-    await expect(panel).toContainText("Zatvaranje ili osvježavanje stranice briše ovaj zapis");
+    await expect(panel).toContainText("Proces se sprema u zasebni lokalni IndexedDB ledger");
+    await expect(panel).toContainText("Prekid ili reload završava taj segment kao prekinut");
+    await expect(panel).toContainText("nije serverska potvrda ni udaljena mentorska pohrana");
     await expect(panel).toContainText("nije dokaz ljudskog autorstva");
     await panel.getByRole("button", { name: "Završi i provjeri sesiju" }).click();
     await expect(panel).toHaveAttribute("data-capture-status", "verified-local");
