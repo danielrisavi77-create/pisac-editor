@@ -12,7 +12,7 @@ A draft is keyed by `documentId + objectId` and tied to one exact registry `bind
 
 Only verified activity for that same document, object, binding and canonical node may enter the draft. Individual keystrokes do not increment the academic revision.
 
-The draft's `openedAt` and `afterText` are derived from verified activity. Callers do not supply an arbitrary snapshot from the live editor.
+The draft's `openedAt`, `lastActivityAt` and `afterText` are derived from verified activity. Callers do not supply an arbitrary snapshot from the live editor.
 
 A later draft update must contain all activity already persisted for that draft. Rollback of verified activity is rejected.
 
@@ -20,7 +20,7 @@ A later draft update must contain all activity already persisted for that draft.
 
 Explicit seal creates exactly `baseRevision + 1`.
 
-The sealed revision copies the verified draft snapshot. It does not re-read the live editor at seal time, so uncaptured edits made after the verified process segment cannot silently enter a sealed academic revision.
+The sealed revision copies the verified draft snapshot. It does not re-read the live editor at seal time, so uncaptured edits made after the verified process segment cannot silently enter a sealed academic revision. Seal time must be strictly later than `lastActivityAt`; this keeps the final old-binding event strictly inside the old binding interval after registry phase 2.
 
 A deleted bound node is represented by `afterText = null`.
 
@@ -43,7 +43,7 @@ Any larger or unrelated mismatch is rejected as unsafe.
 
 ## Persistence boundary
 
-Drafts and sealed revisions use separate IndexedDB tables.
+Drafts and sealed revisions use separate IndexedDB tables. Legacy experimental unscoped `rows` data is preserved but rejected as `invalid-ledger`; the lifecycle does not guess a missing `documentId`.
 
 The drafts table has a unique `[documentId+objectId]` index, allowing at most one open draft per academic object in one document.
 
