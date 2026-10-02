@@ -59,6 +59,8 @@ import AnalysisLineageDemo from "./analysis-lineage-demo";
 import DecisionLogDemo from "./decision-log-demo";
 import DefenseDemo from "./defense-demo";
 import ResearchMemoryDemo from "./research-memory-demo";
+import MentorProcessDemo from "./mentor-process-demo";
+import MentorCommandCenterDemo from "./mentor-command-center-demo";
 
 /**
  * The journal key every visitor's demo shares inside their own browser.
@@ -368,6 +370,8 @@ function JournalledDemoEditor({
       <DecisionLogDemo />
       <DefenseDemo />
       <ResearchMemoryDemo />
+      <MentorCommandCenterDemo />
+      <MentorProcessDemo />
 
       <DocxExportBar
         document={visibleDocument}

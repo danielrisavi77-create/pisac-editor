@@ -1,0 +1,9 @@
+import{describe,expect,it}from"vitest";import{buildMentorQueue,groupMentorQueue,type MentorProjectInput}from"./command-center";
+const base:MentorProjectInput={projectId:"p1",studentId:"s1",studentLabel:"Daniel",workLabel:"Diplomski",lastActivityAt:"2026-09-29T10:00:00Z",reviewDeltaCount:6,studentResponseCount:2,neverReviewedCount:1,readinessBlockerCount:0,forensicAnomalyCount:0,finalReviewRequested:false,studentWorkPending:false};
+describe("Mentor Command Center",()=>{
+ it("explains mentor work without a risk score",()=>{const x=buildMentorQueue([base])[0];expect(x.waitingOn).toBe("mentor");expect(x.reasons).toEqual([{kind:"review-delta",count:6},{kind:"student-responses",count:2},{kind:"never-reviewed",count:1}]);expect(x).not.toHaveProperty("score");});
+ it("surfaces forensic anomalies as facts, not misconduct conclusions",()=>expect(buildMentorQueue([{...base,reviewDeltaCount:0,studentResponseCount:0,neverReviewedCount:0,forensicAnomalyCount:2}])[0].reasons).toContainEqual({kind:"forensic-anomalies",count:2}));
+ it("derives student waiting only when mentor has no pending action",()=>expect(buildMentorQueue([{...base,reviewDeltaCount:0,studentResponseCount:0,neverReviewedCount:0,studentWorkPending:true}])[0].waitingOn).toBe("student"));
+ it("mentor action wins over simultaneous student work",()=>expect(buildMentorQueue([{...base,studentWorkPending:true}])[0].waitingOn).toBe("mentor"));
+ it("groups workflow by derived next actor",()=>{const q=buildMentorQueue([base,{...base,projectId:"p2",reviewDeltaCount:0,studentResponseCount:0,neverReviewedCount:0,studentWorkPending:true},{...base,projectId:"p3",reviewDeltaCount:0,studentResponseCount:0,neverReviewedCount:0,studentWorkPending:false}]);const g=groupMentorQueue(q);expect(g.mentor).toHaveLength(1);expect(g.student).toHaveLength(1);expect(g.none).toHaveLength(1);});
+});
