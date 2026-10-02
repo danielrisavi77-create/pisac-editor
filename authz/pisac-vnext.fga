@@ -1,0 +1,88 @@
+model
+  schema 1.1
+
+type user
+
+type institution
+  relations
+    define member: [user]
+    define admin: [user]
+    define auditor: [user]
+    define can_manage_policy: admin
+    define can_read_policy: admin or auditor
+    define can_read_audit: admin or auditor
+
+type course
+  relations
+    define institution: [institution]
+    define teacher: [user]
+    define assistant: [user]
+    define student: [user]
+    define can_manage: teacher or assistant
+    define can_view_roster: teacher or assistant
+
+type assignment
+  relations
+    define course: [course]
+    define can_manage: can_manage from course
+    define can_view_roster: can_view_roster from course
+
+type project
+  relations
+    define assignment: [assignment]
+    define student: [user]
+    define mentor: [user]
+    define co_mentor: [user]
+    define reviewer: [user]
+    define break_glass: [user with non_expired_grant]
+
+    define can_read_private_draft: student or break_glass
+    define can_read_shared_revision: student or mentor or co_mentor or reviewer or break_glass
+    define can_write_document: student
+    define can_comment: mentor or co_mentor or reviewer
+    define can_request_revision: mentor or co_mentor
+    define can_mark_reviewed: mentor or co_mentor or reviewer
+    define can_submit: student
+    define can_manage_sharing: student
+
+type document
+  relations
+    define project: [project]
+    define can_read_private_draft: can_read_private_draft from project
+    define can_read_shared_revision: can_read_shared_revision from project
+    define can_write_document: can_write_document from project
+    define can_comment: can_comment from project
+    define can_request_revision: can_request_revision from project
+
+type submission
+  relations
+    define project: [project]
+    define can_read: can_read_shared_revision from project
+    define can_finalize: can_submit from project
+    define can_review: can_mark_reviewed from project
+
+type evidence_package
+  relations
+    define project: [project]
+    define viewer: [user]
+    define exporter: [user]
+    define break_glass: [user with non_expired_grant]
+
+    define can_append: student from project
+    define can_read: student from project or viewer or exporter or break_glass or break_glass from project
+    define can_export: student from project or exporter
+
+type institution_policy
+  relations
+    define institution: [institution]
+    define can_manage: can_manage_policy from institution
+    define can_read: can_read_policy from institution
+
+type audit_record
+  relations
+    define institution: [institution]
+    define can_read: can_read_audit from institution
+
+condition non_expired_grant(current_time: timestamp, grant_time: timestamp, grant_duration: duration) {
+  current_time >= grant_time && current_time < grant_time + grant_duration
+}
