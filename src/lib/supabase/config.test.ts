@@ -18,26 +18,47 @@ describe("getSupabaseConfig", () => {
     ).toBeNull();
   });
 
-  it("returns null when only the anon key is present", () => {
-    expect(getSupabaseConfig({ NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon" })).toBeNull();
+  it("returns null when only a public key is present", () => {
+    expect(
+      getSupabaseConfig({ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "publishable" }),
+    ).toBeNull();
+    expect(getSupabaseConfig({ NEXT_PUBLIC_SUPABASE_ANON_KEY: "legacy-anon" })).toBeNull();
   });
 
   it("returns null when a value is blank whitespace", () => {
     expect(
       getSupabaseConfig({
         NEXT_PUBLIC_SUPABASE_URL: "   ",
-        NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon",
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "publishable",
       }),
     ).toBeNull();
   });
 
-  it("returns trimmed values when both env vars are present", () => {
+  it("prefers the publishable key and trims both values", () => {
     expect(
       getSupabaseConfig({
         NEXT_PUBLIC_SUPABASE_URL: " https://x.supabase.co ",
-        NEXT_PUBLIC_SUPABASE_ANON_KEY: " anon-key ",
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: " publishable-key ",
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: " legacy-anon ",
       }),
-    ).toEqual({ url: "https://x.supabase.co", anonKey: "anon-key" });
+    ).toEqual({ url: "https://x.supabase.co", publicKey: "publishable-key" });
+  });
+
+  it("falls back to the legacy anon key when the publishable key is absent or blank", () => {
+    expect(
+      getSupabaseConfig({
+        NEXT_PUBLIC_SUPABASE_URL: "https://x.supabase.co",
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: " legacy-anon ",
+      }),
+    ).toEqual({ url: "https://x.supabase.co", publicKey: "legacy-anon" });
+
+    expect(
+      getSupabaseConfig({
+        NEXT_PUBLIC_SUPABASE_URL: "https://x.supabase.co",
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "   ",
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: "legacy-anon",
+      }),
+    ).toEqual({ url: "https://x.supabase.co", publicKey: "legacy-anon" });
   });
 });
 
@@ -46,11 +67,20 @@ describe("isSupabaseConfigured", () => {
     expect(isSupabaseConfigured({})).toBe(false);
   });
 
-  it("is true with both env vars", () => {
+  it("is true with the preferred publishable key", () => {
     expect(
       isSupabaseConfigured({
         NEXT_PUBLIC_SUPABASE_URL: "https://x.supabase.co",
-        NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon-key",
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "publishable-key",
+      }),
+    ).toBe(true);
+  });
+
+  it("remains true with the temporary legacy anon fallback", () => {
+    expect(
+      isSupabaseConfigured({
+        NEXT_PUBLIC_SUPABASE_URL: "https://x.supabase.co",
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: "legacy-anon",
       }),
     ).toBe(true);
   });
