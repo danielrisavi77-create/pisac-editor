@@ -33,16 +33,9 @@ describe("RFC 8785 JCS", () => {
     };
 
     const canonical = canonicalizeJcs(value);
-    expect(Object.keys(JSON.parse(canonical))).toEqual([
-      "\r",
-      "1",
-      "nested",
-      "\u0080",
-      "\u00f6",
-      "\u20ac",
-      "\ud83d\ude00",
-      "\ufb33",
-    ]);
+    expect(canonical).toBe(
+      '{"\\r":"Carriage Return","1":"One","nested":[{"a":2,"z":1},{"a":4,"b":3}],"\u0080":"Control","ö":"Latin Small Letter O With Diaeresis","€":"Euro Sign","😀":"Emoji: Grinning Face","דּ":"Hebrew Letter Dalet With Dagesh"}',
+    );
     expect(JSON.parse(canonical).nested).toEqual([
       { a: 2, z: 1 },
       { a: 4, b: 3 },
