@@ -27,7 +27,7 @@
 | ADR-VN-009 | Revision vocabulary | generic revision fields in historic domain | explicit documentRevision/objectRevision at new boundaries | EVOLVE | no broad risky rename; enforce in new APIs/contracts |
 | ADR-VN-010 | Identity | Supabase + generic IdentityProvider | normalized Principal; federation gateway when multi-IdP complexity justifies it | EVOLVE | direct AAI is fine for pilot; broker introduced only with ≥2 meaningful institutional federation sources |
 | ADR-VN-011 | Federation | none | AAI@EduHr / eduGAIN / university SAML/OIDC | ADD | sandbox then production federation tests |
-| ADR-VN-012 | Authorization | owner-only RLS / role checks | ReBAC/OpenFGA-style fine-grained authorization | ADD | adversarial cross-user/course/institution suite; RLS remains defence-in-depth |
+| ADR-VN-012 | Authorization | owner-only RLS / role checks | ReBAC/OpenFGA-style fine-grained authorization | ADD | adversarial cross-user/course/institution suite; high-consistency fail-closed evidence/private checks; revoke proven before access is considered removed; RLS remains defence-in-depth |
 | ADR-VN-012A | Enterprise provisioning | none | optional SCIM 2.0 for account/group lifecycle | ADD WHEN REQUIRED | adopt only for institutional directory provisioning; never substitute SCIM groups for academic course truth by default |
 | ADR-VN-013 | Academic policy | domain-specific policies planned | separate Policy Engine | KEEP/EVOLVE | do not encode academic policy as access-control tuples |
 | ADR-VN-014 | LMS integration | none | LTI 1.3 Advantage first | ADD | certified/reference-platform interoperability tests |
