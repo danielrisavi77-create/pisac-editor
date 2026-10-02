@@ -25,11 +25,27 @@ function extendsPersistedPrefix(previous:CapturedProcess,next:CapturedProcess):b
  const expectedHead=previous.events.length?next.events[previous.events.length-1]?.eventHash:next.genesisHash;
  return previous.receipt.headHash===expectedHead;
 }
+function chainOrder(rows:readonly ProcessSegmentRecord[]):ProcessSegmentRecord[]|null{
+ if(!rows.length)return[];
+ const byHead=new Map<string,ProcessSegmentRecord>();
+ for(const row of rows){if(byHead.has(row.bundle.receipt.headHash))return null;byHead.set(row.bundle.receipt.headHash,row);}
+ const roots=rows.filter(x=>x.previousSessionHead===null);if(roots.length!==1)return null;
+ const childByParent=new Map<string,ProcessSegmentRecord>();
+ for(const row of rows){
+  if(row.previousSessionHead===null)continue;
+  const parent=byHead.get(row.previousSessionHead);if(!parent||parent.sessionId===row.sessionId||childByParent.has(row.previousSessionHead))return null;
+  if(parent.status==="active"||Date.parse(row.startedAt)<Date.parse(parent.updatedAt))return null;
+  childByParent.set(row.previousSessionHead,row);
+ }
+ const ordered:ProcessSegmentRecord[]=[];const seen=new Set<string>();let current:ProcessSegmentRecord|undefined=roots[0];
+ while(current){if(seen.has(current.sessionId))return null;seen.add(current.sessionId);ordered.push(current);current=childByParent.get(current.bundle.receipt.headHash);}
+ return ordered.length===rows.length?ordered:null;
+}
 async function assertContinuation(db:ProcessLedgerDatabase,r:ProcessSegmentRecord){
  const rows=(await db.segments.where("documentId").equals(r.documentId).toArray()).filter(x=>x.sessionId!==r.sessionId);
  if(rows.some(x=>!structurallyValid(x)))throw new Error("process-ledger-invalid-record");
- rows.sort((a,b)=>Date.parse(a.startedAt)-Date.parse(b.startedAt)||a.sessionId.localeCompare(b.sessionId));
- const latest=rows.at(-1);
+ const ordered=chainOrder(rows);if(!ordered)throw new Error("process-ledger-chain-invalid");
+ const latest=ordered.at(-1);
  if(!latest){if(r.previousSessionHead!==null)throw new Error("process-ledger-missing-parent");return;}
  if(latest.status==="active")throw new Error("process-ledger-parent-active");
  if(Date.parse(r.startedAt)<Date.parse(latest.updatedAt))throw new Error("process-ledger-overlap");
@@ -74,7 +90,8 @@ export async function markProcessInterrupted(db:ProcessLedgerDatabase,documentId
  });
 }
 export async function loadProcessLedger(db:ProcessLedgerDatabase,documentId:string):Promise<{segments:ProcessSegmentRecord[];invalidSessionIds:string[]}>{
- const rows=await db.segments.where("documentId").equals(documentId).toArray();const segments:ProcessSegmentRecord[]=[],invalidSessionIds:string[]=[];
+ const rows=await db.segments.where("documentId").equals(documentId).toArray();let segments:ProcessSegmentRecord[]=[],invalidSessionIds:string[]=[];
  for(const r of rows){if(structurallyValid(r))segments.push(structuredClone(r));else invalidSessionIds.push(r.sessionId);}
- segments.sort((a,b)=>Date.parse(a.startedAt)-Date.parse(b.startedAt)||a.sessionId.localeCompare(b.sessionId));invalidSessionIds.sort();return{segments,invalidSessionIds};
+ const ordered=chainOrder(segments);if(ordered)segments=ordered;else segments.sort((a,b)=>Date.parse(a.startedAt)-Date.parse(b.startedAt)||a.sessionId.localeCompare(b.sessionId));
+ invalidSessionIds.sort();return{segments,invalidSessionIds};
 }
