@@ -89,6 +89,8 @@ export type EditorProps = {
   editable?: boolean;
   debounceMs?: number;
   placeholder?: string;
+  /** Optional local observer hook; does not change F1 saving or record input by itself. */
+  onReady?: (editor: Editor | null) => void;
 };
 
 type ToolbarState = {
@@ -151,6 +153,7 @@ export default function DocumentEditor({
   initialDocument,
   onCanonicalChange,
   onDirty,
+  onReady,
   flushRef,
   editable = true,
   debounceMs = DEFAULT_DEBOUNCE_MS,
@@ -240,6 +243,12 @@ export default function DocumentEditor({
       }, delay.current);
     },
   });
+
+  useEffect(() => {
+    if (!editor) return;
+    onReady?.(editor);
+    return () => onReady?.(null);
+  }, [editor, onReady]);
 
   /**
    * Replaces the whole document with `doc`, with the undo history cleared.
