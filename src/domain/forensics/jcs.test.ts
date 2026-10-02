@@ -68,6 +68,30 @@ describe("RFC 8785 JCS", () => {
     expect(() => canonicalizeJcs(cyclic)).toThrow("cyclic value");
   });
 
+  it("matches representative RFC 8785 Appendix B number vectors", () => {
+    const vectors: Array<[number, string]> = [
+      [0, "0"],
+      [-0, "0"],
+      [Number.MIN_VALUE, "5e-324"],
+      [-Number.MIN_VALUE, "-5e-324"],
+      [Number.MAX_VALUE, "1.7976931348623157e+308"],
+      [-Number.MAX_VALUE, "-1.7976931348623157e+308"],
+      [2 ** 53, "9007199254740992"],
+      [2 ** 68, "295147905179352830000"],
+      [9.999999999999997e22, "9.999999999999997e+22"],
+      [1e23, "1e+23"],
+      [9.999999999999997e-7, "9.999999999999997e-7"],
+      [0.000001, "0.000001"],
+      [333333333.3333333, "333333333.3333333"],
+      [-0.0000033333333333333333, "-0.0000033333333333333333"],
+      [1424953923781206.25, "1424953923781206.2"],
+    ];
+
+    for (const [value, expected] of vectors) {
+      expect(canonicalizeJcs(value)).toBe(expected);
+    }
+  });
+
   it("uses ECMAScript number serialization including negative zero", () => {
     expect(canonicalizeJcs({ n: -0, small: 0.000001, large: 1e30 })).toBe(
       '{"large":1e+30,"n":0,"small":0.000001}',
