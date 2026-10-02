@@ -106,11 +106,12 @@ OpenFGA's default query mode may use cache. Its `HIGHER_CONSISTENCY` mode bypass
 
 The application port therefore marks sensitive operations such as:
 
-- private draft reads;
-- document writes;
-- submission finalization;
+- private and shared academic-content reads;
+- mentor/reviewer content actions;
+- document writes and submission actions;
+- roster reads;
 - evidence append/read/export;
-- institution policy changes
+- policy/audit reads and institution policy changes
 
 for higher-consistency checks.
 
@@ -125,7 +126,7 @@ stop new capability -> delete authz relation
 -> verify denial with higher consistency -> REVOKED
 ~~~
 
-Temporary denial is preferable to continued sensitive access after an intended revoke.
+Temporary denial is preferable to continued sensitive access after an intended revoke. The initial model therefore prefers higher consistency on revocable content paths; latency optimization requires a later measured design that preserves immediate revocation.
 
 ## Provider-neutral boundary
 
