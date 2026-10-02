@@ -63,6 +63,42 @@ const SHA256_HEX = /^[0-9a-f]{64}$/;
 const MAX_ID_LENGTH = 256;
 const MAX_EVENTS = 5000;
 const SOURCES = new Set<string>(EVIDENCE_SOURCES_V2);
+const SEGMENT_KEYS = new Set([
+  "evidenceSchema",
+  "canonicalization",
+  "hashAlgorithm",
+  "documentId",
+  "sessionId",
+  "segmentId",
+  "sequenceFrom",
+  "sequenceTo",
+  "observedStartedAt",
+  "observedEndedAt",
+  "initialDocumentHash",
+  "finalDocumentHash",
+  "predecessorSegmentHash",
+  "events",
+  "captureContext",
+  "evidenceProfileId",
+]);
+const EVENT_KEYS = new Set([
+  "sequence",
+  "occurredAt",
+  "elapsedMs",
+  "source",
+  "steps",
+  "touchedNodeIds",
+  "beforeDocumentHash",
+  "afterDocumentHash",
+]);
+const CAPTURE_CONTEXT_KEYS = new Set(["editorModel", "transactionFormat"]);
+
+function hasOnlyKeys(
+  value: Record<string, unknown>,
+  allowed: ReadonlySet<string>,
+): boolean {
+  return Object.keys(value).every((key) => allowed.has(key));
+}
 
 function nonEmptyBounded(value: unknown): value is string {
   return (
@@ -116,7 +152,7 @@ function isEvent(
   end: number,
   previousElapsed: number,
 ): value is EvidenceEventV2 {
-  if (!isPlainObject(value)) return false;
+  if (!isPlainObject(value) || !hasOnlyKeys(value, EVENT_KEYS)) return false;
   if (
     value.sequence !== expectedSequence ||
     !isCanonicalIsoInstant(value.occurredAt) ||
@@ -146,7 +182,7 @@ function isEvent(
 }
 
 export function isEvidenceSegmentV2(value: unknown): value is EvidenceSegmentV2 {
-  if (!isPlainObject(value)) return false;
+  if (!isPlainObject(value) || !hasOnlyKeys(value, SEGMENT_KEYS)) return false;
 
   if (
     value.evidenceSchema !== EVIDENCE_SEGMENT_SCHEMA_V2 ||
@@ -172,6 +208,7 @@ export function isEvidenceSegmentV2(value: unknown): value is EvidenceSegmentV2 
     value.events.length < 1 ||
     value.events.length > MAX_EVENTS ||
     !isPlainObject(value.captureContext) ||
+    !hasOnlyKeys(value.captureContext, CAPTURE_CONTEXT_KEYS) ||
     !nonEmptyBounded(value.captureContext.editorModel) ||
     !nonEmptyBounded(value.captureContext.transactionFormat)
   ) {
