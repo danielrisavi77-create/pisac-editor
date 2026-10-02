@@ -16,6 +16,16 @@ describe("process ledger continuation integrity",()=>{
   await expect(saveProcessCheckpoint(o.db,{bundle:b("s3","h3"),status:"active",startedAt:"2026-09-29T20:03:00Z",updatedAt:"2026-09-29T20:03:00Z",previousSessionHead:null})).rejects.toThrow("missing-parent");
   o.db.close();
  });
+ it("uses parent-head lineage rather than timestamp or session id to find the chain tail",async()=>{
+  const o=await openProcessLedger(name);if(!o.ok)throw new Error("open");
+  await saveProcessCheckpoint(o.db,{bundle:b("z-parent","h1"),status:"active",startedAt:"2026-09-29T20:00:00Z",updatedAt:"2026-09-29T20:00:00Z",previousSessionHead:null});
+  await markProcessInterrupted(o.db,"d","z-parent","2026-09-29T20:00:00Z");
+  await saveProcessCheckpoint(o.db,{bundle:b("a-child","h2"),status:"active",startedAt:"2026-09-29T20:00:00Z",updatedAt:"2026-09-29T20:00:00Z",previousSessionHead:"h1"});
+  await markProcessInterrupted(o.db,"d","a-child","2026-09-29T20:00:00Z");
+  await saveProcessCheckpoint(o.db,{bundle:b("m-tail","h3"),status:"active",startedAt:"2026-09-29T20:00:00Z",updatedAt:"2026-09-29T20:00:00Z",previousSessionHead:"h2"});
+  const rows=await o.db.segments.where("documentId").equals("d").toArray();expect(rows).toHaveLength(3);
+  o.db.close();
+ });
  it("rejects a continuation whose start overlaps the terminal parent",async()=>{
   const o=await openProcessLedger(name);if(!o.ok)throw new Error("open");
   await saveProcessCheckpoint(o.db,{bundle:b("s1","h1"),status:"active",startedAt:"2026-09-29T20:00:00Z",updatedAt:"2026-09-29T20:03:00Z",previousSessionHead:null});
