@@ -3,6 +3,12 @@ import type{VerifiedObjectActivity}from"@/domain/forensics/verified-object-activ
 export function revisionDraftFromVerifiedActivity(input:{binding:AcademicObjectNodeBinding;activity:readonly VerifiedObjectActivity[];draftId:string}):AcademicRevisionDraft|null{
  const matching=input.activity.filter(x=>x.documentId===input.binding.documentId&&x.objectId===input.binding.objectId&&x.bindingId===input.binding.bindingId&&x.nodeId===input.binding.nodeId);
  if(!matching.length)return null;
+ const boundAt=Date.parse(input.binding.boundAt);let previousStart=-Infinity;
+ for(const x of matching){
+  const start=Date.parse(x.startedAt),end=Date.parse(x.endedAt);
+  if(!x.eventIndexes.length||!Number.isFinite(start)||!Number.isFinite(end)||start<=boundAt||end<start||start<previousStart)throw new Error("verified-revision: invalid activity chronology");
+  previousStart=start;
+ }
  const first=matching[0],last=matching.at(-1)!;
  return{draftId:input.draftId,documentId:input.binding.documentId,objectId:input.binding.objectId,baseRevision:input.binding.objectRevision,bindingId:input.binding.bindingId,openedAt:first.startedAt,lastActivityAt:last.endedAt,activity:matching.map(x=>({sessionId:x.sessionId,eventIndexes:x.eventIndexes})),afterText:last.afterText};
 }
