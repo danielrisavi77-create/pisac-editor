@@ -169,7 +169,7 @@ export default function LiveProcessEditor(props: EditorProps) {
   const selected = bundle && position > 0 ? bundle.events[position - 1] : null;
   const selectedHistory=historySegments.find(x=>x.record.sessionId===historySession)??null;
   const historyReplay=useMemo(()=>{if(!selectedHistory||!editor)return null;try{return replayCapturedProcess(selectedHistory.bundle,editor.schema,historyPosition);}catch{return null;}},[selectedHistory,editor,historyPosition]);
-  const analytics=useMemo(()=>history?.valid?buildProcessAnalytics(history.segments.map(s=>{const verified=historySegments.find(x=>x.record.sessionId===s.sessionId);if(!verified)throw new Error("verified history segment missing");return{sessionId:s.sessionId,startedAt:s.startedAt,updatedAt:s.updatedAt,eventCount:s.eventCount,status:s.status,eventTimes:verified.bundle.events.map(e=>e.event.occurredAt)}}),{idleThresholdMs:15000}):null,[history,historySegments]);
+  const analytics=useMemo(()=>history?.valid?buildProcessAnalytics(history.segments.map(s=>{const verified=historySegments.find(x=>x.record.sessionId===s.sessionId);if(!verified)throw new Error("verified history segment missing");return{sessionId:s.sessionId,startedAt:s.startedAt,updatedAt:s.updatedAt,eventCount:s.eventCount,status:s.status,eventElapsedMs:verified.bundle.events.map(e=>e.event.elapsedMs)}}),{idleThresholdMs:15000}):null,[history,historySegments]);
   const globalSteps=useMemo(()=>history?buildGlobalHistorySteps(history):[],[history]);
   const globalStep=globalCursor>=0?globalSteps[globalCursor]??null:null;
   const globalSegment=globalStep&&globalStep.kind!=="gap"?historySegments.find(x=>x.record.sessionId===globalStep.sessionId)??null:null;
