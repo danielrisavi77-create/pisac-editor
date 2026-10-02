@@ -7,8 +7,8 @@ import { expect, test } from "@playwright/test";
  * so `decideAccess` (src/lib/supabase/guard.ts) sends every protected path to
  * /postavljanje. That proves the guard is wired into middleware.ts and that no
  * protected surface renders without a session — it does NOT prove the
- * authenticated branches, which stay BLOCKED until the Supabase project is
- * restored (see e2e/EVIDENCE.md).
+ * authenticated branches, which stay BLOCKED until a deployment is wired to the active Supabase project and authenticated
+ * fixtures exist (see e2e/EVIDENCE.md).
  */
 test.describe("auth guard, unconfigured deployment", () => {
   test("/workspace never renders; it redirects to /postavljanje", async ({
@@ -63,7 +63,7 @@ test.describe("auth guard, unconfigured deployment", () => {
       page.getByText("NEXT_PUBLIC_SUPABASE_URL", { exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByText("NEXT_PUBLIC_SUPABASE_ANON_KEY", { exact: true }),
+      page.getByText("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", { exact: true }),
     ).toBeVisible();
     // The setup page must never leak a service role key or a project URL.
     await expect(page.locator("body")).not.toContainText("SERVICE_ROLE");
