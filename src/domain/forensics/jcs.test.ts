@@ -36,8 +36,8 @@ describe("RFC 8785 JCS", () => {
     expect(Object.keys(JSON.parse(canonical))).toEqual([
       "\r",
       "1",
-      "\u0080",
       "nested",
+      "\u0080",
       "\u00f6",
       "\u20ac",
       "\ud83d\ude00",
