@@ -1,17 +1,25 @@
 /**
  * Env-driven Supabase configuration.
  *
- * No Supabase project exists yet, so nothing here may throw at import time:
- * builds, lint, typecheck and tests must all pass with no env vars set.
- * Only the two public (anon) values are ever read. The service role key is
- * server-only and must never be referenced from `src/` or `app/`.
+ * Builds, lint, typecheck and tests must all pass when no live deployment env
+ * is configured. Only public browser credentials are read here; secret/service
+ * role credentials must never be referenced from `src/` or `app/`.
+ *
+ * New deployments should use Supabase's publishable key. The legacy anon key is
+ * accepted only as a temporary compatibility fallback while existing
+ * environments are migrated.
  */
 export type SupabaseConfig = {
   url: string;
-  anonKey: string;
+  publicKey: string;
 };
 
 type EnvSource = Record<string, string | undefined>;
+
+function preferredPublicKey(publishable: string | undefined, legacyAnon: string | undefined): string {
+  const current = publishable?.trim() ?? "";
+  return current !== "" ? current : legacyAnon?.trim() ?? "";
+}
 
 /**
  * Next.js inlines `process.env.NEXT_PUBLIC_*` at build time, so the property
@@ -21,24 +29,30 @@ function readEnv(env?: EnvSource): SupabaseConfig {
   if (env) {
     return {
       url: env.NEXT_PUBLIC_SUPABASE_URL ?? "",
-      anonKey: env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+      publicKey: preferredPublicKey(
+        env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+        env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      ),
     };
   }
   return {
     url: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
-    anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+    publicKey: preferredPublicKey(
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    ),
   };
 }
 
-/** Returns the config, or `null` when either env var is missing/blank. */
+/** Returns the config, or `null` when either required public value is blank. */
 export function getSupabaseConfig(env?: EnvSource): SupabaseConfig | null {
-  const { url, anonKey } = readEnv(env);
+  const { url, publicKey } = readEnv(env);
   const trimmedUrl = url.trim();
-  const trimmedAnonKey = anonKey.trim();
-  if (trimmedUrl === "" || trimmedAnonKey === "") {
+  const trimmedPublicKey = publicKey.trim();
+  if (trimmedUrl === "" || trimmedPublicKey === "") {
     return null;
   }
-  return { url: trimmedUrl, anonKey: trimmedAnonKey };
+  return { url: trimmedUrl, publicKey: trimmedPublicKey };
 }
 
 /** Convenience guard for UI and route code. */
