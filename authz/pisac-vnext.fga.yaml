@@ -1,0 +1,205 @@
+name: Pisač vNext authorization model tests
+
+model_file: ./pisac-vnext.fga
+
+tuples:
+  - user: user:alice
+    relation: student
+    object: project:project-1
+
+  - user: user:mentor
+    relation: mentor
+    object: project:project-1
+
+  - user: user:reviewer
+    relation: reviewer
+    object: project:project-1
+
+  - user: project:project-1
+    relation: project
+    object: document:doc-1
+
+  - user: project:project-1
+    relation: project
+    object: submission:submission-1
+
+  - user: project:project-1
+    relation: project
+    object: evidence_package:evidence-1
+
+  - user: user:evidence-reviewer
+    relation: viewer
+    object: evidence_package:evidence-1
+
+  - user: user:evidence-exporter
+    relation: exporter
+    object: evidence_package:evidence-1
+
+  - user: user:teacher
+    relation: teacher
+    object: course:course-1
+
+  - user: course:course-1
+    relation: course
+    object: assignment:assignment-1
+
+  - user: user:admin
+    relation: admin
+    object: institution:fpzg
+
+  - user: user:auditor
+    relation: auditor
+    object: institution:fpzg
+
+  - user: institution:fpzg
+    relation: institution
+    object: institution_policy:policy-1
+
+  - user: institution:fpzg
+    relation: institution
+    object: audit_record:audit-1
+
+  - user: user:support
+    relation: break_glass
+    object: project:project-1
+    condition:
+      name: non_expired_grant
+      context:
+        grant_time: "2026-10-02T20:00:00Z"
+        grant_duration: 10m
+
+tests:
+  - name: student owns private authoring path
+    check:
+      - user: user:alice
+        object: document:doc-1
+        assertions:
+          can_read_private_draft: true
+          can_read_shared_revision: true
+          can_write_document: true
+      - user: user:alice
+        object: submission:submission-1
+        assertions:
+          can_finalize: true
+      - user: user:alice
+        object: evidence_package:evidence-1
+        assertions:
+          can_append: true
+          can_read: true
+          can_export: true
+
+  - name: mentor reviews shared state but not private or raw evidence by role alone
+    check:
+      - user: user:mentor
+        object: document:doc-1
+        assertions:
+          can_read_private_draft: false
+          can_read_shared_revision: true
+          can_write_document: false
+          can_comment: true
+          can_request_revision: true
+      - user: user:mentor
+        object: evidence_package:evidence-1
+        assertions:
+          can_read: false
+          can_export: false
+
+  - name: reviewer is narrower than mentor
+    check:
+      - user: user:reviewer
+        object: document:doc-1
+        assertions:
+          can_read_shared_revision: true
+          can_comment: true
+          can_request_revision: false
+
+  - name: explicit evidence roles are distinct
+    check:
+      - user: user:evidence-reviewer
+        object: evidence_package:evidence-1
+        assertions:
+          can_read: true
+          can_export: false
+      - user: user:evidence-exporter
+        object: evidence_package:evidence-1
+        assertions:
+          can_read: true
+          can_export: true
+
+  - name: course teacher manages assignment but does not inherit project content
+    check:
+      - user: user:teacher
+        object: assignment:assignment-1
+        assertions:
+          can_manage: true
+          can_view_roster: true
+      - user: user:teacher
+        object: document:doc-1
+        assertions:
+          can_read_private_draft: false
+          can_read_shared_revision: false
+      - user: user:teacher
+        object: evidence_package:evidence-1
+        assertions:
+          can_read: false
+
+  - name: institution admin and auditor are not content superadmins
+    check:
+      - user: user:admin
+        object: institution_policy:policy-1
+        assertions:
+          can_manage: true
+          can_read: true
+      - user: user:admin
+        object: audit_record:audit-1
+        assertions:
+          can_read: true
+      - user: user:admin
+        object: document:doc-1
+        assertions:
+          can_read_private_draft: false
+          can_read_shared_revision: false
+      - user: user:auditor
+        object: institution_policy:policy-1
+        assertions:
+          can_manage: false
+          can_read: true
+      - user: user:auditor
+        object: evidence_package:evidence-1
+        assertions:
+          can_read: false
+
+  - name: active break glass is temporary and read only
+    check:
+      - user: user:support
+        object: document:doc-1
+        context:
+          current_time: "2026-10-02T20:04:00Z"
+        assertions:
+          can_read_private_draft: true
+          can_read_shared_revision: true
+          can_write_document: false
+          can_comment: false
+      - user: user:support
+        object: evidence_package:evidence-1
+        context:
+          current_time: "2026-10-02T20:04:00Z"
+        assertions:
+          can_read: true
+          can_export: false
+
+  - name: expired break glass denies
+    check:
+      - user: user:support
+        object: document:doc-1
+        context:
+          current_time: "2026-10-02T20:10:00Z"
+        assertions:
+          can_read_private_draft: false
+          can_read_shared_revision: false
+      - user: user:support
+        object: evidence_package:evidence-1
+        context:
+          current_time: "2026-10-02T20:10:00Z"
+        assertions:
+          can_read: false
