@@ -127,9 +127,7 @@ describe("EvidenceSegmentV2", () => {
   });
 
   it("rejects schema-marker drift rather than guessing how bytes should be interpreted", () => {
-    const segment = fixture() as EvidenceSegmentV2 & {
-      canonicalization: string;
-    };
+    const segment = fixture() as unknown as Record<string, unknown>;
     segment.canonicalization = "legacy-custom";
     expect(isEvidenceSegmentV2(segment)).toBe(false);
   });
