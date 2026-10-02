@@ -91,11 +91,6 @@ export type ReferenceAuthorizationDecision = {
   basis: ReferenceDecisionBasis;
 };
 
-const resourceId = (
-  resource: AuthorizationResource,
-  expected: AuthorizationResource["type"],
-): string | null => (resource.type === expected ? resource.id : null);
-
 function hasRole<T extends string>(
   rows: ReadonlyArray<{ userId: string; role: T }>,
   userId: string,
