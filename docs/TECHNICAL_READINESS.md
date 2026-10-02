@@ -3,13 +3,14 @@
 **Phase:** 0 — Repository Baseline Audit  
 **Started:** 2026-10-01  
 **Baseline:** main after eab8b517150a79555defe0445cfe15c7227749ae  
+**Live reconciliation:** 2026-10-02  
 **Rule:** code existence is not equivalent to verified production behavior.
 
 ## Executive status
 
-Pisač is not a frontend-only prototype. Main already contains a substantial F1 authoring kernel: Next.js, Tiptap canonical editor, Dexie local journal, explicit sync state machine, server-sync contracts, prepared Supabase/Postgres migrations with RLS and privileged RPC boundaries, conflict/recovery logic, checkpoints, DOCX export, CI and Playwright coverage.
+Pisač is not a frontend-only prototype. Main contains a substantial F1 authoring kernel: Next.js, Tiptap canonical editor, Dexie local journal, explicit sync state machine, server-sync contracts, live Supabase/Postgres schema with RLS and privileged RPC boundaries, conflict/recovery logic, checkpoints, DOCX export, CI and Playwright coverage.
 
-The principal Gate 1 blocker is backend activation and live verification. Repository evidence says the dedicated Pisač Supabase project is paused/unconfigured, migrations 2026091904–06 are PREPARED ONLY, and authenticated server-backed E2E legs remain BLOCKED.
+The dedicated Pisač Supabase project is now ACTIVE_HEALTHY. The original six F1 migrations were already live and the forward-only `f1_live_hardening` migration has been applied. The principal Gate 1 blocker is now **deployed application environment + authenticated server-backed E2E/adversarial evidence**, not database restoration.
 
 Collaboration/mentor domain logic and demo UI already exist on main, but F2 explicitly says real UI/server persistence follows backend activation. Newer forensic/process-history work exists in open draft/stacked PRs and is not counted as production-ready main functionality.
 
@@ -26,15 +27,15 @@ DONE; REVIEWED; E2E VERIFIED; INTEGRATION VERIFIED; UNIT VERIFIED; IMPLEMENTED; 
 | P0-003 | Canonical document model | UNIT VERIFIED | P0 | domain tests; server lifecycle E2E missing |
 | P0-004 | Local durable journal | E2E VERIFIED (local) | P0 | Dexie + /demo; server reconciliation missing |
 | P0-005 | Explicit sync state machine | UNIT VERIFIED | P0 | drain/state tests; live server E2E missing |
-| P0-006 | Server CAS/revision store | UNIT VERIFIED/BLOCKED | P0 | migration/RPC/tests; migration not live |
+| P0-006 | Server CAS/revision store | UNIT VERIFIED / LIVE SCHEMA | P0 | live RPC/schema exists; authenticated browser/CAS E2E missing |
 | P0-007 | Conflict resolution | UNIT VERIFIED | P0 | rebase/discard tests; multi-client E2E missing |
 | P0-008 | Recovery | UNIT VERIFIED | P0 | recovery tests; live server recovery missing |
-| P0-009 | Named checkpoints | UNIT VERIFIED/BLOCKED | P0 | migration/contracts; migration not live |
+| P0-009 | Named checkpoints | UNIT VERIFIED / LIVE SCHEMA | P0 | live checkpoint RPC/table exists; authenticated E2E missing |
 | P0-010 | DOCX export | UNIT VERIFIED | P1 | F1 serializer/fidelity tests; browser export E2E missing |
-| P0-011 | Supabase auth | IMPLEMENTED/BLOCKED | P0 | SSR auth/guards/routes; project live E2E missing |
-| P0-012 | Workspace/project persistence | IMPLEMENTED/BLOCKED | P0 | migration/actions/UI; live create/list missing |
-| P0-013 | Owner-only RLS | UNIT VERIFIED/BLOCKED | P0 | migration tests; live adversarial proof missing |
-| P0-014 | Privileged write RPC boundary | UNIT VERIFIED/BLOCKED | P0 | auth.uid/grants/revokes/search_path; live proof/advisors missing |
+| P0-011 | Supabase auth | IMPLEMENTED / BACKEND ACTIVE | P0 | SSR auth/guards/routes; deployed env + live login/session E2E missing |
+| P0-012 | Workspace/project persistence | IMPLEMENTED / LIVE SCHEMA | P0 | schema/actions/UI live-capable; authenticated create/list E2E missing |
+| P0-013 | Owner-only RLS | LIVE / ADVERSE PROOF PENDING | P0 | RLS enabled on live F1 tables; cross-user/direct-API evidence missing |
+| P0-014 | Privileged write RPC boundary | LIVE / REVIEWED | P0 | advisors re-run; three intentional authenticated SECURITY DEFINER warnings remain; live adversarial RPC proof missing |
 | P0-015 | Security headers | E2E VERIFIED public scope | P0 | authenticated route proof later |
 | P0-016 | App auth rate limiter | UNIT VERIFIED/LIMITED | P1 | per-process only; edge/Supabase limits required |
 | P0-017 | CI quality gates | E2E VERIFIED baseline | P0 | lint/typecheck/unit/build/bundle/Chromium |
@@ -61,11 +62,16 @@ DONE; REVIEWED; E2E VERIFIED; INTEGRATION VERIFIED; UNIT VERIFIED; IMPLEMENTED; 
 | P0-038 | Accessibility | E2E PARTIAL | P1 | authenticated editor/mentor surfaces missing |
 | P0-039 | Production AI endpoint | DISABLED BY DESIGN | P2 | identity/quota/distributed abuse controls first |
 | P0-040 | Production source/citation retrieval | NOT STARTED/deferred | P2 | explicitly deferred |
+| P0-041 | Property/runtime correctness harness | NOT STARTED | P0 after live vertical slice | fast-check + Zod |
+| P0-042 | Mutation testing | NOT STARTED | P1 | Stryker critical-domain scope |
+| P0-043 | Architecture/dead-code gates | NOT STARTED | P1 | dependency-cruiser + Knip |
+| P0-044 | Dependency automation | NOT STARTED | P1 | Renovate with normal CI/review |
+| P0-045 | Formal lifecycle model | NOT STARTED / SPIKE | P2 | Alloy model for revision/share/mentor/evidence; not Gate 1 blocker |
 
 ## Key findings
 
-### F0-1 — Backend code exists; backend evidence does not close Gate 1
-Supabase SSR plumbing, workspace/project schema, owner-only RLS, canonical document/revision store, CAS RPC, idempotency and checkpoint contracts exist. They are not live-verified because the target backend is currently documented as paused/unconfigured.
+### F0-1 — Backend is live; product evidence still does not close Gate 1
+Supabase SSR plumbing, workspace/project schema, owner-only RLS, canonical document/revision store, CAS RPC, idempotency and checkpoint contracts exist and the target database is ACTIVE_HEALTHY. What is still missing is a named deployed/test application environment carrying the public Supabase configuration plus authenticated browser/system evidence over those live boundaries.
 
 ### F0-2 — Demo evidence is not production evidence
 /demo proves browser-side editor/local-journal behavior. It does not prove auth, server sync, CAS, RLS, checkpoints or production mentor permissions.
@@ -76,38 +82,43 @@ SharePackage, revision-request, review and attention logic exist and have tests/
 ### F0-4 — Forensic work is branch topology, not baseline capability
 PR #28 (forensic ledger), PR #31 (multi-session history) and PR #27 (Academic Graph/Mentor Coverage) are draft/stacked work. Audit them on their exact heads before reconciliation.
 
-### F0-5 — CI is strong for the unconfigured baseline
-Current CI covers lint, typecheck, unit tests, AI tests, production build, bundle budget and Chromium Playwright. Authenticated live-backend E2E remains the major missing evidence.
+### F0-5 — CI is strong but not yet a correctness proof
+Current CI covers lint, typecheck, unit tests, AI tests, production build, bundle budget and Chromium Playwright. Authenticated live-backend E2E remains the major missing product evidence. Property/state-machine testing, mutation testing, architecture-boundary enforcement, dead-code analysis and the planned security toolchain remain additional quality work rather than implied by a green baseline CI.
 
 ## Immediate Gate 1 backlog
 
 | ID | Task | Status | Dependency | Definition of Done |
 |---|---|---|---|---|
-| G1-BE-001 | Re-check dedicated Pisač Supabase project state | TODO | account access | status/config recorded without secrets |
-| G1-BE-002 | Review current Supabase changelog/docs against prepared migrations | TODO | 001 | relevant breaking changes checked |
-| G1-BE-003 | Security review workspace migration 1904 | TODO | 002 | RLS/grants/functions reviewed |
-| G1-BE-004 | Security review document migration 1905 | TODO | 002 | CAS/idempotency/RLS/definer reviewed |
-| G1-BE-005 | Security review checkpoint migration 1906 | TODO | 002 | ownership/immutability reviewed |
-| G1-BE-006 | Activate/restore backend environment | BLOCKED/OWNER if paused | 001 | project active/reachable |
-| G1-BE-007 | Apply approved F1 migrations | TODO | 003–006 | schema/history verified |
-| G1-BE-008 | Run Supabase advisors | TODO | 007 | findings triaged/resolved |
-| G1-BE-009 | Configure deployed app Supabase env | TODO | 006 | auth can start; no secret exposure |
-| G1-BE-010 | Verify login/callback/session | TODO | 009 | authenticated browser flow passes |
+| G1-BE-001 | Re-check dedicated Pisač Supabase project state | DONE | account access | ACTIVE_HEALTHY recorded |
+| G1-BE-002 | Review current Supabase changelog/docs | DONE | 001 | current 2026 changes reviewed |
+| G1-BE-003 | Security review workspace migration | DONE | 002 | grants/RLS reviewed + hardened |
+| G1-BE-004 | Security review document/CAS migration | DONE | 002 | CAS/idempotency/definer reviewed + hardened |
+| G1-BE-005 | Security review checkpoint migration | DONE | 002 | ownership/immutability reviewed + hardened |
+| G1-BE-006 | Activate/restore backend environment | DONE | 001 | project ACTIVE_HEALTHY |
+| G1-BE-007 | Reconcile/apply F1 migration state | DONE | 003–006 | original live history preserved; forward-only hardening applied |
+| G1-BE-008 | Run Supabase advisors | DONE | 007 | only intentional definer WARN + unused-index INFO remain |
+| G1-BE-009 | Configure deployed app Supabase public env | TODO / OWNER-DEPLOY | 006 | URL + publishable key + site URL present; no secret exposure |
+| G1-BE-010 | Configure auth redirect allowlist and verify login/callback/session | TODO / OWNER-AUTH | 009 | authenticated browser flow passes |
 | G1-BE-011 | Verify workspace create/list | TODO | 010 | live DB E2E passes |
 | G1-BE-012 | Verify document bootstrap/load | TODO | 011 | server canonical document opens |
 | G1-BE-013 | Verify local→server sync ACK | TODO | 012 | LOCAL_DURABLE→SYNCED demonstrated |
-| G1-BE-014 | Cross-user read denial | TODO | 012 + second identity | Student B cannot read A |
-| G1-BE-015 | Direct-write bypass denial | TODO | 007 | table mutation cannot bypass RPC/CAS |
-| G1-BE-016 | Idempotent replay | TODO | 013 | no duplicate revision |
-| G1-BE-017 | Reused tx key rejection | TODO | 013 | txid_reused demonstrated |
-| G1-BE-018 | Concurrent stale-base conflict | TODO | 013 | no silent overwrite |
-| G1-BE-019 | Rebase/discard E2E | TODO | 018 | both paths verified; conflict retained |
-| G1-BE-020 | Server checkpoints | TODO | 012 | snapshot comes from server truth |
-| G1-BE-021 | Authenticated offline/reconnect | TODO | 013 | safe delayed sync |
-| G1-BE-022 | Refresh/crash recovery | TODO | 013 | recoverable work survives |
-| G1-BE-023 | Multi-tab scenario | TODO | 013 | matches locking/conflict contract |
-| G1-BE-024 | Multi-device conflict | TODO | 018 | deterministic behavior verified |
-| G1-BE-025 | Upgrade F1 evidence register | TODO | 010–024 | PASS only with SHA/env/artifact evidence |
+| G1-BE-014 | Cross-user/anonymous/direct-write denial | TODO | 010–013 | adverse authorization matrix passes |
+| G1-BE-015 | Idempotency/reused tx/stale-base conflict | TODO | 013 | no duplicate or silent overwrite |
+| G1-BE-016 | Rebase/discard/checkpoint/offline/recovery/multi-client E2E | TODO | 015 | failure matrix evidenced |
+| G1-BE-017 | Upgrade F1 evidence register | TODO | 010–016 | PASS only with exact SHA/env/artifacts |
+
+## Post-vertical-slice correctness backlog
+
+| ID | Task | Priority | Gate |
+|---|---|---|---|
+| Q-COR-001 | fast-check property/state-machine invariants | P0 | immediately after authenticated vertical slice |
+| Q-COR-002 | Zod persistence/API runtime schemas | P0 | same |
+| Q-COR-003 | Stryker critical-domain mutation tests | P1 | after property baseline |
+| Q-ARCH-001 | dependency-cruiser import/layer rules | P1 | after vertical slice |
+| Q-DEAD-001 | Knip unused code/dependency gate | P1 | after architecture rules |
+| Q-DEP-001 | Renovate controlled dependency/action updates | P1 | after CI gates stable |
+| Q-SEC-001 | Gitleaks + OSV + zizmor + Semgrep + Harden-Runner | P0/P1 | Gate 1 hardening / Gate 4 expansion |
+| Q-FORMAL-001 | Alloy Revision/Share/Mentor/Evidence model | P2 spike | after deterministic harness; never a Gate 1 blocker |
 
 ## Evidence/Mentor backlog seeds
 
@@ -373,3 +384,14 @@ Task status:
 - G1-BE-010+ TODO — authenticated browser/system verification.
 
 No synthetic or real student rows were inserted during this step.
+
+
+# K. 2026-10-02 execution reconciliation
+
+- Live project rechecked through the Supabase connection: `cxwxxcwrgushfkisfpxz` is ACTIVE_HEALTHY on Postgres 17.
+- Seven live migrations are present; all five F1 public tables have RLS enabled and remain empty before synthetic auth verification.
+- Security advisors currently report only the three intentional authenticated-callable SECURITY DEFINER RPC warnings.
+- Performance advisors currently report five unused-index INFO findings on the empty database; those indexes are not removed based on zero-row statistics.
+- Current Supabase guidance prefers `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`; the code migration uses it first with a temporary legacy anon fallback.
+- The next product proof is deploy configuration + authenticated synthetic E2E. Do not repeat restore/apply-old-migrations work.
+- The quality/research expansion is now bounded: dependency-cruiser, Knip, Renovate and one Alloy spike are accepted additions; broad tool discovery stops unless a concrete failure/gap requires it.
