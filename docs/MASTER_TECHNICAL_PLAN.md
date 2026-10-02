@@ -59,6 +59,8 @@ Goal: a student can genuinely use Pisač to write without unacceptable risk of l
 
 ## Phase 1 — Backend activation
 
+**Live reconciliation 2026-10-02:** the dedicated Pisač Supabase project is already `ACTIVE_HEALTHY`; the original F1 schema is live and a forward-only hardening migration has been applied. The current critical path starts at deployed public environment configuration and authenticated browser/system evidence, not at restoring or replaying old migrations.
+
 - activate/configure the dedicated Pisač Supabase project
 - verify current Supabase requirements before applying anything
 - review and apply approved migrations
@@ -271,6 +273,52 @@ Before real student data:
 
 Rollout:
 `internal synthetic test → small controlled test → limited FPZG pilot → findings/fixes → expanded pilot`
+
+---
+
+# Cross-cutting verification infrastructure
+
+These are verification layers, not product features. They are added in the order that closes current risk fastest.
+
+## Deterministic correctness
+
+- **fast-check** — property/state-machine tests for append-only ledgers, replay, revision lifecycles, evidence invalidation and mentor projections.
+- **Zod** — runtime schemas at persistence/API/import boundaries; compile-time TypeScript types are not treated as runtime validation.
+- **StrykerJS** — mutation testing on critical `src/domain/**` and selected `src/lib/**` scopes to test the quality of the tests themselves.
+
+## Architecture and codebase hygiene
+
+- **dependency-cruiser** — CI-enforced import/layer rules. Domain code must stay framework/persistence independent; UI must not bypass application/domain boundaries.
+- **Knip** — unused files/exports/dependencies/scripts detection so parallel AI development does not accumulate unreachable implementations.
+- **Renovate** — dependency and GitHub Action update PRs with normal CI/review; no blind automerge for security-, persistence- or framework-critical changes.
+
+## Security/supply chain
+
+- Gitleaks for secrets.
+- OSV-Scanner for dependency vulnerabilities.
+- zizmor for GitHub Actions security.
+- Semgrep for general and Pisač-specific static rules.
+- Harden-Runner where appropriate for CI runtime visibility.
+- SBOM/provenance/signing is a release-hardening concern for Gate 4, not a Gate 1 prerequisite.
+
+## Formal-model spike
+
+After the authenticated vertical slice and deterministic correctness harness exist, build one **small Alloy 6 model** covering:
+
+`Revision ↔ SharePackage ↔ Mentor visibility ↔ Evidence review validity`.
+
+Required assertions include:
+- a newer private revision is never visible through an older share;
+- a sealed revision is immutable;
+- revocation closes future access according to policy;
+- revision-specific review/evidence cannot silently migrate to changed content;
+- restore/version transitions preserve later history rather than deleting it.
+
+TLA+/Apalache is reserved for sync/concurrency protocols only if ordinary state-machine/property testing leaves a meaningful unresolved concurrency risk. Formal methods must not become an excuse to delay the verified vertical slice.
+
+## Authority rule
+
+AI/Jev/Laya may discover suspicious states, rank review work or generate candidate tests. They do **not** decide correctness. Merge/release authority remains deterministic tests, database authorization checks, exact environment evidence and human/independent review where required.
 
 ---
 
