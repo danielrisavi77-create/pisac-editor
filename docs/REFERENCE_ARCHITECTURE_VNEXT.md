@@ -268,6 +268,36 @@ Operations such as read-private-draft, read-shared-revision, read-evidence, comm
 
 PostgreSQL RLS remains defence-in-depth and tenant containment. It is not the complete authorization model.
 
+#### Authorization consistency and revocation
+
+Security-critical access cannot rely on stale authorization cache state.
+
+For operations such as READ_PRIVATE_DRAFT, READ_EVIDENCE, EXPORT_EVIDENCE and privileged administration:
+
+- request the authorization service's higher/strongest available consistency mode;
+- fail closed when the authorization service cannot establish the required relationship;
+- never allow a stale positive cache entry to preserve evidence access after an intended revocation.
+
+Relationship lifecycle is ordered for safety:
+
+~~~text
+GRANT:
+domain grant PENDING
+ -> write authorization relationship
+ -> verify visibility
+ -> grant ACTIVE
+
+REVOKE:
+mark relationship REVOKING / stop issuing new share capability
+ -> remove authorization relationship
+ -> verify denial using high-consistency check
+ -> mark domain grant REVOKED
+~~~
+
+A grant may be delayed by an authorization outage. A revoke must prefer temporary denial over continued sensitive access.
+
+If an outbox/projection is used between application state and an external ReBAC store, it may not be the only enforcement mechanism for immediate revocation of evidence/private-content access.
+
 ### 6.5 Academic Policy Engine is separate
 
 Access control answers **who may perform an operation**.
