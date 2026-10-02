@@ -69,6 +69,7 @@
 | ADR-VN-046 | Tenant isolation | personal workspace now | tenant_id + ReBAC + RLS; dedicated cell optional enterprise tier | EVOLVE | cross-tenant adversarial tests |
 | ADR-VN-047 | Evidence public identifiers | local IDs | opaque/hash-only transparency leaves | ADD | privacy inspection proves no direct PII |
 | ADR-VN-048 | Background workflows | ordinary app jobs | simple durable queue first; Temporal only if justified | KEEP TARGET | adopt Temporal only for long-running multi-step durable workflows materially hard to model otherwise |
+| ADR-VN-049 | Protocol evolution | implicit per implementation | version every durable wire/evidence format; expand-migrate-contract; offline compatibility gate | ADD | N-1/long-offline client matrix; unsupported clients fail recoverably, never reinterpret persisted bytes |
 
 ## Supersession rules
 
