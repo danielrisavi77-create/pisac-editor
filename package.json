@@ -12,9 +12,10 @@
     "lint": "eslint .",
     "check:bundle": "node scripts/check-bundle-budget.mjs",
     "typecheck": "tsc --noEmit",
-    "test:unit": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:property": "vitest run --project property",
     "test:ai": "npm --prefix tools/ai-architect test",
-    "test": "npm run test:unit && npm run test:ai",
+    "test": "npm run test:unit && npm run test:property && npm run test:ai",
     "test:e2e": "playwright test",
     "bootstrap:evidence-storage": "node scripts/bootstrap-evidence-storage.mjs"
   },
@@ -40,6 +41,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
+    "@fast-check/vitest": "^0.5.0",
     "@netlify/plugin-nextjs": "^5.16.0",
     "@playwright/test": "^1.63.0",
     "@types/node": "^24.10.2",
@@ -48,6 +50,7 @@
     "eslint": "^9.39.5",
     "eslint-config-next": "15.5.25",
     "fake-indexeddb": "^6.2.5",
+    "fast-check": "^4.10.2",
     "typescript": "^5.9.3",
     "vitest": "^5.0.1"
   }

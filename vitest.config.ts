@@ -16,6 +16,26 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    // Two projects so that property tests run exactly once and can be scaled
+    // separately (FC_NUM_RUNS) without slowing the unit suite.
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "unit",
+          include: ["src/**/*.test.ts"],
+          exclude: ["src/**/*.property.test.ts", "**/node_modules/**"],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "property",
+          include: ["src/**/*.property.test.ts", "tests/property/**/*.property.test.ts"],
+          setupFiles: ["tests/property/setup.ts"],
+          testTimeout: 60_000,
+        },
+      },
+    ],
   },
 });
