@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: netlify-deploy
   cancel-in-progress: false
@@ -13,11 +16,14 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
       NETLIFY_SITE_ID: d3555e93-3e6b-453f-9a28-062df5fdc4bf # pisac-demo.netlify.app (not a secret)
     steps:
+      # The deploy token is scoped to the two steps that need it. It is never in
+      # the environment of `npm ci`, so dependency install scripts cannot read it.
       - name: Check for Netlify token
         id: gate
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
         run: |
           if [ -z "$NETLIFY_AUTH_TOKEN" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
@@ -25,6 +31,8 @@ jobs:
           fi
       - uses: actions/checkout@v4
         if: steps.gate.outputs.skip != 'true'
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         if: steps.gate.outputs.skip != 'true'
         with:
@@ -35,4 +43,6 @@ jobs:
         run: npm ci
       - name: Build and deploy
         if: steps.gate.outputs.skip != 'true'
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
         run: npx --yes netlify-cli@23 deploy --build --prod --site "$NETLIFY_SITE_ID" --message "GitHub Actions deploy $GITHUB_SHA"
