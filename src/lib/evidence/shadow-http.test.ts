@@ -1,21 +1,51 @@
 import { describe, expect, it } from "vitest";
 
-import { readJsonBodyLimited } from "./shadow-http";
+import {
+  isPinnedSameOrigin,
+  readJsonBodyLimited,
+} from "./shadow-http";
 
-describe("readJsonBodyLimited", () => {
-  it("parses a bounded JSON body", async () => {
+describe("Evidence shadow HTTP guards", () => {
+  it("requires the exact pinned Origin", () => {
+    expect(
+      isPinnedSameOrigin(
+        new Request("https://pisac.example/api", {
+          headers: { origin: "https://pisac.example" },
+        }),
+        "https://pisac.example",
+      ),
+    ).toBe(true);
+
+    expect(
+      isPinnedSameOrigin(
+        new Request("https://pisac.example/api", {
+          headers: { origin: "https://attacker.example" },
+        }),
+        "https://pisac.example",
+      ),
+    ).toBe(false);
+
+    expect(
+      isPinnedSameOrigin(
+        new Request("https://pisac.example/api"),
+        "https://pisac.example",
+      ),
+    ).toBe(false);
+  });
+
+  it("parses a bounded UTF-8 JSON body", async () => {
     const request = new Request("https://pisac.test", {
       method: "POST",
-      body: '{"x":1}',
+      body: JSON.stringify({ value: "Pisač" }),
       headers: { "content-type": "application/json" },
     });
     await expect(readJsonBodyLimited(request, 1024)).resolves.toEqual({
       ok: true,
-      value: { x: 1 },
+      value: { value: "Pisač" },
     });
   });
 
-  it("rejects declared or actual oversized bodies before use", async () => {
+  it("rejects declared or streamed oversized bodies before JSON use", async () => {
     const declared = new Request("https://pisac.test", {
       method: "POST",
       body: "{}",
