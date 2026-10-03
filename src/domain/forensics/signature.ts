@@ -21,27 +21,51 @@ export type PublicVerificationKey = {
   keyBase64Url: string;
 };
 
+const BASE64URL = /^[A-Za-z0-9_-]+$/;
 
-export function isSignatureEnvelope(value: unknown): value is SignatureEnvelope {
+function nonEmptyBounded(value: unknown, max: number): value is string {
+  return (
+    typeof value === "string" &&
+    value.trim().length > 0 &&
+    value.length <= max
+  );
+}
+
+function isSignatureAlgorithm(value: unknown): value is SignatureAlgorithm {
+  return (
+    value === "Ed25519" ||
+    value === "ECDSA_P256_SHA256" ||
+    value === "RSA_PSS_SHA256"
+  );
+}
+
+function encodingMatchesAlgorithm(
+  algorithm: SignatureAlgorithm,
+  encoding: unknown,
+): encoding is SignatureEncoding {
+  if (algorithm === "Ed25519") return encoding === "raw";
+  if (algorithm === "ECDSA_P256_SHA256") {
+    return encoding === "ieee-p1363" || encoding === "der";
+  }
+  // RSA signatures are fixed-length signature octets, not ASN.1 DER objects.
+  return encoding === "raw";
+}
+
+export function isSignatureEnvelope(
+  value: unknown,
+): value is SignatureEnvelope {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return false;
   }
   const v = value as Record<string, unknown>;
+  if (!isSignatureAlgorithm(v.algorithm)) return false;
+
   return (
-    (v.algorithm === "Ed25519" ||
-      v.algorithm === "ECDSA_P256_SHA256" ||
-      v.algorithm === "RSA_PSS_SHA256") &&
-    typeof v.keyId === "string" &&
-    v.keyId.trim().length > 0 &&
-    v.keyId.length <= 2048 &&
-    typeof v.keyVersion === "string" &&
-    v.keyVersion.trim().length > 0 &&
-    v.keyVersion.length <= 256 &&
-    (v.signatureEncoding === "raw" ||
-      v.signatureEncoding === "ieee-p1363" ||
-      v.signatureEncoding === "der") &&
+    nonEmptyBounded(v.keyId, 2048) &&
+    nonEmptyBounded(v.keyVersion, 256) &&
+    encodingMatchesAlgorithm(v.algorithm, v.signatureEncoding) &&
     typeof v.signatureBase64Url === "string" &&
-    /^[A-Za-z0-9_-]+$/.test(v.signatureBase64Url)
+    BASE64URL.test(v.signatureBase64Url)
   );
 }
 
@@ -52,15 +76,13 @@ export function isPublicVerificationKey(
     return false;
   }
   const v = value as Record<string, unknown>;
+
   return (
-    isSignatureEnvelope({
-      algorithm: v.algorithm,
-      keyId: v.keyId,
-      keyVersion: v.keyVersion,
-      signatureBase64Url: "x",
-    }) &&
+    isSignatureAlgorithm(v.algorithm) &&
+    nonEmptyBounded(v.keyId, 2048) &&
+    nonEmptyBounded(v.keyVersion, 256) &&
     v.encoding === "spki-der" &&
     typeof v.keyBase64Url === "string" &&
-    /^[A-Za-z0-9_-]+$/.test(v.keyBase64Url)
+    BASE64URL.test(v.keyBase64Url)
   );
 }
