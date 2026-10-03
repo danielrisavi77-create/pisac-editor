@@ -54,8 +54,6 @@ export type ReserveEvidenceAcceptanceInput = {
   principalId: string;
   storageRef: string;
   descriptor: EvidenceSegmentDescriptorV2;
-  receiptId: string;
-  acceptedAt: string;
 };
 
 export type ReserveEvidenceAcceptanceResult =
@@ -77,7 +75,8 @@ export type ReserveEvidenceAcceptanceResult =
  * - predecessor/hash-chain head;
  * - one accepted segment transition at a time for an evidence package.
  *
- * It advances metadata to pending_signature before the signing call. A retry
+ * It mints receiptId + acceptedAt inside the canonical reserve transaction,
+ * then advances metadata to pending_signature before the signing call. A retry
  * of the same command must return duplicate_pending so the exact same receipt
  * payload can be signed later without minting a new acceptance time/id.
  */
