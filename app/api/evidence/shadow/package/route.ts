@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 
-import { ensureSupabaseEvidencePackage } from "@/adapters/evidence/supabase-evidence-context";
-import { verifySupabaseEvidenceBucket } from "@/adapters/evidence/supabase-evidence-payload-store";
-import { readJsonBodyLimited } from "@/lib/evidence/shadow-http";
+import { isPlainObject, ownProperty } from "@/domain/json";
 import { getEvidenceShadowConfig } from "@/lib/evidence/shadow-config";
-import { createEvidenceShadowSigner } from "@/lib/evidence/shadow-signer";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
-import { isPlainObject } from "@/domain/json";
+import {
+  isPinnedSameOrigin,
+  readJsonBodyLimited,
+} from "@/lib/evidence/shadow-http";
+import { createEvidenceShadowRuntime } from "@/lib/evidence/shadow-runtime";
+import { getEvidenceShadowSession } from "@/lib/evidence/shadow-session";
 
 export const runtime = "nodejs";
 
@@ -17,108 +17,78 @@ const UUID =
 function json(body: unknown, status: number) {
   return NextResponse.json(body, {
     status,
-    headers: { "Cache-Control": "no-store" },
+    headers: { "cache-control": "no-store" },
   });
 }
 
 export async function POST(request: Request) {
-  const configResult = getEvidenceShadowConfig();
-  if (!configResult.ok) {
-    return json({ status: "unavailable", reason: configResult.reason }, 503);
+  const config = getEvidenceShadowConfig();
+  if (config.status === "disabled") return json({ status: "disabled" }, 404);
+  if (config.status !== "ready") {
+    return json({ status: "unavailable" }, 503);
   }
-  const config = configResult.value;
-  if (!config.enabled) {
-    return json({ status: "not_found" }, 404);
+  if (!isPinnedSameOrigin(request, config.value.siteOrigin)) {
+    return json({ status: "forbidden" }, 403);
   }
-
   if (
     !request.headers
       .get("content-type")
       ?.toLowerCase()
       .startsWith("application/json")
   ) {
-    return json({ status: "invalid", reason: "JSON required" }, 415);
+    return json({ status: "invalid" }, 415);
   }
 
-  const userSupabase = await createClient();
-  if (!userSupabase) {
-    return json({ status: "unavailable", reason: "Supabase not configured" }, 503);
+  const session = await getEvidenceShadowSession();
+  if (session.status === "unconfigured") {
+    return json({ status: "unavailable" }, 503);
   }
-  const {
-    data: { user },
-    error: userError,
-  } = await userSupabase.auth.getUser();
-  if (userError || !user) {
+  if (session.status === "unauthenticated") {
     return json({ status: "unauthenticated" }, 401);
   }
 
-  const supabaseAdmin = createAdminClient();
-  if (!supabaseAdmin) {
-    return json({ status: "unavailable", reason: "server secret not configured" }, 503);
-  }
-
-  const bucket = await verifySupabaseEvidenceBucket(
-    supabaseAdmin,
-    config.bucket,
-  );
-  if (bucket.status !== "ready") {
+  const body = await readJsonBodyLimited(request, 4096);
+  if (!body.ok || !isPlainObject(body.value)) {
     return json(
-      {
-        status: "unavailable",
-        reason:
-          bucket.status === "misconfigured"
-            ? bucket.reason
-            : `Evidence bucket is ${bucket.status}`,
-      },
-      503,
+      { status: body.ok ? "invalid" : body.reason },
+      body.ok ? 400 : body.status,
     );
   }
-
-  // Do not create even a shadow package until the complete signing path is
-  // ready. Production aws-kms mode intentionally stays unavailable until the
-  // official SDK transport is composed.
-  const signer = createEvidenceShadowSigner(config);
-  if (signer.status !== "ready") {
-    return json({ status: "unavailable", reason: signer.reason }, 503);
-  }
-
-  const parsed = await readJsonBodyLimited(request, 8 * 1024);
-  if (!parsed.ok) {
-    return json({ status: "invalid", reason: parsed.reason }, parsed.status);
-  }
-  if (
-    !isPlainObject(parsed.value) ||
-    typeof parsed.value.documentId !== "string" ||
-    !UUID.test(parsed.value.documentId)
-  ) {
-    return json({ status: "invalid", reason: "invalid document id" }, 400);
-  }
-
-  const ensured = await ensureSupabaseEvidencePackage(supabaseAdmin, {
-    actorId: user.id,
-    documentId: parsed.value.documentId,
-    evidenceProfileId: config.evidenceProfileId,
-    maxPayloadBytes: config.maxPayloadBytes,
-  });
-
-  if (ensured.status === "ok") {
-    return json({ status: "ok", context: ensured.context }, 200);
-  }
-  if (ensured.status === "not_found") {
-    return json({ status: "not_found" }, 404);
-  }
-  if (ensured.status === "profile_conflict") {
-    return json(
-      {
-        status: "profile_conflict",
-        evidencePackageId: ensured.evidencePackageId,
-        maxPayloadBytes: ensured.maxPayloadBytes,
-      },
-      409,
-    );
-  }
-  if (ensured.status === "invalid") {
+  const documentId = ownProperty(body.value, "documentId");
+  if (typeof documentId !== "string" || !UUID.test(documentId)) {
     return json({ status: "invalid" }, 400);
   }
-  return json({ status: "unavailable", reason: ensured.reason }, 503);
+
+  const runtimeState = await createEvidenceShadowRuntime();
+  if (runtimeState.status !== "ready") {
+    return json({ status: "unavailable" }, 503);
+  }
+
+  const outcome = await runtimeState.runtime.ensurePackage({
+    actorId: session.user.id,
+    documentId,
+  });
+
+  if (outcome.status === "ok") {
+    return json(
+      {
+        status: "ok",
+        evidencePackageId: outcome.context.evidencePackageId,
+        evidenceProfileId: outcome.context.evidenceProfileId,
+        maxPayloadBytes: outcome.context.maxPayloadBytes,
+        acceptsEvidence: outcome.context.acceptsEvidence,
+      },
+      200,
+    );
+  }
+  if (outcome.status === "not_found") {
+    return json({ status: "not_found" }, 404);
+  }
+  if (outcome.status === "profile_conflict") {
+    return json({ status: "profile_conflict" }, 409);
+  }
+  if (outcome.status === "invalid") {
+    return json({ status: "invalid" }, 400);
+  }
+  return json({ status: "unavailable" }, 503);
 }
