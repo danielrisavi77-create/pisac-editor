@@ -45,7 +45,7 @@ jobs:
           PROMPTFOO_DISABLE_TELEMETRY: "1"
         run: |
           mkdir -p .ai/runtime
-          npx --yes promptfoo@latest eval \
+          npx --yes promptfoo@0.123.1 eval \
             -c .ai/evals/promptfooconfig.yaml \
             --no-table \
             --output .ai/runtime/promptfoo-results.json
