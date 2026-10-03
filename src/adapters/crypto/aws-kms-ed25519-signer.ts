@@ -121,6 +121,7 @@ export class AwsKmsEd25519SigningKeyProvider
       algorithm: "Ed25519",
       keyId: this.configuredKeyId,
       keyVersion: result.keyId,
+      signatureEncoding: "raw",
       signatureBase64Url: toBase64Url(result.signature),
     };
   }
@@ -131,6 +132,7 @@ export class AwsKmsEd25519SigningKeyProvider
   ): Promise<boolean> {
     if (
       signature.algorithm !== "Ed25519" ||
+      signature.signatureEncoding !== "raw" ||
       signature.keyId !== this.configuredKeyId ||
       !signature.keyVersion.trim()
     ) {
