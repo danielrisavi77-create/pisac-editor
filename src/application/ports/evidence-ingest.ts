@@ -1,4 +1,5 @@
 import type { AuthorizationContext } from "./authorization";
+import { isPlainObject } from "@/domain/json";
 import type { SignedEvidenceReceipt } from "@/domain/forensics/evidence-receipt";
 import {
   EVIDENCE_CANONICALIZATION_V2,
@@ -75,14 +76,12 @@ function canonicalInstant(value: unknown): value is string {
   return Number.isFinite(time) && new Date(time).toISOString() === value;
 }
 
-export function validateEvidenceIngestCommandV2(
-  command: EvidenceIngestCommandV2,
-): boolean {
-  const descriptor = command?.descriptor;
+export function isEvidenceSegmentDescriptorV2(
+  descriptor: unknown,
+): descriptor is EvidenceSegmentDescriptorV2 {
+  if (!isPlainObject(descriptor)) return false;
+
   if (
-    !descriptor ||
-    !nonEmptyBounded(command.clientRequestId, MAX_CLIENT_REQUEST_ID_LENGTH) ||
-    !nonEmptyBounded(command.canonicalPayload, 16 * 1024 * 1024) ||
     !nonEmptyBounded(descriptor.evidencePackageId) ||
     !nonEmptyBounded(descriptor.documentId) ||
     !nonEmptyBounded(descriptor.sessionId) ||
@@ -92,23 +91,42 @@ export function validateEvidenceIngestCommandV2(
     descriptor.hashAlgorithm !== EVIDENCE_HASH_ALGORITHM_V2 ||
     !nonEmptyBounded(descriptor.evidenceProfileId) ||
     !Number.isSafeInteger(descriptor.sequenceFrom) ||
-    descriptor.sequenceFrom < 1 ||
+    Number(descriptor.sequenceFrom) < 1 ||
     !Number.isSafeInteger(descriptor.sequenceTo) ||
-    descriptor.sequenceTo < descriptor.sequenceFrom ||
+    Number(descriptor.sequenceTo) < Number(descriptor.sequenceFrom) ||
     !Number.isSafeInteger(descriptor.eventCount) ||
-    descriptor.eventCount < 1 ||
-    descriptor.sequenceTo !== descriptor.sequenceFrom + descriptor.eventCount - 1 ||
+    Number(descriptor.eventCount) < 1 ||
+    Number(descriptor.sequenceTo) !==
+      Number(descriptor.sequenceFrom) + Number(descriptor.eventCount) - 1 ||
     !canonicalInstant(descriptor.observedStartedAt) ||
     !canonicalInstant(descriptor.observedEndedAt) ||
     Date.parse(descriptor.observedEndedAt) <
       Date.parse(descriptor.observedStartedAt) ||
+    typeof descriptor.segmentHash !== "string" ||
     !SHA256_HEX.test(descriptor.segmentHash) ||
     !(
       descriptor.predecessorSegmentHash === null ||
-      SHA256_HEX.test(descriptor.predecessorSegmentHash)
+      (typeof descriptor.predecessorSegmentHash === "string" &&
+        SHA256_HEX.test(descriptor.predecessorSegmentHash))
     ) ||
     !Number.isSafeInteger(descriptor.payloadBytes) ||
-    descriptor.payloadBytes < 1
+    Number(descriptor.payloadBytes) < 1
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+export function validateEvidenceIngestCommandV2(
+  command: EvidenceIngestCommandV2,
+): boolean {
+  const descriptor = command?.descriptor;
+  if (
+    !descriptor ||
+    !nonEmptyBounded(command.clientRequestId, MAX_CLIENT_REQUEST_ID_LENGTH) ||
+    !nonEmptyBounded(command.canonicalPayload, 16 * 1024 * 1024) ||
+    !isEvidenceSegmentDescriptorV2(descriptor)
   ) {
     return false;
   }
