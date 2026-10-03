@@ -3,10 +3,13 @@ export type SignatureAlgorithm =
   | "ECDSA_P256_SHA256"
   | "RSA_PSS_SHA256";
 
+export type SignatureEncoding = "raw" | "ieee-p1363" | "der";
+
 export type SignatureEnvelope = {
   algorithm: SignatureAlgorithm;
   keyId: string;
   keyVersion: string;
+  signatureEncoding: SignatureEncoding;
   signatureBase64Url: string;
 };
 
@@ -34,6 +37,9 @@ export function isSignatureEnvelope(value: unknown): value is SignatureEnvelope 
     typeof v.keyVersion === "string" &&
     v.keyVersion.trim().length > 0 &&
     v.keyVersion.length <= 256 &&
+    (v.signatureEncoding === "raw" ||
+      v.signatureEncoding === "ieee-p1363" ||
+      v.signatureEncoding === "der") &&
     typeof v.signatureBase64Url === "string" &&
     /^[A-Za-z0-9_-]+$/.test(v.signatureBase64Url)
   );
