@@ -21,22 +21,33 @@ function requestKey(input: {
   descriptor: { evidencePackageId: string };
   clientRequestId: string;
 }): string {
-  return [
+  return canonicalizeJcs([
     input.principalId,
     input.descriptor.evidencePackageId,
     input.clientRequestId,
-  ].join(":");
+  ]);
 }
 
 export class InMemoryEvidenceAcceptanceRepository
   implements EvidenceAcceptanceRepository
 {
+  private readonly clock: () => string;
+  private readonly idFactory: () => string;
   private readonly byRequest = new Map<string, EvidenceAcceptanceRecord>();
   private readonly byReceipt = new Map<string, EvidenceAcceptanceRecord>();
   private readonly heads = new Map<string, ChainHead>();
 
   reserveUnavailableReason: string | null = null;
   attachUnavailableReason: string | null = null;
+
+  constructor(options: {
+    clock?: () => string;
+    idFactory?: () => string;
+  } = {}) {
+    this.clock = options.clock ?? (() => new Date().toISOString());
+    this.idFactory =
+      options.idFactory ?? (() => globalThis.crypto.randomUUID());
+  }
 
   async reserve(
     input: ReserveEvidenceAcceptanceInput,
@@ -52,11 +63,8 @@ export class InMemoryEvidenceAcceptanceRepository
     const existing = this.byRequest.get(key);
     if (existing) {
       const same =
-        existing.descriptor.segmentHash === input.descriptor.segmentHash &&
-        existing.descriptor.segmentId === input.descriptor.segmentId &&
-        existing.descriptor.documentId === input.descriptor.documentId &&
-        existing.descriptor.evidencePackageId ===
-          input.descriptor.evidencePackageId;
+        canonicalizeJcs(existing.descriptor) ===
+        canonicalizeJcs(input.descriptor);
       if (!same) return { status: "idempotency_conflict" };
       return {
         status:
@@ -80,6 +88,19 @@ export class InMemoryEvidenceAcceptanceRepository
       };
     }
 
+    const acceptedAt = this.clock();
+    const receiptId = this.idFactory();
+    if (
+      !receiptId.trim() ||
+      !Number.isFinite(Date.parse(acceptedAt)) ||
+      new Date(Date.parse(acceptedAt)).toISOString() !== acceptedAt
+    ) {
+      return {
+        status: "unavailable",
+        reason: "acceptance identity/time unavailable",
+      };
+    }
+
     const record: EvidenceAcceptanceRecord = {
       clientRequestId: input.clientRequestId,
       principalId: input.principalId,
@@ -87,7 +108,7 @@ export class InMemoryEvidenceAcceptanceRepository
       descriptor: structuredClone(input.descriptor),
       receiptPayload: {
         receiptSchema: EVIDENCE_RECEIPT_SCHEMA_V1,
-        receiptId: input.receiptId,
+        receiptId,
         evidencePackageId: input.descriptor.evidencePackageId,
         documentId: input.descriptor.documentId,
         sessionId: input.descriptor.sessionId,
@@ -102,7 +123,7 @@ export class InMemoryEvidenceAcceptanceRepository
         sequenceTo: input.descriptor.sequenceTo,
         eventCount: input.descriptor.eventCount,
         payloadBytes: input.descriptor.payloadBytes,
-        acceptedAt: input.acceptedAt,
+        acceptedAt,
       },
       status: "pending_signature",
     };
@@ -130,20 +151,23 @@ export class InMemoryEvidenceAcceptanceRepository
     const record = this.byReceipt.get(input.receiptId);
     if (!record) return { status: "not_found" };
 
+    if (
+      input.signedReceipt.payload.receiptId !==
+        record.receiptPayload.receiptId ||
+      canonicalizeJcs(input.signedReceipt.payload) !==
+        canonicalizeJcs(record.receiptPayload)
+    ) {
+      return { status: "conflict" };
+    }
+
     if (record.status === "signed") {
       if (!record.signedReceipt) {
         return { status: "conflict" };
       }
-      return canonicalizeJcs(record.signedReceipt) ===
-        canonicalizeJcs(input.signedReceipt)
-        ? {
-            status: "already_attached",
-            receipt: structuredClone(record.signedReceipt),
-          }
-        : {
-            status: "already_attached",
-            receipt: structuredClone(record.signedReceipt),
-          };
+      return {
+        status: "already_attached",
+        receipt: structuredClone(record.signedReceipt),
+      };
     }
 
     if (
