@@ -1,6 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { AzureKeyVaultSigningKeyProvider, createAzureEvidenceSigner } from "@/adapters/crypto/azure-key-vault-signer";
+import {
+  createAzureEvidenceSigner,
+  type AzureKeyVaultSigningKeyProvider,
+} from "@/adapters/crypto/azure-key-vault-signer";
 import { DevelopmentEd25519SigningKeyProvider } from "@/adapters/crypto/development-ed25519-signer";
 import { SupabaseEvidenceAcceptanceRepository } from "@/adapters/evidence/supabase-evidence-acceptance-repository";
 import {
@@ -57,10 +60,15 @@ function buildSigner(
 export async function createEvidenceShadowRuntime(
   env: EnvSource = process.env,
 ): Promise<EvidenceShadowRuntimeResult> {
-  const configState = getEvidenceShadowConfig(
-    env,
-    env.NODE_ENV ?? process.env.NODE_ENV,
-  );
+  const rawNodeEnv = env.NODE_ENV ?? process.env.NODE_ENV;
+  const nodeEnv =
+    rawNodeEnv === "production" ||
+    rawNodeEnv === "development" ||
+    rawNodeEnv === "test"
+      ? rawNodeEnv
+      : undefined;
+
+  const configState = getEvidenceShadowConfig(env, nodeEnv);
   if (configState.status === "disabled") return { status: "disabled" };
   if (configState.status === "misconfigured") {
     return { status: "misconfigured" };
