@@ -75,6 +75,7 @@ function receipt(): SignedEvidenceReceipt {
       algorithm: "Ed25519",
       keyId: "test",
       keyVersion: "v1",
+      signatureEncoding: "raw",
       signatureBase64Url: "signature",
     },
   };
