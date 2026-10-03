@@ -137,6 +137,26 @@ export function isEvidenceIngestCommandV2(
   );
 }
 
+export function isEvidenceIngestCommandV2(
+  value: unknown,
+): value is EvidenceIngestCommandV2 {
+  if (!isPlainObject(value)) return false;
+  const clientRequestId = value.clientRequestId;
+  const canonicalPayload = value.canonicalPayload;
+  const descriptor = value.descriptor;
+  if (
+    !nonEmptyBounded(clientRequestId, MAX_CLIENT_REQUEST_ID_LENGTH) ||
+    !nonEmptyBounded(canonicalPayload, 16 * 1024 * 1024) ||
+    !isEvidenceSegmentDescriptorV2(descriptor)
+  ) {
+    return false;
+  }
+  return (
+    new TextEncoder().encode(canonicalPayload).byteLength ===
+    descriptor.payloadBytes
+  );
+}
+
 export function validateEvidenceIngestCommandV2(
   command: EvidenceIngestCommandV2,
 ): boolean {
