@@ -1,4 +1,4 @@
-import type { SignatureEnvelope } from "@/application/ports/signing-key-provider";
+import type { SignatureEnvelope } from "./signature";
 import { sha256WebCrypto } from "./crypto";
 import { canonicalizeJcs } from "./jcs";
 import type { EvidenceSegmentV2 } from "./evidence-segment-v2";
