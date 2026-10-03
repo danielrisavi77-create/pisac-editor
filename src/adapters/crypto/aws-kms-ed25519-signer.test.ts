@@ -55,6 +55,7 @@ describe("AwsKmsEd25519SigningKeyProvider", () => {
       algorithm: "Ed25519",
       keyId: "alias/pisac-evidence",
       keyVersion: "arn:aws:kms:eu-central-1:123:key/concrete-v1",
+      signatureEncoding: "raw",
       signatureBase64Url: "AQIDBA",
     });
 
@@ -119,6 +120,7 @@ describe("AwsKmsEd25519SigningKeyProvider", () => {
         algorithm: "Ed25519",
         keyId: "alias/pisac-evidence",
         keyVersion: "arn:aws:kms:eu-central-1:123:key/concrete-v1",
+        signatureEncoding: "raw",
         signatureBase64Url: "AQIDBA",
       }),
     ).toBe(false);
