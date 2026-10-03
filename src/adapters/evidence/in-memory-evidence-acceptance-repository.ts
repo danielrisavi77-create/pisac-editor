@@ -42,6 +42,7 @@ export class InMemoryEvidenceAcceptanceRepository
   private readonly byReceipt = new Map<string, EvidenceAcceptanceRecord>();
   private readonly heads = new Map<string, ChainHead>();
 
+  lookupUnavailableReason: string | null = null;
   reserveUnavailableReason: string | null = null;
   attachUnavailableReason: string | null = null;
 
@@ -57,10 +58,10 @@ export class InMemoryEvidenceAcceptanceRepository
   async lookup(
     input: EvidenceAcceptanceIdentity,
   ): Promise<LookupEvidenceAcceptanceResult> {
-    if (this.reserveUnavailableReason) {
+    if (this.lookupUnavailableReason) {
       return {
         status: "unavailable",
-        reason: this.reserveUnavailableReason,
+        reason: this.lookupUnavailableReason,
       };
     }
 
