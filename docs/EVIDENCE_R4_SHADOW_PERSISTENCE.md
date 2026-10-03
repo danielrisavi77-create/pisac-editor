@@ -22,6 +22,8 @@ Live migrations:
 - `20261003075051 evidence_r4_shadow_lookup_authorization`
 - `20261003075723 evidence_r4_signature_encoding`
 - `20261003081415 evidence_r4_signature_encoding_pairs`
+- `20261003082323 evidence_r4_signature_encoding_pairs` — idempotent live-history reapply
+- `20261003082618 evidence_r4_sql_runtime_fixes`
 
 The same SQL is mirrored in `supabase/migrations/`.
 
@@ -263,6 +265,43 @@ Concurrency is instead covered by:
 
 A live two-session concurrency test becomes mandatory before the shadow feature
 flag is enabled for any authenticated pilot user.
+
+## Live rollback adversarial test
+
+After applying the shadow migrations, R4 ran a real PostgreSQL state-machine
+test inside one `BEGIN ... ROLLBACK` transaction using synthetic IDs only.
+
+It exercised:
+
+- package provisioning for the document owner;
+- owner ALLOW and unrelated-principal DENY;
+- initial idempotency lookup;
+- first atomic reserve;
+- duplicate-pending reserve;
+- idempotency-key conflict;
+- wrong-predecessor chain conflict;
+- valid next-segment reserve;
+- signature attachment;
+- signed-receipt lookup;
+- recovery lookup after package closure;
+- rejection of new evidence after package closure.
+
+The first run found a real PL/pgSQL defect: `COALESCE` had been incorrectly
+schema-qualified as `pg_catalog.coalesce`. PostgreSQL permits the function
+definition to be stored but fails when that expression executes. Migration
+`20261003082618` corrects every affected Evidence RPC. The full rollback test
+then passed.
+
+After rollback, the live project again contained:
+
+~~~text
+pisac_evidence.packages     = 0
+pisac_evidence.acceptances  = 0
+~~~
+
+This is now a mandatory pattern for future trust-plane migrations: creation
+success is not sufficient evidence; critical RPCs must be invoked against a
+synthetic rollback fixture before activation.
 
 ## Advisor state
 
