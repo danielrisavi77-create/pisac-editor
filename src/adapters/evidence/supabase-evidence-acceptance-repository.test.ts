@@ -88,6 +88,7 @@ async function fixtureRecord(status: "pending_signature" | "signed") {
       algorithm: "Ed25519",
       keyId: "kms-alias",
       keyVersion: "kms-arn",
+      signatureEncoding: "raw",
       signatureBase64Url: "AQIDBA",
     },
   };
