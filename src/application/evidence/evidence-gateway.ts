@@ -123,12 +123,14 @@ export class EvidenceGateway implements EvidenceIngestPort {
     }
 
     const context = contextResult.context;
+    if (!context.acceptsEvidence) {
+      return { status: "not_accepting" };
+    }
     if (
-      !context.acceptsEvidence ||
       context.documentId !== verified.segment.documentId ||
       context.evidenceProfileId !== verified.segment.evidenceProfileId
     ) {
-      return { status: "unauthorized" };
+      return { status: "invalid" };
     }
     if (request.command.descriptor.payloadBytes > context.maxPayloadBytes) {
       return { status: "too_large" };
