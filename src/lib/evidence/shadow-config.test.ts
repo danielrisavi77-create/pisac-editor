@@ -1,71 +1,91 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  DEFAULT_EVIDENCE_PROFILE_MAX_BYTES,
-  getEvidenceShadowConfig,
-} from "./shadow-config";
+import { getEvidenceShadowConfig } from "./shadow-config";
+
+const base = {
+  PISAC_EVIDENCE_SHADOW_ENABLED: "1",
+  NEXT_PUBLIC_SITE_URL: "https://pisac.example",
+  PISAC_EVIDENCE_STORAGE_BUCKET: "pisac-evidence-shadow",
+  PISAC_EVIDENCE_SHADOW_PROFILE_ID: "standard-v1",
+};
 
 describe("Evidence shadow configuration", () => {
-  it("is disabled by default and uses a development signer only outside production", () => {
-    expect(getEvidenceShadowConfig({}, "test")).toEqual({
-      ok: true,
-      value: {
-        enabled: false,
-        bucket: "pisac-evidence-shadow",
-        evidenceProfileId: "standard-v1",
-        maxPayloadBytes: DEFAULT_EVIDENCE_PROFILE_MAX_BYTES,
-        maxCommandBytes: DEFAULT_EVIDENCE_PROFILE_MAX_BYTES + 64 * 1024,
-        signer: null,
-      },
+  it("is disabled unless explicitly enabled", () => {
+    expect(getEvidenceShadowConfig({}, "production")).toEqual({
+      status: "disabled",
     });
   });
 
-  it("requires an explicit AWS KMS key in production", () => {
-    expect(getEvidenceShadowConfig({}, "production")).toMatchObject({
-      ok: true,
-      value: { enabled: false, signer: null },
+  it("requires pinned origin, explicit bucket/profile and production KMS mode", () => {
+    expect(
+      getEvidenceShadowConfig(base, "production"),
+    ).toEqual({
+      status: "ready",
+      value: {
+        siteOrigin: "https://pisac.example",
+        bucket: "pisac-evidence-shadow",
+        evidenceProfileId: "standard-v1",
+        maxPayloadBytes: 2 * 1024 * 1024,
+        maxCommandBytes: 2 * 1024 * 1024 + 256 * 1024,
+        signer: { mode: "azure-key-vault" },
+      },
     });
 
     expect(
       getEvidenceShadowConfig(
         {
-          PISAC_EVIDENCE_SHADOW_ENABLED: "1",
-          PISAC_EVIDENCE_SIGNER_MODE: "aws-kms",
-          PISAC_EVIDENCE_AWS_KMS_KEY_ID: "alias/pisac-evidence",
+          ...base,
+          NEXT_PUBLIC_SITE_URL: "",
         },
         "production",
       ),
-    ).toMatchObject({
-      ok: true,
-      value: {
-        enabled: true,
-        signer: {
-          mode: "aws-kms",
-          keyId: "alias/pisac-evidence",
-        },
-      },
-    });
+    ).toMatchObject({ status: "misconfigured" });
   });
 
-  it("refuses development signing in production and invalid byte limits", () => {
+  it("permits development signing only outside production", () => {
     expect(
       getEvidenceShadowConfig(
-        { PISAC_EVIDENCE_SIGNER_MODE: "development" },
-        "production",
+        {
+          ...base,
+          PISAC_EVIDENCE_SIGNER_MODE: "development",
+        },
+        "test",
       ),
-    ).toEqual({
-      ok: false,
-      reason: "development Evidence signer is prohibited in production",
+    ).toMatchObject({
+      status: "ready",
+      value: { signer: { mode: "development" } },
     });
 
     expect(
       getEvidenceShadowConfig(
-        { PISAC_EVIDENCE_MAX_PAYLOAD_BYTES: "999999999" },
-        "test",
+        {
+          ...base,
+          PISAC_EVIDENCE_SIGNER_MODE: "development",
+        },
+        "production",
       ),
-    ).toEqual({
-      ok: false,
-      reason: "invalid Evidence shadow configuration",
-    });
+    ).toMatchObject({ status: "misconfigured" });
+  });
+
+  it("rejects invalid byte limits and unsupported signer modes", () => {
+    expect(
+      getEvidenceShadowConfig(
+        {
+          ...base,
+          PISAC_EVIDENCE_SHADOW_MAX_PAYLOAD_BYTES: "999999999",
+        },
+        "production",
+      ),
+    ).toMatchObject({ status: "misconfigured" });
+
+    expect(
+      getEvidenceShadowConfig(
+        {
+          ...base,
+          PISAC_EVIDENCE_SIGNER_MODE: "mystery",
+        },
+        "production",
+      ),
+    ).toMatchObject({ status: "misconfigured" });
   });
 });
