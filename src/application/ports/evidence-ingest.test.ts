@@ -31,7 +31,7 @@ function validCommand(): EvidenceIngestCommandV2 {
       observedStartedAt: "2026-10-03T06:00:00.000Z",
       observedEndedAt: "2026-10-03T06:01:00.000Z",
       segmentHash: "a".repeat(64),
-      previousSegmentHash: null,
+      predecessorSegmentHash: null,
       payloadBytes: new TextEncoder().encode(payload).byteLength,
     },
   };
