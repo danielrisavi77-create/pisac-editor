@@ -32,8 +32,6 @@ type GatewayDependencies = {
   payloadStore: EvidencePayloadStore;
   repository: EvidenceAcceptanceRepository;
   signer: SigningKeyProvider;
-  clock?: () => string;
-  idFactory?: () => string;
 };
 
 function descriptorMatchesSegment(
@@ -92,21 +90,8 @@ async function parseAndVerifyCanonicalPayload(
   return { ok: true, segment: parsed };
 }
 
-function canonicalInstant(value: string): boolean {
-  const time = Date.parse(value);
-  return Number.isFinite(time) && new Date(time).toISOString() === value;
-}
-
 export class EvidenceGateway implements EvidenceIngestPort {
-  private readonly clock: () => string;
-  private readonly idFactory: () => string;
-
-  constructor(private readonly dependencies: GatewayDependencies) {
-    this.clock =
-      dependencies.clock ?? (() => new Date().toISOString());
-    this.idFactory =
-      dependencies.idFactory ?? (() => globalThis.crypto.randomUUID());
-  }
+  constructor(private readonly dependencies: GatewayDependencies) {}
 
   async ingest(
     request: EvidenceIngestRequestV2,
@@ -186,23 +171,11 @@ export class EvidenceGateway implements EvidenceIngestPort {
       return { status: "invalid" };
     }
 
-    const acceptedAt = this.clock();
-    const receiptId = this.idFactory();
-    if (!canonicalInstant(acceptedAt) || !receiptId.trim()) {
-      return {
-        status: "unavailable",
-        stage: "repository",
-        reason: "gateway identity/time unavailable",
-      };
-    }
-
     const reserved = await this.dependencies.repository.reserve({
       clientRequestId: request.command.clientRequestId,
       principalId: request.principalId,
       storageRef: stored.storageRef,
       descriptor: request.command.descriptor,
-      receiptId,
-      acceptedAt,
     });
 
     if (reserved.status === "unavailable") {
