@@ -6,6 +6,7 @@ import {
   AWS_KMS_RAW_MESSAGE_TYPE,
   AWS_KMS_SIGN_VERIFY_USAGE,
   AwsKmsEd25519SigningKeyProvider,
+  type AwsKmsEd25519PublicKeyResult,
   type AwsKmsEd25519Transport,
 } from "./aws-kms-ed25519-signer";
 
@@ -29,7 +30,7 @@ class FakeTransport implements AwsKmsEd25519Transport {
 
   async getPublicKey(
     input: Parameters<AwsKmsEd25519Transport["getPublicKey"]>[0],
-  ) {
+  ): Promise<AwsKmsEd25519PublicKeyResult> {
     this.calls.push({ kind: "getPublicKey", ...input });
     return {
       keyId: "arn:aws:kms:eu-central-1:123:key/concrete-v1",
