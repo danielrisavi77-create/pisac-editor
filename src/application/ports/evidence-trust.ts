@@ -49,6 +49,20 @@ export type EvidenceAcceptanceRecord = {
   signedReceipt?: SignedEvidenceReceipt;
 };
 
+export type EvidenceAcceptanceIdentity = {
+  clientRequestId: string;
+  principalId: string;
+  evidencePackageId: string;
+  descriptor: EvidenceSegmentDescriptorV2;
+};
+
+export type LookupEvidenceAcceptanceResult =
+  | { status: "not_found" }
+  | { status: "duplicate_pending"; record: EvidenceAcceptanceRecord }
+  | { status: "duplicate_signed"; record: EvidenceAcceptanceRecord }
+  | { status: "idempotency_conflict" }
+  | { status: "unavailable"; reason: string };
+
 export type ReserveEvidenceAcceptanceInput = {
   clientRequestId: string;
   principalId: string;
@@ -61,6 +75,12 @@ export type ReserveEvidenceAcceptanceResult =
   | { status: "duplicate_pending"; record: EvidenceAcceptanceRecord }
   | { status: "duplicate_signed"; record: EvidenceAcceptanceRecord }
   | { status: "idempotency_conflict" }
+  | { status: "invalid" }
+  | { status: "unauthorized" }
+  | { status: "not_accepting" }
+  | { status: "too_large" }
+  | { status: "context_mismatch" }
+  | { status: "concurrent_conflict" }
   | {
       status: "chain_conflict";
       expectedPreviousSegmentHash: string | null;
@@ -81,6 +101,10 @@ export type ReserveEvidenceAcceptanceResult =
  * payload can be signed later without minting a new acceptance time/id.
  */
 export interface EvidenceAcceptanceRepository {
+  lookup(
+    input: EvidenceAcceptanceIdentity,
+  ): Promise<LookupEvidenceAcceptanceResult>;
+
   reserve(
     input: ReserveEvidenceAcceptanceInput,
   ): Promise<ReserveEvidenceAcceptanceResult>;
