@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { DevelopmentEd25519SigningKeyProvider } from "./development-ed25519-signer";
 
@@ -31,14 +31,13 @@ describe("DevelopmentEd25519SigningKeyProvider", () => {
   });
 
   it("refuses construction in production mode", () => {
-    const previous = process.env.NODE_ENV;
-    process.env.NODE_ENV = "production";
+    vi.stubEnv("NODE_ENV", "production");
     try {
       expect(
         () => new DevelopmentEd25519SigningKeyProvider(),
       ).toThrow("prohibited in production");
     } finally {
-      process.env.NODE_ENV = previous;
+      vi.unstubAllEnvs();
     }
   });
 });
