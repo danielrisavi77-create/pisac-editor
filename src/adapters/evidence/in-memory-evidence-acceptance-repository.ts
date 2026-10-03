@@ -195,6 +195,7 @@ export class InMemoryEvidenceAcceptanceRepository
       digest.sha256 !== input.signedReceipt.payloadDigestSha256 ||
       !input.signedReceipt.signature.keyId.trim() ||
       !input.signedReceipt.signature.keyVersion.trim() ||
+      !input.signedReceipt.signature.signatureEncoding ||
       !input.signedReceipt.signature.signatureBase64Url.trim()
     ) {
       return { status: "conflict" };
