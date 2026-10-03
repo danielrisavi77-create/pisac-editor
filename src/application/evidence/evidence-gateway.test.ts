@@ -448,6 +448,19 @@ describe("EvidenceGateway", () => {
     expect((await ingest(closed)).status).toBe("not_accepting");
   });
 
+  it("fails before object storage when the idempotency lookup is unavailable", async () => {
+    const s = setup();
+    s.repository.lookupUnavailableReason = "lookup down";
+
+    expect(await ingest(s)).toEqual({
+      status: "unavailable",
+      stage: "repository",
+      reason: "lookup down",
+    });
+    expect(s.payloadStore.size).toBe(0);
+    expect(s.repository.records()).toHaveLength(0);
+  });
+
   it("does not mint metadata or a receipt when payload storage is unavailable", async () => {
     const s = setup();
     s.payloadStore.unavailableReason = "object store down";
