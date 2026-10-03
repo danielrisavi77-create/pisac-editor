@@ -2,8 +2,9 @@
  * Env-driven Supabase configuration.
  *
  * Builds, lint, typecheck and tests must all pass when no live deployment env
- * is configured. Only public browser credentials are read here; secret/service
- * role credentials must never be referenced from `src/` or `app/`.
+ * is configured. This shared/browser config reads only public credentials.
+ * Server-only secret/service-role credentials live in the dedicated
+ * `src/lib/supabase/admin.ts` boundary and must never enter client bundles.
  *
  * New deployments should use Supabase's publishable key. The legacy anon key is
  * accepted only as a temporary compatibility fallback while existing

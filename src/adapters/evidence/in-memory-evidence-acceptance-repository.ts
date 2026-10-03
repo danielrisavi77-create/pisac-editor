@@ -1,6 +1,8 @@
 import type {
+  EvidenceAcceptanceIdentity,
   EvidenceAcceptanceRecord,
   EvidenceAcceptanceRepository,
+  LookupEvidenceAcceptanceResult,
   ReserveEvidenceAcceptanceInput,
   ReserveEvidenceAcceptanceResult,
 } from "@/application/ports/evidence-trust";
@@ -40,6 +42,7 @@ export class InMemoryEvidenceAcceptanceRepository
   private readonly byReceipt = new Map<string, EvidenceAcceptanceRecord>();
   private readonly heads = new Map<string, ChainHead>();
 
+  lookupUnavailableReason: string | null = null;
   reserveUnavailableReason: string | null = null;
   attachUnavailableReason: string | null = null;
 
@@ -50,6 +53,38 @@ export class InMemoryEvidenceAcceptanceRepository
     this.clock = options.clock ?? (() => new Date().toISOString());
     this.idFactory =
       options.idFactory ?? (() => globalThis.crypto.randomUUID());
+  }
+
+  async lookup(
+    input: EvidenceAcceptanceIdentity,
+  ): Promise<LookupEvidenceAcceptanceResult> {
+    if (this.lookupUnavailableReason) {
+      return {
+        status: "unavailable",
+        reason: this.lookupUnavailableReason,
+      };
+    }
+
+    const key = canonicalizeJcs([
+      input.principalId,
+      input.evidencePackageId,
+      input.clientRequestId,
+    ]);
+    const existing = this.byRequest.get(key);
+    if (!existing) return { status: "not_found" };
+
+    const same =
+      canonicalizeJcs(existing.descriptor) ===
+      canonicalizeJcs(input.descriptor);
+    if (!same) return { status: "idempotency_conflict" };
+
+    return {
+      status:
+        existing.status === "signed"
+          ? "duplicate_signed"
+          : "duplicate_pending",
+      record: cloneRecord(existing),
+    };
   }
 
   async reserve(
@@ -161,6 +196,7 @@ export class InMemoryEvidenceAcceptanceRepository
       digest.sha256 !== input.signedReceipt.payloadDigestSha256 ||
       !input.signedReceipt.signature.keyId.trim() ||
       !input.signedReceipt.signature.keyVersion.trim() ||
+      !input.signedReceipt.signature.signatureEncoding ||
       !input.signedReceipt.signature.signatureBase64Url.trim()
     ) {
       return { status: "conflict" };

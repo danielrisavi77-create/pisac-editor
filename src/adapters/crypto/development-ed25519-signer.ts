@@ -44,6 +44,7 @@ export class DevelopmentEd25519SigningKeyProvider
       algorithm: "Ed25519",
       keyId: this.keyId,
       keyVersion: this.keyVersion,
+      signatureEncoding: "raw",
       signatureBase64Url: signature.toString("base64url"),
     };
   }
@@ -68,6 +69,7 @@ export class DevelopmentEd25519SigningKeyProvider
   ): Promise<boolean> {
     if (
       signature.algorithm !== "Ed25519" ||
+      signature.signatureEncoding !== "raw" ||
       signature.keyId !== this.keyId ||
       signature.keyVersion !== this.keyVersion
     ) {

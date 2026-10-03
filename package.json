@@ -15,7 +15,8 @@
     "test:unit": "vitest run",
     "test:ai": "npm --prefix tools/ai-architect test",
     "test": "npm run test:unit && npm run test:ai",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "bootstrap:evidence-storage": "node scripts/bootstrap-evidence-storage.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
