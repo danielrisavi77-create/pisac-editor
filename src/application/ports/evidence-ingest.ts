@@ -118,12 +118,12 @@ export function isEvidenceSegmentDescriptorV2(
   return true;
 }
 
-export function validateEvidenceIngestCommandV2(
-  command: EvidenceIngestCommandV2,
-): boolean {
-  const descriptor = command?.descriptor;
+export function isEvidenceIngestCommandV2(
+  command: unknown,
+): command is EvidenceIngestCommandV2 {
+  if (!isPlainObject(command)) return false;
+  const descriptor = command.descriptor;
   if (
-    !descriptor ||
     !nonEmptyBounded(command.clientRequestId, MAX_CLIENT_REQUEST_ID_LENGTH) ||
     !nonEmptyBounded(command.canonicalPayload, 16 * 1024 * 1024) ||
     !isEvidenceSegmentDescriptorV2(descriptor)
@@ -135,6 +135,12 @@ export function validateEvidenceIngestCommandV2(
     new TextEncoder().encode(command.canonicalPayload).byteLength ===
     descriptor.payloadBytes
   );
+}
+
+export function validateEvidenceIngestCommandV2(
+  command: EvidenceIngestCommandV2,
+): boolean {
+  return isEvidenceIngestCommandV2(command);
 }
 
 export type { SignedEvidenceReceipt } from "@/domain/forensics/evidence-receipt";
