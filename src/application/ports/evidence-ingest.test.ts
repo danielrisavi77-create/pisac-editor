@@ -1,51 +1,83 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  validateEvidenceIngestCommand,
-  type EvidenceIngestCommand,
+  validateEvidenceIngestCommandV2,
+  type EvidenceIngestCommandV2,
 } from "./evidence-ingest";
+import {
+  EVIDENCE_CANONICALIZATION_V2,
+  EVIDENCE_HASH_ALGORITHM_V2,
+  EVIDENCE_SEGMENT_SCHEMA_V2,
+} from "@/domain/forensics/evidence-segment-v2";
 
-const payload = "{\"events\":[]}";
+const payload = '{"evidenceSchema":"pisac-evidence-segment-v2"}';
 
-function validCommand(): EvidenceIngestCommand {
+function validCommand(): EvidenceIngestCommandV2 {
   return {
     clientRequestId: "req-1",
     canonicalPayload: payload,
     descriptor: {
+      evidencePackageId: "evidence-1",
       documentId: "doc-1",
       sessionId: "session-1",
       segmentId: "segment-1",
-      schema: "pisac-local-transactions-v1",
-      eventCount: 0,
-      startedAt: "2026-10-02T19:00:00Z",
-      endedAt: "2026-10-02T19:01:00Z",
-      segmentHash: "sha256:abc",
-      previousSegmentHash: null,
+      evidenceSchema: EVIDENCE_SEGMENT_SCHEMA_V2,
+      canonicalization: EVIDENCE_CANONICALIZATION_V2,
+      hashAlgorithm: EVIDENCE_HASH_ALGORITHM_V2,
+      evidenceProfileId: "standard-v1",
+      sequenceFrom: 1,
+      sequenceTo: 1,
+      eventCount: 1,
+      observedStartedAt: "2026-10-03T06:00:00.000Z",
+      observedEndedAt: "2026-10-03T06:01:00.000Z",
+      segmentHash: "a".repeat(64),
+      predecessorSegmentHash: null,
       payloadBytes: new TextEncoder().encode(payload).byteLength,
     },
   };
 }
 
-describe("evidence ingest boundary", () => {
-  it("accepts a structurally coherent segment envelope", () => {
-    expect(validateEvidenceIngestCommand(validCommand())).toBe(true);
+describe("evidence ingest v2 boundary", () => {
+  it("accepts a structurally coherent v2 envelope", () => {
+    expect(validateEvidenceIngestCommandV2(validCommand())).toBe(true);
   });
 
-  it("fails closed on payload-size or chronology mismatches", () => {
+  it("fails closed on size, chronology, range and hash-shape mismatches", () => {
     expect(
-      validateEvidenceIngestCommand({
+      validateEvidenceIngestCommandV2({
         ...validCommand(),
         descriptor: { ...validCommand().descriptor, payloadBytes: 1 },
       }),
     ).toBe(false);
 
     expect(
-      validateEvidenceIngestCommand({
+      validateEvidenceIngestCommandV2({
         ...validCommand(),
         descriptor: {
           ...validCommand().descriptor,
-          startedAt: "2026-10-02T19:02:00Z",
-          endedAt: "2026-10-02T19:01:00Z",
+          observedStartedAt: "2026-10-03T06:02:00.000Z",
+          observedEndedAt: "2026-10-03T06:01:00.000Z",
+        },
+      }),
+    ).toBe(false);
+
+    expect(
+      validateEvidenceIngestCommandV2({
+        ...validCommand(),
+        descriptor: {
+          ...validCommand().descriptor,
+          sequenceTo: 2,
+          eventCount: 1,
+        },
+      }),
+    ).toBe(false);
+
+    expect(
+      validateEvidenceIngestCommandV2({
+        ...validCommand(),
+        descriptor: {
+          ...validCommand().descriptor,
+          segmentHash: "sha256:not-a-wire-hash",
         },
       }),
     ).toBe(false);
