@@ -16,6 +16,7 @@ Live migration history currently contains:
 - `f1_documents_grants`
 - `f1_checkpoints`
 - `f1_live_hardening`
+- `gate1_least_privilege`
 
 Live tables: `pisac_workspaces`, `pisac_projects`, `pisac_documents`, `pisac_document_revisions`, `pisac_checkpoints`.
 
@@ -27,6 +28,18 @@ The three authenticated-callable SECURITY DEFINER RPC advisor warnings are expec
 - `pisac_create_checkpoint`
 
 They are the intentional privileged write paths; PUBLIC/anon execution must remain revoked and authorization stays in the functions.
+
+## Least-privilege proof — 2. listopada 2026.
+
+PR #38 merged as `bfd93ba8fd4a55104ab73b693c6164a3be564926`; forward-only Supabase migration `gate1_least_privilege` is applied.
+
+Verified live privileges:
+- `pisac_workspaces`, `pisac_projects`: authenticated SELECT/INSERT/UPDATE/DELETE = true; TRUNCATE/REFERENCES/TRIGGER/MAINTAIN = false.
+- `pisac_documents`, `pisac_document_revisions`, `pisac_checkpoints`: authenticated SELECT = true; INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER/MAINTAIN = false.
+- anon SELECT on all five tables = false.
+- `pisac_ensure_document`, `pisac_commit_document`, `pisac_create_checkpoint`: anon EXECUTE = false; authenticated EXECUTE = true.
+
+Post-apply advisors: exactly the same three intentional authenticated SECURITY DEFINER WARN findings plus five unused-index INFO findings on the still-empty database.
 
 ## Current Supabase compatibility requirement
 
