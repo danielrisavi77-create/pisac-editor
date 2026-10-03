@@ -47,6 +47,7 @@ class ToggleSigner implements SigningKeyProvider {
     "v1",
   );
   fail = false;
+  verifyFail = false;
 
   async sign(message: Uint8Array): Promise<SignatureEnvelope> {
     if (this.fail) throw new Error("synthetic signer outage");
@@ -61,6 +62,7 @@ class ToggleSigner implements SigningKeyProvider {
     message: Uint8Array,
     signature: SignatureEnvelope,
   ): Promise<boolean> {
+    if (this.verifyFail) return false;
     return this.inner.verify(message, signature);
   }
 }
@@ -468,6 +470,20 @@ describe("EvidenceGateway", () => {
     });
     expect(s.payloadStore.size).toBe(1);
     expect(s.repository.records()).toHaveLength(0);
+  });
+
+  it("refuses to persist a signer response that cannot be verified", async () => {
+    const s = setup();
+    s.signer.verifyFail = true;
+
+    expect(await ingest(s)).toEqual({
+      status: "unavailable",
+      stage: "signing",
+      reason: "signer returned unverifiable signature",
+    });
+    expect(s.repository.records()).toHaveLength(1);
+    expect(s.repository.records()[0].status).toBe("pending_signature");
+    expect(s.repository.records()[0].signedReceipt).toBeUndefined();
   });
 
   it("recovers signer failure by signing the same reserved receipt on retry", async () => {
