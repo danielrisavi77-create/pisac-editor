@@ -21,5 +21,6 @@ export interface SigningKeyProvider {
 export type {
   PublicVerificationKey,
   SignatureAlgorithm,
+  SignatureEncoding,
   SignatureEnvelope,
 } from "@/domain/forensics/signature";
