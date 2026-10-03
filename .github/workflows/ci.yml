@@ -36,6 +36,9 @@ jobs:
       - name: Unit tests
         run: npm run test:unit
 
+      - name: Property tests
+        run: npm run test:property
+
       - name: AI Architect tests
         run: npm run test:ai
 
