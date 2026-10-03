@@ -26,5 +26,9 @@ export type PublicVerificationKey = {
  */
 export interface SigningKeyProvider {
   sign(message: Uint8Array): Promise<SignatureEnvelope>;
+  verify(
+    message: Uint8Array,
+    signature: SignatureEnvelope,
+  ): Promise<boolean>;
   publicVerificationKey(): Promise<PublicVerificationKey>;
 }
