@@ -172,11 +172,12 @@ function setup() {
 
 async function ingest(
   setupResult: ReturnType<typeof setup>,
-  commandValue = await command(),
+  commandValue?: Awaited<ReturnType<typeof command>>,
 ) {
+  const actualCommand = commandValue ?? (await command());
   return setupResult.gateway.ingest({
     principalId: "student-1",
-    command: commandValue,
+    command: actualCommand,
   });
 }
 
