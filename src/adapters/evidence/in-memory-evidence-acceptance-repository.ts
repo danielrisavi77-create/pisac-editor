@@ -170,15 +170,6 @@ export class InMemoryEvidenceAcceptanceRepository
       };
     }
 
-    if (
-      input.signedReceipt.payload.receiptId !==
-        record.receiptPayload.receiptId ||
-      canonicalizeJcs(input.signedReceipt.payload) !==
-        canonicalizeJcs(record.receiptPayload)
-    ) {
-      return { status: "conflict" };
-    }
-
     record.status = "signed";
     record.signedReceipt = structuredClone(input.signedReceipt);
     return { status: "attached" };
