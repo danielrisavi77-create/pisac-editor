@@ -111,7 +111,18 @@ export type EvidenceBucketReadiness =
 export async function verifySupabaseEvidenceBucket(
   supabaseAdmin: SupabaseClient,
   bucket = DEFAULT_EVIDENCE_BUCKET,
+  requiredPayloadBytes = 1,
 ): Promise<EvidenceBucketReadiness> {
+  if (
+    !Number.isSafeInteger(requiredPayloadBytes) ||
+    requiredPayloadBytes < 1 ||
+    requiredPayloadBytes > MAX_EVIDENCE_OBJECT_BYTES
+  ) {
+    return {
+      status: "misconfigured",
+      reason: "invalid required Evidence payload limit",
+    };
+  }
   const { data, error } = await supabaseAdmin.storage.getBucket(bucket);
 
   if (error) {
@@ -151,11 +162,12 @@ export async function verifySupabaseEvidenceBucket(
   if (
     limit === null ||
     !Number.isFinite(limit) ||
+    limit < requiredPayloadBytes ||
     limit > MAX_EVIDENCE_OBJECT_BYTES
   ) {
     return {
       status: "misconfigured",
-      reason: "evidence bucket file-size limit is missing or too large",
+      reason: "evidence bucket file-size limit does not match policy",
     };
   }
 
