@@ -1,8 +1,8 @@
+import type { EvidenceSegmentDescriptorV2 } from "./evidence-ingest";
 import type {
-  EvidenceSegmentDescriptorV2,
+  EvidenceReceiptPayloadV1,
   SignedEvidenceReceipt,
-} from "./evidence-ingest";
-import type { EvidenceSegmentV2 } from "@/domain/forensics/evidence-segment-v2";
+} from "@/domain/forensics/evidence-receipt";
 
 export type EvidencePackageContext = {
   evidencePackageId: string;
@@ -38,25 +38,6 @@ export interface EvidencePayloadStore {
     canonicalPayload: string;
   }): Promise<EvidencePayloadPutResult>;
 }
-
-export type EvidenceReceiptPayloadV1 = {
-  receiptSchema: "pisac-evidence-receipt-v1";
-  receiptId: string;
-  evidencePackageId: string;
-  documentId: string;
-  sessionId: string;
-  segmentId: string;
-  segmentHash: string;
-  predecessorSegmentHash: string | null;
-  previousReceiptId: string | null;
-  evidenceSchema: EvidenceSegmentV2["evidenceSchema"];
-  evidenceProfileId: string;
-  sequenceFrom: number;
-  sequenceTo: number;
-  eventCount: number;
-  payloadBytes: number;
-  acceptedAt: string;
-};
 
 export type EvidenceAcceptanceRecord = {
   clientRequestId: string;
