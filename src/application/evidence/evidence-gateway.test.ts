@@ -139,10 +139,13 @@ function setup() {
     },
   ]);
   const payloadStore = new InMemoryEvidencePayloadStore();
-  const repository = new InMemoryEvidenceAcceptanceRepository();
-  const signer = new ToggleSigner();
   let now = "2026-10-03T06:05:00.000Z";
   let receiptSequence = 0;
+  const repository = new InMemoryEvidenceAcceptanceRepository({
+    clock: () => now,
+    idFactory: () => `receipt-${++receiptSequence}`,
+  });
+  const signer = new ToggleSigner();
 
   const gateway = new EvidenceGateway({
     authorization,
@@ -150,8 +153,6 @@ function setup() {
     payloadStore,
     repository,
     signer,
-    clock: () => now,
-    idFactory: () => `receipt-${++receiptSequence}`,
   });
 
   return {
@@ -368,9 +369,7 @@ describe("EvidenceGateway", () => {
     const otherProfile = await command(
       segment({ profile: "other-profile" }),
     );
-    expect((await ingest(s, otherProfile)).status).toBe(
-      "unauthorized",
-    );
+    expect((await ingest(s, otherProfile)).status).toBe("invalid");
 
     s.contexts.set({
       evidencePackageId: "evidence-1",
@@ -379,7 +378,7 @@ describe("EvidenceGateway", () => {
       maxPayloadBytes: 2 * 1024 * 1024,
       acceptsEvidence: true,
     });
-    expect((await ingest(s)).status).toBe("unauthorized");
+    expect((await ingest(s)).status).toBe("invalid");
     expect(s.payloadStore.size).toBe(0);
   });
 
@@ -404,7 +403,6 @@ describe("EvidenceGateway", () => {
 
   it("distinguishes context, size and closed-package failures before storage", async () => {
     const missing = setup();
-    missing.contexts = missing.contexts;
     expect(
       await missing.gateway.ingest({
         principalId: "student-1",
@@ -417,6 +415,14 @@ describe("EvidenceGateway", () => {
         },
       }),
     ).toEqual({ status: "invalid" });
+
+    const contextUnavailable = setup();
+    contextUnavailable.contexts.unavailableReason = "context store down";
+    expect(await ingest(contextUnavailable)).toEqual({
+      status: "unavailable",
+      stage: "context",
+      reason: "context store down",
+    });
 
     const tooLarge = setup();
     tooLarge.contexts.set({
@@ -436,7 +442,7 @@ describe("EvidenceGateway", () => {
       maxPayloadBytes: 2 * 1024 * 1024,
       acceptsEvidence: false,
     });
-    expect((await ingest(closed)).status).toBe("unauthorized");
+    expect((await ingest(closed)).status).toBe("not_accepting");
   });
 
   it("does not mint metadata or a receipt when payload storage is unavailable", async () => {
