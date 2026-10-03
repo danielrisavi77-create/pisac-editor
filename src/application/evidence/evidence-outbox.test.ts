@@ -180,6 +180,7 @@ describe("Evidence Outbox state machine", () => {
       { status: "invalid" as const },
       { status: "unauthorized" as const },
       { status: "too_large" as const },
+      { status: "not_accepting" as const },
       { status: "idempotency_conflict" as const },
       {
         status: "chain_conflict" as const,
