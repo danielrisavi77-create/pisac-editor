@@ -1,3 +1,4 @@
+import { canonicalizeJcs } from "@/domain/forensics/jcs";
 import type {
   EvidencePayloadPutResult,
   EvidencePayloadStore,
@@ -21,7 +22,10 @@ export class InMemoryEvidencePayloadStore implements EvidencePayloadStore {
       return { status: "unavailable", reason: this.unavailableReason };
     }
 
-    const key = `${input.evidencePackageId}:${input.segmentHash}`;
+    const key = canonicalizeJcs([
+      input.evidencePackageId,
+      input.segmentHash,
+    ]);
     const existing = this.payloads.get(key);
     if (existing) {
       return existing.canonicalPayload === input.canonicalPayload
@@ -43,7 +47,7 @@ export class InMemoryEvidencePayloadStore implements EvidencePayloadStore {
     segmentHash: string,
   ): StoredPayload | null {
     const value = this.payloads.get(
-      `${evidencePackageId}:${segmentHash}`,
+      canonicalizeJcs([evidencePackageId, segmentHash]),
     );
     return value ? structuredClone(value) : null;
   }
