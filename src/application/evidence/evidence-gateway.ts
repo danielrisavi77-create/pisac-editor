@@ -218,6 +218,14 @@ export class EvidenceGateway implements EvidenceIngestPort {
       const signature = await this.dependencies.signer.sign(
         receiptDigest.bytes,
       );
+      if (
+        !(await this.dependencies.signer.verify(
+          receiptDigest.bytes,
+          signature,
+        ))
+      ) {
+        throw new Error("signer returned unverifiable signature");
+      }
       signedReceipt = {
         payload: record.receiptPayload,
         payloadDigestSha256: receiptDigest.sha256,
