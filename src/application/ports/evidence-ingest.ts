@@ -46,6 +46,7 @@ export type EvidenceIngestOutcome =
   | { status: "invalid" }
   | { status: "unauthorized" }
   | { status: "too_large" }
+  | { status: "not_accepting" }
   | {
       status: "unavailable";
       stage: "authorization" | "context" | "storage" | "repository" | "signing";
