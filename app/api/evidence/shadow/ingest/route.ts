@@ -1,141 +1,107 @@
 import { NextResponse } from "next/server";
 
-import { SupabaseEvidenceAcceptanceRepository } from "@/adapters/evidence/supabase-evidence-acceptance-repository";
-import { SupabaseEvidenceContextPort } from "@/adapters/evidence/supabase-evidence-context";
-import { SupabaseF1EvidenceAuthorizationPort } from "@/adapters/evidence/supabase-f1-evidence-authorization";
-import {
-  SupabaseEvidencePayloadStore,
-  verifySupabaseEvidenceBucket,
-} from "@/adapters/evidence/supabase-evidence-payload-store";
-import { EvidenceGateway } from "@/application/evidence/evidence-gateway";
 import { isEvidenceIngestCommandV2 } from "@/application/ports/evidence-ingest";
-import { readJsonBodyLimited } from "@/lib/evidence/shadow-http";
 import { getEvidenceShadowConfig } from "@/lib/evidence/shadow-config";
-import { createEvidenceShadowSigner } from "@/lib/evidence/shadow-signer";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import {
+  isPinnedSameOrigin,
+  readJsonBodyLimited,
+} from "@/lib/evidence/shadow-http";
+import { createEvidenceShadowRuntime } from "@/lib/evidence/shadow-runtime";
+import { getEvidenceShadowSession } from "@/lib/evidence/shadow-session";
 
 export const runtime = "nodejs";
 
 function json(body: unknown, status: number) {
   return NextResponse.json(body, {
     status,
-    headers: { "Cache-Control": "no-store" },
+    headers: { "cache-control": "no-store" },
   });
 }
 
 export async function POST(request: Request) {
-  const configResult = getEvidenceShadowConfig();
-  if (!configResult.ok) {
-    return json({ status: "unavailable", reason: configResult.reason }, 503);
+  const config = getEvidenceShadowConfig();
+  if (config.status === "disabled") return json({ status: "disabled" }, 404);
+  if (config.status !== "ready") {
+    return json({ status: "unavailable" }, 503);
   }
-  const config = configResult.value;
-  if (!config.enabled) {
-    return json({ status: "not_found" }, 404);
+  if (!isPinnedSameOrigin(request, config.value.siteOrigin)) {
+    return json({ status: "forbidden" }, 403);
   }
-
   if (
     !request.headers
       .get("content-type")
       ?.toLowerCase()
       .startsWith("application/json")
   ) {
-    return json({ status: "invalid", reason: "JSON required" }, 415);
+    return json({ status: "invalid" }, 415);
   }
 
-  const userSupabase = await createClient();
-  if (!userSupabase) {
-    return json({ status: "unavailable", reason: "Supabase not configured" }, 503);
+  const session = await getEvidenceShadowSession();
+  if (session.status === "unconfigured") {
+    return json({ status: "unavailable" }, 503);
   }
-  const {
-    data: { user },
-    error: userError,
-  } = await userSupabase.auth.getUser();
-  if (userError || !user) {
+  if (session.status === "unauthenticated") {
     return json({ status: "unauthenticated" }, 401);
   }
 
-  const supabaseAdmin = createAdminClient();
-  if (!supabaseAdmin) {
-    return json({ status: "unavailable", reason: "server secret not configured" }, 503);
-  }
-
-  const bucket = await verifySupabaseEvidenceBucket(
-    supabaseAdmin,
-    config.bucket,
+  const body = await readJsonBodyLimited(
+    request,
+    config.value.maxCommandBytes,
   );
-  if (bucket.status !== "ready") {
-    return json(
-      {
-        status: "unavailable",
-        reason:
-          bucket.status === "misconfigured"
-            ? bucket.reason
-            : `Evidence bucket is ${bucket.status}`,
-      },
-      503,
-    );
-  }
-
-  const signerResult = createEvidenceShadowSigner(config);
-  if (signerResult.status !== "ready") {
-    return json(
-      { status: "unavailable", reason: signerResult.reason },
-      503,
-    );
-  }
-
-  const parsed = await readJsonBodyLimited(request, config.maxCommandBytes);
-  if (!parsed.ok) {
-    return json({ status: "invalid", reason: parsed.reason }, parsed.status);
-  }
-  if (!isEvidenceIngestCommandV2(parsed.value)) {
+  if (!body.ok) return json({ status: body.reason }, body.status);
+  if (!isEvidenceIngestCommandV2(body.value)) {
     return json({ status: "invalid" }, 400);
   }
 
-  const contexts = new SupabaseEvidenceContextPort(supabaseAdmin);
-  const authorization = new SupabaseF1EvidenceAuthorizationPort(
-    userSupabase,
-    contexts,
-    user.id,
-  );
-  const gateway = new EvidenceGateway({
-    authorization,
-    contexts,
-    payloadStore: new SupabaseEvidencePayloadStore(
-      supabaseAdmin,
-      config.bucket,
-    ),
-    repository: new SupabaseEvidenceAcceptanceRepository(supabaseAdmin),
-    signer: signerResult.signer,
+  const runtimeState = await createEvidenceShadowRuntime();
+  if (runtimeState.status !== "ready") {
+    return json({ status: "unavailable" }, 503);
+  }
+
+  const outcome = await runtimeState.runtime.gateway.ingest({
+    principalId: session.user.id,
+    command: body.value,
+    authorizationContext: {
+      currentTime: new Date().toISOString(),
+    },
   });
 
-  const outcome = await gateway.ingest({
-    principalId: user.id,
-    command: parsed.value,
-  });
-
-  if (outcome.status === "accepted") {
-    return json(outcome, 201);
+  switch (outcome.status) {
+    case "accepted":
+    case "duplicate":
+      return json(
+        {
+          status: outcome.status,
+          receipt: outcome.receipt,
+        },
+        200,
+      );
+    case "invalid":
+      return json({ status: "invalid" }, 400);
+    case "unauthorized":
+      return json({ status: "unauthorized" }, 403);
+    case "too_large":
+      return json({ status: "too_large" }, 413);
+    case "not_accepting":
+      return json({ status: "not_accepting" }, 409);
+    case "idempotency_conflict":
+      return json({ status: "idempotency_conflict" }, 409);
+    case "chain_conflict":
+      return json(
+        {
+          status: "chain_conflict",
+          expectedPreviousSegmentHash:
+            outcome.expectedPreviousSegmentHash,
+        },
+        409,
+      );
+    case "unavailable":
+      return json(
+        {
+          status: "unavailable",
+          stage: outcome.stage,
+        },
+        503,
+      );
   }
-  if (outcome.status === "duplicate") {
-    return json(outcome, 200);
-  }
-  if (outcome.status === "invalid") {
-    return json(outcome, 400);
-  }
-  if (outcome.status === "unauthorized") {
-    return json(outcome, 403);
-  }
-  if (outcome.status === "too_large") {
-    return json(outcome, 413);
-  }
-  if (
-    outcome.status === "chain_conflict" ||
-    outcome.status === "idempotency_conflict" ||
-    outcome.status === "not_accepting"
-  ) {
-    return json(outcome, 409);
-  }
-  return json(outcome, 503);
 }
