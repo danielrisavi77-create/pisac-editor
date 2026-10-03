@@ -20,7 +20,7 @@ export type EvidenceShadowConfig = {
   evidenceProfileId: string;
   maxPayloadBytes: number;
   maxCommandBytes: number;
-  signer: EvidenceShadowSignerConfig;
+  signer: EvidenceShadowSignerConfig | null;
 };
 
 export type EvidenceShadowConfigResult =
@@ -61,6 +61,23 @@ export function getEvidenceShadowConfig(
     maxPayloadBytes === null
   ) {
     return { ok: false, reason: "invalid Evidence shadow configuration" };
+  }
+
+  if (!enabled) {
+    return {
+      ok: true,
+      value: {
+        enabled: false,
+        bucket,
+        evidenceProfileId,
+        maxPayloadBytes,
+        maxCommandBytes: Math.min(
+          maxPayloadBytes + 64 * 1024,
+          MAX_EVIDENCE_OBJECT_BYTES,
+        ),
+        signer: null,
+      },
+    };
   }
 
   const signerMode =
