@@ -2,11 +2,12 @@ import {
   requiredAuthorizationConsistency,
   type AuthorizationPort,
 } from "@/application/ports/authorization";
-import type {
-  EvidenceIngestCommandV2,
-  EvidenceIngestOutcome,
-  EvidenceIngestPort,
-  EvidenceIngestRequestV2,
+import {
+  validateEvidenceIngestCommandV2,
+  type EvidenceIngestCommandV2,
+  type EvidenceIngestOutcome,
+  type EvidenceIngestPort,
+  type EvidenceIngestRequestV2,
 } from "@/application/ports/evidence-ingest";
 import type {
   EvidenceAcceptanceRepository,
@@ -112,6 +113,9 @@ export class EvidenceGateway implements EvidenceIngestPort {
   ): Promise<EvidenceIngestOutcome> {
     if (!request.principalId?.trim()) {
       return { status: "unauthorized" };
+    }
+    if (!validateEvidenceIngestCommandV2(request.command)) {
+      return { status: "invalid" };
     }
 
     const verified = await parseAndVerifyCanonicalPayload(request.command);
