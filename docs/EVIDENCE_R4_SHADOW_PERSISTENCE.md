@@ -21,6 +21,7 @@ Live migrations:
 - `20261003074143 evidence_r4_shadow_lookup_recovery`
 - `20261003075051 evidence_r4_shadow_lookup_authorization`
 - `20261003075723 evidence_r4_signature_encoding`
+- `20261003081415 evidence_r4_signature_encoding_pairs`
 
 The same SQL is mirrored in `supabase/migrations/`.
 
@@ -120,8 +121,12 @@ Portable receipts support:
 ~~~text
 Ed25519              + raw
 ECDSA_P256_SHA256    + ieee-p1363 | der
-RSA_PSS_SHA256       + der/raw as defined by a future provider profile
+RSA_PSS_SHA256       + raw
 ~~~
+
+The application validator and live signature-attachment RPC enforce these
+algorithm/encoding pairs. Public verification keys are validated independently
+as SPKI DER material; they do not carry a signature encoding.
 
 The live signature-attachment RPC rejects missing/unknown signature encodings
 and requires Ed25519 to use raw encoding.
