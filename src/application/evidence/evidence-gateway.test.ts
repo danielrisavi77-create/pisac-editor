@@ -531,6 +531,37 @@ describe("EvidenceGateway", () => {
     expect(s.repository.records()[0].status).toBe("signed");
   });
 
+  it("recovers an already accepted pending receipt even after the package closes", async () => {
+    const s = setup();
+    const cmd = await command();
+    s.signer.fail = true;
+
+    expect((await ingest(s, cmd)).status).toBe("unavailable");
+    expect(s.repository.records()[0].status).toBe("pending_signature");
+    expect(s.payloadStore.size).toBe(1);
+
+    s.contexts.set({
+      evidencePackageId: "evidence-1",
+      documentId: "doc-1",
+      evidenceProfileId: "standard-v1",
+      maxPayloadBytes: 1,
+      acceptsEvidence: false,
+    });
+    s.signer.fail = false;
+
+    const recovered = await ingest(s, cmd);
+    expect(recovered.status).toBe("accepted");
+    if (recovered.status !== "accepted") {
+      throw new Error("recovery failed");
+    }
+    expect(recovered.receipt.payload.receiptId).toBe("receipt-1");
+    expect(recovered.receipt.payload.acceptedAt).toBe(
+      "2026-10-03T06:05:00.000Z",
+    );
+    expect(s.payloadStore.size).toBe(1);
+    expect(s.repository.records()).toHaveLength(1);
+  });
+
   it("recovers signature-persistence failure without changing acceptance history", async () => {
     const s = setup();
     const cmd = await command();
