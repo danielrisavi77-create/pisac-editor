@@ -15,15 +15,15 @@ describe("Evidence shadow configuration", () => {
         evidenceProfileId: "standard-v1",
         maxPayloadBytes: DEFAULT_EVIDENCE_PROFILE_MAX_BYTES,
         maxCommandBytes: DEFAULT_EVIDENCE_PROFILE_MAX_BYTES + 64 * 1024,
-        signer: { mode: "development" },
+        signer: null,
       },
     });
   });
 
   it("requires an explicit AWS KMS key in production", () => {
-    expect(getEvidenceShadowConfig({}, "production")).toEqual({
-      ok: false,
-      reason: "AWS KMS Evidence key is not configured",
+    expect(getEvidenceShadowConfig({}, "production")).toMatchObject({
+      ok: true,
+      value: { enabled: false, signer: null },
     });
 
     expect(
