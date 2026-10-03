@@ -162,6 +162,17 @@ describe("verifySupabaseEvidenceBucket", () => {
       status: "ready",
     });
 
+    await expect(
+      verifySupabaseEvidenceBucket(
+        ready.fake,
+        DEFAULT_EVIDENCE_BUCKET,
+        4 * 1024 * 1024,
+      ),
+    ).resolves.toEqual({
+      status: "misconfigured",
+      reason: "evidence bucket file-size limit does not match policy",
+    });
+
     const publicBucket = client({
       bucket: {
         public: true,
