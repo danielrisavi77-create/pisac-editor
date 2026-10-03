@@ -4,7 +4,10 @@ import type {
   ReserveEvidenceAcceptanceInput,
   ReserveEvidenceAcceptanceResult,
 } from "@/application/ports/evidence-trust";
-import { EVIDENCE_RECEIPT_SCHEMA_V1 } from "@/domain/forensics/evidence-receipt";
+import {
+  digestEvidenceReceiptPayload,
+  EVIDENCE_RECEIPT_SCHEMA_V1,
+} from "@/domain/forensics/evidence-receipt";
 import { canonicalizeJcs } from "@/domain/forensics/jcs";
 
 type ChainHead = {
@@ -150,6 +153,18 @@ export class InMemoryEvidenceAcceptanceRepository
 
     const record = this.byReceipt.get(input.receiptId);
     if (!record) return { status: "not_found" };
+
+    const digest = await digestEvidenceReceiptPayload(
+      input.signedReceipt.payload,
+    );
+    if (
+      digest.sha256 !== input.signedReceipt.payloadDigestSha256 ||
+      !input.signedReceipt.signature.keyId.trim() ||
+      !input.signedReceipt.signature.keyVersion.trim() ||
+      !input.signedReceipt.signature.signatureBase64Url.trim()
+    ) {
+      return { status: "conflict" };
+    }
 
     if (
       input.signedReceipt.payload.receiptId !==
