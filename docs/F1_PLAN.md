@@ -97,4 +97,4 @@ tests, E2E-PARTIAL means only the unconfigured-deployment leg runs in Chromium.
 ## 6. Migration numbering note
 
 Next migration file uses the pattern `supabase/migrations/2026MMDDNN_<name>.sql`;
-repository history still contains the legacy AI migrations, while the dedicated Pisač live database has the six original F1 migrations plus the forward-only `f1_live_hardening` migration. Never replay the old F1 SQL based only on repository filenames; reconcile live migration history first.
+repository history still contains the legacy AI migrations, while the dedicated Pisač live database now has eight F1 migration-history entries: the six original F1 migrations plus forward-only `f1_live_hardening` and `gate1_least_privilege`. Never replay old F1 SQL based only on repository filenames; reconcile live migration history first.
